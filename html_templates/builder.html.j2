@@ -1,0 +1,124 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Inventory Builder{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Metadata builder</p>
+            <h2>Schema-guided inventory editing</h2>
+        </div>
+    </section>
+
+    <section class="builder-layout">
+        <article class="form-shell">
+            <h3>Add or update a group</h3>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="object_type" value="group">
+                <label>
+                    Group name
+                    <input type="text" name="group_name" placeholder="web" required>
+                </label>
+                <label>
+                    Environment
+                    <input type="text" name="env" placeholder="lab">
+                </label>
+                <label>
+                    Datacenter
+                    <input type="text" name="datacenter" placeholder="homelab-a">
+                </label>
+                <label>
+                    Release
+                    <input type="text" name="release" placeholder="2025.04">
+                </label>
+                <label class="wide">
+                    Workflow
+                    <input type="text" name="workflow" placeholder="build -> provision -> configure -> deploy">
+                </label>
+                <label>
+                    Provider
+                    <input type="text" name="group_provider" placeholder="proxmox">
+                </label>
+                <label>
+                    Proxmox node
+                    <input type="text" name="proxmox_node" placeholder="pve01">
+                </label>
+                <label>
+                    Template VMID
+                    <input type="text" name="template_vmid" placeholder="9000">
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Save group</button>
+                </div>
+            </form>
+        </article>
+
+        <article class="form-shell">
+            <h3>Add or update a node</h3>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="object_type" value="node">
+                <label>
+                    Group
+                    <select name="target_group" required>
+                        {% for group_name in group_names %}
+                            <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Host name
+                    <input type="text" name="host_name" placeholder="vm-101.lab" required>
+                </label>
+                <label>
+                    User
+                    <input type="text" name="user" placeholder="root">
+                </label>
+                <label>
+                    Port
+                    <input type="number" name="port" value="22">
+                </label>
+                <label class="wide">
+                    Private key
+                    <input type="text" name="private_key" placeholder="/home/user/.ssh/id_ed25519">
+                </label>
+                <label>
+                    Provider
+                    <input type="text" name="provider" placeholder="proxmox">
+                </label>
+                <label>
+                    VMID
+                    <input type="text" name="vmid" placeholder="101">
+                </label>
+                <label>
+                    Provisioner
+                    <input type="text" name="provisioner" placeholder="cloud-init">
+                </label>
+                <label>
+                    Configuration
+                    <input type="text" name="configuration" placeholder="ansible">
+                </label>
+                <label>
+                    State
+                    <input type="text" name="state" placeholder="planned">
+                </label>
+                <label>
+                    Application
+                    <input type="text" name="application" placeholder="bkc-managed">
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Save node</button>
+                </div>
+            </form>
+        </article>
+    </section>
+
+    <section class="form-shell">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Current model</p>
+                <h3>Inventory JSON</h3>
+            </div>
+        </div>
+        <pre class="json-preview">{{ inventory_json }}</pre>
+    </section>
+{% endblock %}

@@ -1,0 +1,23 @@
+{
+  "ansible": {
+    "config_root": "/etc/ansible",
+    "controller_host": "ansible-controller.example.lab",
+    "controller_password": "",
+    "controller_user": "automation",
+    "inventory_path": "/etc/ansible/hosts",
+    "playbook": "site.yml"
+  },
+  "proxmox": {
+    "api_url": "https://proxmox.example.lab:8006/api2/json",
+    "password": "",
+    "token_name": "bkc",
+    "token_value": "",
+    "username": "root@pam",
+    "verify_ssl": false
+  },
+  "ssh": {
+    "key_name": "bkc_id_rsa",
+    "private_key_path": "keys/bkc_id_rsa",
+    "public_key_path": "keys/bkc_id_rsa.pub"
+  }
+}

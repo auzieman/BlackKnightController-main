@@ -1,0 +1,23 @@
+{% extends 'base.html.j2' %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Rendered assets</p>
+            <h2>Templates</h2>
+        </div>
+    </section>
+    <section class="group-grid">
+        {% for template in templates %}
+            <article class="group-card">
+                <h3>{{ template }}</h3>
+                <a class="button" href="{{ url_for('templates.edit_template', template_name=template) }}">Edit template</a>
+            </article>
+        {% else %}
+            <article class="group-card empty-state">
+                <h3>No templates found</h3>
+                <p>Create templates in `file_templates/` to make this useful.</p>
+            </article>
+        {% endfor %}
+    </section>
+{% endblock %}

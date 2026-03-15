@@ -1,0 +1,17 @@
+{% extends 'base.html.j2' %}
+
+{% block content %}
+    <section class="form-shell">
+        <p class="eyebrow">Template editor</p>
+        <h2>{{ template }}</h2>
+        <form method="post" class="form-grid">
+            <label class="wide">
+                Content
+                <textarea name="content" rows="20">{{ content }}</textarea>
+            </label>
+            <div class="wide">
+                <button class="button" type="submit">Save template</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

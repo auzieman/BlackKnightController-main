@@ -1,0 +1,17 @@
+{% extends 'base.html.j2' %}
+
+{% block content %}
+    <section class="form-shell">
+        <p class="eyebrow">Deployment view</p>
+        <h2>{{ host }}</h2>
+        <p>This is still a planning surface, not an executor yet. The useful part right now is that the host metadata is normalized enough to hand off to Proxmox automation, Ansible inventory generation, or BKC-native render/deploy steps.</p>
+        <div class="meta-panel">
+            <p><strong>Workflow:</strong> {{ workflow }}</p>
+            <p><strong>Provider:</strong> {{ host_data.provider or 'unset' }}</p>
+            <p><strong>Provisioner:</strong> {{ host_data.provisioner or 'unset' }}</p>
+            <p><strong>Configuration:</strong> {{ host_data.configuration or 'unset' }}</p>
+            <p><strong>Application:</strong> {{ host_data.application or 'unset' }}</p>
+            <p><strong>State:</strong> {{ host_data.state or 'unset' }}</p>
+        </div>
+    </section>
+{% endblock %}

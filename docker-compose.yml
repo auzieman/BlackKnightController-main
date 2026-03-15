@@ -1,0 +1,31 @@
+services:
+  bkc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blackknightcontroller
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: development
+    volumes:
+      - ./dictionaries:/app/dictionaries
+      - ./file_templates:/app/file_templates
+      - ./keys:/app/keys
+    restart: unless-stopped
+
+  pxe-lab:
+    build:
+      context: .
+      dockerfile: docker/pxe/Dockerfile
+    container_name: blackknightcontroller-pxe
+    profiles:
+      - lab
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./docker/pxe/dnsmasq.conf:/etc/dnsmasq.conf:ro
+      - ./docker/pxe/dhcp.hosts:/etc/dnsmasq.d/dhcp.hosts:ro
+      - ./docker/pxe/tftpboot:/srv/tftp:ro
+    restart: unless-stopped

@@ -1,0 +1,9 @@
+Flask==2.1.2
+Flask-WTF==1.0.0
+Jinja2==3.1.2
+Fabric==2.6.0
+cryptography==42.0.8
+paramiko==2.12.0
+proxmoxer==2.0.1
+requests==2.31.0
+Werkzeug==2.1.2

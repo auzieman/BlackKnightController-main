@@ -1,0 +1,110 @@
+{% extends 'base.html.j2' %}
+{% block page_heading %}Node Intake{% endblock %}
+
+{% block content %}
+    <section class="builder-layout">
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Bulk node intake</p>
+                    <h2>Manual seed</h2>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="manual">
+                {{ add_node_form.hidden_tag() }}
+                <label class="wide">
+                    Group
+                    {{ add_node_form.group() }}
+                </label>
+                <label class="wide">
+                    One host per line
+                    {{ add_node_form.nodes(rows=8, placeholder='vm-101.lab\n10.10.10.15\nweb-02.local') }}
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Add nodes</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Scan and collect</p>
+                    <h2>Subnet discovery</h2>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="scan">
+                {{ scan_subnet_form.hidden_tag() }}
+                <label>
+                    Group
+                    {{ scan_subnet_form.group() }}
+                </label>
+                <label>
+                    Subnet
+                    {{ scan_subnet_form.subnet(placeholder='192.168.1.0/24 or 192.168.1.9-15') }}
+                </label>
+                <label>
+                    Username
+                    {{ scan_subnet_form.username(placeholder='root') }}
+                </label>
+                <label>
+                    Password
+                    {{ scan_subnet_form.password() }}
+                </label>
+                <label class="checkbox-row wide">
+                    {{ scan_subnet_form.install_key() }}
+                    Install BKC public key after password login
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Scan subnet and import</button>
+                </div>
+            </form>
+        </section>
+    </section>
+
+    {% if scan_result %}
+        <section class="form-shell top-gap">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Discovery results</p>
+                    <h3>{{ scan_result.subnet }}</h3>
+                </div>
+            </div>
+            <section class="meta-panel">
+                <p><strong>Hosts scanned:</strong> {{ scan_result.scanned_hosts }}</p>
+                <p><strong>SSH reachable:</strong> {{ scan_result.ssh_hosts }}</p>
+                <p><strong>Imported:</strong> {{ scan_result.discovered | length }}</p>
+            </section>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP</th>
+                            <th>Hostname</th>
+                            <th>Auth</th>
+                            <th>Key</th>
+                            <th>Errors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for host in scan_result.discovered %}
+                            <tr>
+                                <td>{{ host.ip }}</td>
+                                <td>{{ host.hostname or 'unknown' }}</td>
+                                <td>{{ host.auth_method or 'unverified' }}</td>
+                                <td>{{ 'installed' if host.private_key else 'not installed' }}</td>
+                                <td>{{ host.errors | join('; ') if host.errors else 'none' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="5">No SSH hosts discovered.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    {% endif %}
+{% endblock %}

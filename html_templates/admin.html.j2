@@ -1,0 +1,168 @@
+{% extends 'base.html.j2' %}
+{% block title %}Admin Mode{% endblock %}
+{% block page_heading %}Admin Mode{% endblock %}
+
+{% block content %}
+    <section class="builder-layout">
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Remote SSH</p>
+                    <h2>Run host command</h2>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="host-command">
+                <label>
+                    Group
+                    <select name="group">
+                        {% for group_name, group_data in groups %}
+                            <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="wide">
+                    Command
+                    <input type="text" name="command" placeholder="hostname && uname -a">
+                </label>
+                <div class="wide inventory-picklist">
+                    {% for group_name, group_data in groups %}
+                        <section class="picklist-group">
+                            <div class="picklist-header">
+                                <strong>{{ group_name }}</strong>
+                                <span>{{ group_data.nodes | length }} hosts</span>
+                            </div>
+                            <div class="picklist-items">
+                                {% for host_name, host_data in group_data.nodes.items() %}
+                                    <label class="pick-item">
+                                        <input type="checkbox" name="selected_hosts" value="{{ group_name }}|{{ host_name }}">
+                                        <span>{{ host_name }}</span>
+                                    </label>
+                                {% else %}
+                                    <span class="workflow-empty">No hosts in this group.</span>
+                                {% endfor %}
+                            </div>
+                        </section>
+                    {% endfor %}
+                </div>
+                <div class="wide button-row">
+                    <button class="button" type="submit">Run command on selected hosts</button>
+                    <span class="status-pill muted">If nothing is checked, BKC runs the command across the selected group.</span>
+                </div>
+            </form>
+        </section>
+
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Ansible Controller</p>
+                    <h2>Run playbook</h2>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="ansible-playbook">
+                <label>
+                    Playbook
+                    <select name="playbook">
+                        <option value="">Use configured default</option>
+                        {% for playbook in ansible_scan.get('playbooks', []) %}
+                            <option value="{{ playbook }}">{{ playbook }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Limit
+                    <input type="text" name="limit" placeholder="web or web-01">
+                </label>
+                <label>
+                    Extra args
+                    <input type="text" name="extra_args" placeholder="--check or -e env=lab">
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Run playbook</button>
+                </div>
+            </form>
+        </section>
+    </section>
+
+    {% if result %}
+        <section class="form-shell top-gap">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Execution result</p>
+                    <h3>{% if result_buckets %}Grouped host responses{% else %}{{ result.target }}{% endif %}</h3>
+                </div>
+            </div>
+            {% if result_buckets %}
+                <section class="group-grid">
+                    {% for bucket in result_buckets %}
+                        <article class="group-card">
+                            <p><strong>Exit status:</strong> {{ bucket.exit_status }}</p>
+                            <p><strong>Targets:</strong> {{ bucket.targets | length }}</p>
+                            <p>{{ bucket.targets | join(', ') }}</p>
+                            <label class="wide top-gap">
+                                Stdout
+                                <textarea rows="8" readonly>{{ bucket.stdout }}</textarea>
+                            </label>
+                            <label class="wide top-gap">
+                                Stderr
+                                <textarea rows="4" readonly>{{ bucket.stderr }}</textarea>
+                            </label>
+                        </article>
+                    {% endfor %}
+                </section>
+            {% else %}
+                <section class="meta-panel">
+                    <p><strong>Auth:</strong> {{ result.auth_method }}</p>
+                    <p><strong>Exit status:</strong> {{ result.exit_status }}</p>
+                    <p><strong>Command:</strong> {{ result.command }}</p>
+                </section>
+                <label class="wide top-gap">
+                    Stdout
+                    <textarea rows="12" readonly>{{ result.stdout }}</textarea>
+                </label>
+                <label class="wide top-gap">
+                    Stderr
+                    <textarea rows="8" readonly>{{ result.stderr }}</textarea>
+                </label>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Execution memory</p>
+                <h3>Recent history</h3>
+            </div>
+        </div>
+        <section class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>Type</th>
+                        <th>Targets</th>
+                        <th>Command</th>
+                        <th>Buckets</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in history %}
+                        <tr>
+                            <td>{{ entry.timestamp }}</td>
+                            <td>{{ entry.type }}</td>
+                            <td>{{ entry.targets | length }}</td>
+                            <td>{{ entry.command }}</td>
+                            <td>{{ entry.bucket_count }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="5">No admin history yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </section>
+{% endblock %}

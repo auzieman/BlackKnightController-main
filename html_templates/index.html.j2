@@ -1,0 +1,74 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Overview{% endblock %}
+{% block page_heading %}Overview{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Black Knight Satellite</p>
+            <h2>Infrastructure orchestration with a configurable workflow deck</h2>
+            <p class="hero-copy">Think less static inventory editor, more orbital mission control. Groups define their own stage rail, nodes move across it, and the UI should feel like an operations console rather than a form dump.</p>
+        </div>
+        <div class="hero-panel">
+            <p><strong>Global environment:</strong> {{ globals_meta.env }}</p>
+            <p><strong>Datacenter:</strong> {{ globals_meta.datacenter }}</p>
+            <p><strong>Release:</strong> {{ globals_meta.release }}</p>
+        </div>
+    </section>
+
+    <section class="card-grid">
+        <article class="card metric-card">
+            <p class="metric-label">Groups</p>
+            <p class="metric-value">{{ groups | length }}</p>
+            <p class="metric-copy">Workflow lanes under management</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Model</p>
+            <p class="metric-value">API + SSH</p>
+            <p class="metric-copy">Proxmox lifecycle with config handoff</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Style</p>
+            <p class="metric-value">Adaptive</p>
+            <p class="metric-copy">Columns come from each group workflow string</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Theme</p>
+            <p class="metric-value">Orbital</p>
+            <p class="metric-copy">Console-first with a spacy Black Knight mood</p>
+        </article>
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Current inventory</p>
+            <h3>Groups</h3>
+        </div>
+        <a class="button secondary" href="{{ url_for('builder.builder') }}">Open builder</a>
+    </section>
+
+    <section class="group-grid">
+        {% for group in groups %}
+            <article class="group-card">
+                <div class="group-card-header">
+                    <h4>{{ group.name }}</h4>
+                    <span>{{ group.host_count }} hosts</span>
+                </div>
+                <p><strong>Env:</strong> {{ group.env }}</p>
+                <p><strong>Datacenter:</strong> {{ group.datacenter }}</p>
+                <div class="stage-chip-row">
+                    {% for stage in group.stages %}
+                        <span class="stage-chip">{{ stage }}</span>
+                    {% endfor %}
+                </div>
+                <a class="button" href="{{ url_for('groups.hosts', group=group.name) }}">Inspect group</a>
+            </article>
+        {% else %}
+            <article class="group-card empty-state">
+                <h4>No groups defined</h4>
+                <p>Start by adding a group in the inventory builder, then attach nodes that map to your Proxmox workflow.</p>
+            </article>
+        {% endfor %}
+    </section>
+{% endblock %}

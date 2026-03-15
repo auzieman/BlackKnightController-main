@@ -1,0 +1,3 @@
+# Format:
+# aa:bb:cc:dd:ee:ff,set:known,192.168.50.110,vm-101,12h
+52:54:00:12:34:56,set:known,192.168.50.110,vm-101,12h

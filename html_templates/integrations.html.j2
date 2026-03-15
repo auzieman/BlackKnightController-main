@@ -1,0 +1,223 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Integrations{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Infrastructure controls</p>
+            <h2>Integrations</h2>
+        </div>
+    </section>
+
+    <section class="builder-layout">
+        <article class="form-shell">
+            <h3>Proxmox API</h3>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="save-proxmox">
+                <label class="wide">
+                    API URL
+                    <input type="text" name="api_url" value="{{ integrations.proxmox.api_url }}" placeholder="https://192.168.1.9:8006/api2/json">
+                </label>
+                <label>
+                    Token name
+                    <input type="text" name="token_name" value="{{ integrations.proxmox.token_name }}" placeholder="bkc">
+                </label>
+                <label>
+                    Token value
+                    <input type="password" name="token_value" value="{{ integrations.proxmox.token_value }}">
+                </label>
+                <label>
+                    Username
+                    <input type="text" name="username" value="{{ integrations.proxmox.username }}" placeholder="root@pam">
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" value="{{ integrations.proxmox.password }}">
+                </label>
+                <label class="checkbox-row wide">
+                    <input type="checkbox" name="verify_ssl" {% if integrations.proxmox.verify_ssl %}checked{% endif %}>
+                    Verify SSL certificate
+                </label>
+                <div class="wide button-row">
+                    <button class="button" type="submit">Save Proxmox settings</button>
+                </div>
+            </form>
+            <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="test-proxmox">
+                <button class="button secondary" type="submit">Test Proxmox connection</button>
+            </form>
+            <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="pull-proxmox-inventory">
+                <button class="button secondary" type="submit">Pull Proxmox inventory</button>
+            </form>
+            <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="sync-proxmox-inventory">
+                <button class="button secondary" type="submit">Sync Proxmox inventory into BKC</button>
+            </form>
+        </article>
+
+        <article class="form-shell">
+            <h3>Ansible Controller</h3>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="save-ansible">
+                <label>
+                    Controller host
+                    <input type="text" name="controller_host" value="{{ integrations.ansible.controller_host }}" placeholder="192.168.1.10">
+                </label>
+                <label>
+                    Controller user
+                    <input type="text" name="controller_user" value="{{ integrations.ansible.controller_user }}" placeholder="ansible">
+                </label>
+                <label>
+                    Controller password
+                    <input type="password" name="controller_password" value="{{ integrations.ansible.controller_password }}">
+                </label>
+                <label>
+                    Playbook
+                    <input type="text" name="playbook" value="{{ integrations.ansible.playbook }}" placeholder="site.yml">
+                </label>
+                <label>
+                    Inventory path
+                    <input type="text" name="inventory_path" value="{{ integrations.ansible.inventory_path }}" placeholder="/srv/ansible/inventory">
+                </label>
+                <label>
+                    Config root
+                    <input type="text" name="config_root" value="{{ integrations.ansible.config_root }}" placeholder="/etc/ansible">
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Save Ansible settings</button>
+                </div>
+            </form>
+            <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="scan-ansible">
+                <button class="button secondary" type="submit">Scan Ansible config</button>
+            </form>
+            <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="sync-ansible-inventory">
+                <button class="button secondary" type="submit">Sync Ansible inventory into BKC</button>
+            </form>
+        </article>
+    </section>
+
+    <section class="form-shell">
+        <h3>SSH Automation Key</h3>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="save-ssh">
+            <label>
+                Key name
+                <input type="text" name="key_name" value="{{ integrations.ssh.key_name }}" placeholder="bkc_id_rsa">
+            </label>
+            <div class="wide">
+                <button class="button" type="submit">Save SSH settings</button>
+            </div>
+        </form>
+        <form method="post" class="inline-form">
+            <input type="hidden" name="action" value="generate-ssh-key">
+            <button class="button secondary" type="submit">Generate SSH key pair</button>
+        </form>
+        <section class="meta-panel">
+            <p><strong>Private key:</strong> {{ ssh_key.private_key_path }}</p>
+            <p><strong>Public key:</strong> {{ ssh_key.public_key_path }}</p>
+        </section>
+        <label class="wide top-gap">
+            Public key
+            <textarea rows="4" readonly>{{ ssh_key.public_key }}</textarea>
+        </label>
+    </section>
+
+    {% if proxmox_inventory %}
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Pulled from Proxmox</p>
+                    <h3>Inventory snapshot</h3>
+                </div>
+            </div>
+            <section class="meta-panel">
+                <p><strong>Version:</strong> {{ proxmox_inventory.version.version }}</p>
+                <p><strong>Release:</strong> {{ proxmox_inventory.version.release }}</p>
+                <p><strong>Nodes:</strong> {{ proxmox_inventory.nodes | length }}</p>
+                <p><strong>QEMU VMs:</strong> {{ proxmox_inventory.virtual_machines | length }}</p>
+                <p><strong>LXCs:</strong> {{ proxmox_inventory.containers | length }}</p>
+            </section>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>VMID</th>
+                            <th>Name</th>
+                            <th>Node</th>
+                            <th>Status</th>
+                            <th>Type</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vm in proxmox_inventory.virtual_machines %}
+                            <tr>
+                                <td>{{ vm.vmid }}</td>
+                                <td>{{ vm.name or 'unnamed' }}</td>
+                                <td>{{ vm.node or 'unknown' }}</td>
+                                <td>{{ vm.status or 'unknown' }}</td>
+                                <td>{{ vm.type or 'qemu' }}</td>
+                                <td>{{ vm.ip | default('n/a', true) }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6">No QEMU VMs returned.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+            <label class="wide top-gap">
+                API request trace
+                <textarea rows="8" readonly>{% for req in proxmox_inventory.request_trace %}{{ req.method }} {{ req.path }}
+{% endfor %}</textarea>
+            </label>
+        </section>
+    {% endif %}
+
+    {% if ansible_scan %}
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Scanned from Ansible</p>
+                    <h3>Ansible snapshot</h3>
+                </div>
+            </div>
+            <section class="meta-panel">
+                <p><strong>Controller:</strong> {{ ansible_scan.controller_user }}@{{ ansible_scan.controller_host }}</p>
+                <p><strong>Inventory path:</strong> {{ ansible_scan.inventory_path }}</p>
+                <p><strong>Config root:</strong> {{ ansible_scan.config_root }}</p>
+                <p><strong>Auth:</strong> {{ ansible_scan.auth_method }}</p>
+                <p><strong>Playbooks:</strong> {{ ansible_scan.playbooks | length }}</p>
+            </section>
+            <label class="wide top-gap">
+                Inventory file
+                <textarea rows="10" readonly>{{ ansible_scan.inventory_content }}</textarea>
+            </label>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Playbook</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for playbook in ansible_scan.playbooks %}
+                            <tr>
+                                <td>{{ playbook }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td>No YAML playbooks found under the configured root.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    {% endif %}
+{% endblock %}

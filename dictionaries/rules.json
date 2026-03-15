@@ -1,0 +1,160 @@
+{
+  "globals": {
+    "datacenter": "lab-a",
+    "env": "lab",
+    "release": "sample"
+  },
+  "groups": {
+    "core-services": {
+      "locals": {
+        "configuration": "ansible",
+        "datacenter": "lab-a",
+        "env": "lab",
+        "release": "sample",
+        "workflow": "gathered -> accepted -> build -> configure -> validate -> done"
+      },
+      "nodes": {
+        "dns-core-01.example.lab": {
+          "configuration": "ansible",
+          "fqdn": "dns-core-01.example.lab",
+          "hostname": "dns-core-01",
+          "ip": "10.20.0.10",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "manual-scan",
+          "provider_sources": [
+            "manual-scan",
+            "ansible"
+          ],
+          "provisioner": "ssh-bootstrap",
+          "services_detected": [
+            "named",
+            "dhcpd"
+          ],
+          "state": "validate",
+          "user": "root"
+        },
+        "hypervisor-01.example.lab": {
+          "configuration": "ansible",
+          "fqdn": "hypervisor-01.example.lab",
+          "hostname": "hypervisor-01",
+          "ip": "10.20.0.5",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "manual-scan",
+          "provider_sources": [
+            "manual-scan"
+          ],
+          "provisioner": "ssh-bootstrap",
+          "state": "accepted",
+          "user": "root"
+        }
+      }
+    },
+    "proxmox-node-a": {
+      "locals": {
+        "configuration": "ansible",
+        "datacenter": "lab-a",
+        "env": "lab",
+        "provider": "proxmox",
+        "proxmox_node": "pve-a",
+        "release": "sample",
+        "workflow": "accepted -> build -> configure -> validate -> done"
+      },
+      "nodes": {
+        "app-201": {
+          "configuration": "ansible",
+          "fqdn": "app-201.example.lab",
+          "hostname": "app-201",
+          "identity": "app-201",
+          "ip": "10.20.1.21",
+          "observed_ips": [
+            "10.20.1.21"
+          ],
+          "os_name": "Debian GNU/Linux 12",
+          "package_manager": "apt-get",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "proxmox",
+          "provider_sources": [
+            "proxmox",
+            "ssh-probe",
+            "ansible"
+          ],
+          "provisioner": "cloud-init",
+          "proxmox_node": "pve-a",
+          "resource_type": "qemu",
+          "services_detected": [
+            "docker",
+            "containerd"
+          ],
+          "state": "configure",
+          "user": "deployer",
+          "vmid": 201
+        },
+        "db-301": {
+          "configuration": "ansible",
+          "fqdn": "db-301.example.lab",
+          "hostname": "db-301",
+          "identity": "db-301",
+          "ip": "10.20.1.31",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "proxmox",
+          "provider_sources": [
+            "proxmox",
+            "ssh-probe"
+          ],
+          "provisioner": "cloud-init",
+          "proxmox_node": "pve-a",
+          "resource_type": "lxc",
+          "services_detected": [
+            "postgresql"
+          ],
+          "state": "build",
+          "user": "root",
+          "vmid": 301
+        }
+      }
+    },
+    "web-tier": {
+      "locals": {
+        "configuration": "ansible",
+        "datacenter": "lab-b",
+        "env": "test",
+        "release": "sample",
+        "workflow": "gathered -> accepted -> build -> configure -> validate -> done"
+      },
+      "nodes": {
+        "web-blue-01.example.lab": {
+          "configuration": "ansible",
+          "fqdn": "web-blue-01.example.lab",
+          "hostname": "web-blue-01",
+          "ip": "10.30.1.41",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "ansible",
+          "provider_sources": [
+            "ansible"
+          ],
+          "state": "done",
+          "user": "deployer"
+        },
+        "web-green-01.example.lab": {
+          "configuration": "ansible",
+          "fqdn": "web-green-01.example.lab",
+          "hostname": "web-green-01",
+          "ip": "10.30.1.42",
+          "port": 22,
+          "private_key": "keys/example_id_rsa",
+          "provider": "ansible",
+          "provider_sources": [
+            "ansible"
+          ],
+          "state": "validate",
+          "user": "deployer"
+        }
+      }
+    }
+  }
+}

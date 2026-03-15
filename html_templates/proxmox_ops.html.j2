@@ -1,0 +1,229 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Proxmox Ops{% endblock %}
+{% block page_heading %}Proxmox Ops{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Provider control</p>
+            <h2>Catalog and clone palette</h2>
+        </div>
+        <form method="post">
+            <input type="hidden" name="action" value="refresh">
+            <button class="button" type="submit">Refresh catalog</button>
+        </form>
+    </section>
+
+    <section class="card-grid">
+        <article class="card metric-card">
+            <p class="metric-label">Nodes</p>
+            <p class="metric-value">{{ catalog.nodes | length }}</p>
+            <p class="metric-copy">Visible Proxmox compute nodes.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">VM Templates</p>
+            <p class="metric-value">{{ catalog.templates | length }}</p>
+            <p class="metric-copy">QEMU sources ready for cloning.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">ISOs</p>
+            <p class="metric-value">{{ catalog.iso_images | length }}</p>
+            <p class="metric-copy">Boot media visible from storage.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Next VMID</p>
+            <p class="metric-value">{{ catalog.next_vmid or 'n/a' }}</p>
+            <p class="metric-copy">Suggested next Proxmox object id.</p>
+        </article>
+    </section>
+
+    <section class="builder-layout top-gap">
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">QEMU VM</p>
+                    <h3>Clone from template or existing VM</h3>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="clone-qemu">
+                <label>
+                    Source node
+                    <select name="source_node">
+                        {% for node in catalog.nodes %}
+                            <option value="{{ node.node }}">{{ node.node }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Source VMID
+                    <select name="source_vmid">
+                        {% for template in catalog.templates %}
+                            <option value="{{ template.vmid }}">{{ template.vmid }} - {{ template.name }}{% if template.node %} @ {{ template.node }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    New VMID
+                    <input type="number" name="new_vmid" value="{{ catalog.next_vmid or '' }}" placeholder="201">
+                </label>
+                <label>
+                    New name
+                    <input type="text" name="name" placeholder="web-201">
+                </label>
+                <label class="checkbox-row wide">
+                    <input type="checkbox" name="full_clone" checked>
+                    <span>Use full clone</span>
+                </label>
+                <div class="wide button-row">
+                    <button class="button" type="submit">Clone QEMU VM</button>
+                    <span class="status-pill muted">This pass submits the clone and syncs inventory back into BKC.</span>
+                </div>
+            </form>
+        </section>
+
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">LXC CT</p>
+                    <h3>Clone existing container</h3>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                <input type="hidden" name="action" value="clone-lxc">
+                <label>
+                    Source node
+                    <select name="source_node">
+                        {% for node in catalog.nodes %}
+                            <option value="{{ node.node }}">{{ node.node }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Source CTID
+                    <select name="source_vmid">
+                        {% for container in catalog.containers %}
+                            <option value="{{ container.vmid }}">{{ container.vmid }} - {{ container.name }}{% if container.node %} @ {{ container.node }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    New CTID
+                    <input type="number" name="new_vmid" value="{{ catalog.next_vmid or '' }}" placeholder="301">
+                </label>
+                <label>
+                    Hostname
+                    <input type="text" name="name" placeholder="svc-301">
+                </label>
+                <label class="checkbox-row wide">
+                    <input type="checkbox" name="full_clone" checked>
+                    <span>Use full clone</span>
+                </label>
+                <div class="wide button-row">
+                    <button class="button" type="submit">Clone LXC CT</button>
+                    <span class="status-pill muted">Creation and day-0 personalization still need a separate pass.</span>
+                </div>
+            </form>
+        </section>
+    </section>
+
+    <section class="builder-layout top-gap">
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Sources</p>
+                    <h3>VM templates</h3>
+                </div>
+            </div>
+            <section class="table-card embedded-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>VMID</th>
+                            <th>Name</th>
+                            <th>Status</th>
+                            <th>Memory</th>
+                            <th>Cores</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for template in catalog.templates %}
+                            <tr>
+                                <td>{{ template.node or 'unset' }}</td>
+                                <td>{{ template.vmid }}</td>
+                                <td>{{ template.name or 'unnamed' }}</td>
+                                <td>{{ template.status or 'unknown' }}</td>
+                                <td>{{ template.maxmem or 'n/a' }}</td>
+                                <td>{{ template.cpus or template.maxcpu or 'n/a' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6">No VM templates discovered.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Media</p>
+                    <h3>ISO and CT templates</h3>
+                </div>
+            </div>
+            <section class="table-card embedded-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Storage</th>
+                            <th>Type</th>
+                            <th>Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for image in catalog.iso_images %}
+                            <tr>
+                                <td>{{ image.node }}</td>
+                                <td>{{ image.storage }}</td>
+                                <td>iso</td>
+                                <td>{{ image.volid or image.text or 'unknown' }}</td>
+                            </tr>
+                        {% endfor %}
+                        {% for image in catalog.container_templates %}
+                            <tr>
+                                <td>{{ image.node }}</td>
+                                <td>{{ image.storage }}</td>
+                                <td>vztmpl</td>
+                                <td>{{ image.volid or image.text or 'unknown' }}</td>
+                            </tr>
+                        {% endfor %}
+                        {% if not catalog.iso_images and not catalog.container_templates %}
+                            <tr>
+                                <td colspan="4">No ISO or CT template media discovered.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Trace</p>
+                <h3>Recent API path calls</h3>
+            </div>
+        </div>
+        <label class="wide">
+            Request trace
+            <textarea rows="10" readonly>{% for item in catalog.request_trace %}{{ item.method }} {{ item.path }}{% if item.url %} -> {{ item.url }}{% endif %}
+{% endfor %}</textarea>
+        </label>
+    </section>
+{% endblock %}

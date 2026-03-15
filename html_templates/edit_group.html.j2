@@ -1,0 +1,35 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Edit Group{% endblock %}
+
+{% block content %}
+    <section class="form-shell">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Group metadata</p>
+                <h2>{{ group }}</h2>
+            </div>
+        </div>
+        <form method="post" class="form-grid">
+            <label>
+                Environment
+                <input type="text" name="env" value="{{ locals_data.env or '' }}">
+            </label>
+            <label>
+                Datacenter
+                <input type="text" name="datacenter" value="{{ locals_data.datacenter or '' }}">
+            </label>
+            <label>
+                Release
+                <input type="text" name="release" value="{{ locals_data.release or '' }}">
+            </label>
+            <label class="wide">
+                Workflow
+                <input type="text" name="workflow" value="{{ locals_data.workflow or 'build -> provision -> configure -> deploy' }}">
+            </label>
+            <div class="wide">
+                <button class="button" type="submit">Save group</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

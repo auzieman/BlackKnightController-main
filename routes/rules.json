@@ -1,0 +1,47 @@
+{
+    "globals": {
+        "env": "prod",
+        "datacenter": "us-east-1",
+        "release": "1.0"
+    },
+    "groups": {
+        "web": {
+            "locals": {
+                "env": "dev",
+                "datacenter": "us-west-2",
+                "release": "2.0"
+            },
+            "nodes": {
+                "10.0.0.1": {
+                    "user": "username",
+                    "port": 22,
+                    "private_key": "/path/to/key"
+                },
+                "10.0.0.2": {
+                    "user": "username",
+                    "port": 22,
+                    "private_key": "/path/to/key"
+                }
+            }
+        },
+        "db": {
+            "locals": {
+                "env": "prod",
+                "datacenter": "us-east-1",
+                "release": "1.0"
+            },
+            "nodes": {
+                "10.0.0.3": {
+                    "user": "username",
+                    "port": 22,
+                    "private_key": "/path/to/key"
+                },
+                "10.0.0.4": {
+                    "user": "username",
+                    "port": 22,
+                    "private_key": "/path/to/key"
+                }
+            }
+        }
+    }
+}

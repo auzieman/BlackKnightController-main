@@ -1,0 +1,27 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Groups{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Inventory map</p>
+            <h2>Groups</h2>
+        </div>
+        <a class="button" href="{{ url_for('builder.builder') }}">Add group or node</a>
+    </section>
+
+    <section class="group-grid">
+        {% for group_name, group_data in groups %}
+            <article class="group-card">
+                <h3>{{ group_name }}</h3>
+                <p><strong>Hosts:</strong> {{ group_data.nodes | length }}</p>
+                <p><strong>Env:</strong> {{ group_data.locals.env if group_data.locals else 'unset' }}</p>
+                <p><strong>Workflow:</strong> {{ group_data.locals.workflow if group_data.locals else 'unset' }}</p>
+                <a class="button" href="{{ url_for('groups.hosts', group=group_name) }}">Open group</a>
+            </article>
+        {% endfor %}
+    </section>
+{% endblock %}
+
+

@@ -1,0 +1,66 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Workflow{% endblock %}
+{% block page_heading %}Workflow{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Mission board</p>
+            <h2>Stage-driven workflow across groups</h2>
+            <p class="hero-copy">This is the first dedicated workflow view: group-level rails with cards as managed resources. It is intentionally closer to Kanboard than a dashboard, so inventory can turn into actual work instead of static metadata.</p>
+        </div>
+        <div class="hero-panel">
+            <p><strong>Model:</strong> swimlane-ready workflow rails</p>
+            <p><strong>Cards:</strong> hosts, VMs, containers, and discovered nodes</p>
+            <p><strong>Next:</strong> attach real actions to stage movement</p>
+        </div>
+    </section>
+
+    {% for workflow_group in workflow_groups %}
+        <section class="section-header">
+            <div>
+                <p class="eyebrow">Workflow rail</p>
+                <h3>{{ workflow_group.name }}</h3>
+            </div>
+            <div class="topbar-badges">
+                <span class="status-pill">{{ workflow_group.host_count }} resources</span>
+                <span class="status-pill muted">{{ workflow_group.workflow }}</span>
+            </div>
+        </section>
+
+        <section class="workflow-board">
+            {% for column in workflow_group.columns %}
+                <article class="workflow-column">
+                    <div class="workflow-column-header">
+                        <h4>{{ column.name }}</h4>
+                        <span>{{ column.hosts | length }}</span>
+                    </div>
+                    <div class="workflow-column-body">
+                        {% for host in column.hosts %}
+                            <article class="workflow-node-card">
+                                <div class="workflow-node-top">
+                                    <strong>{{ host.name }}</strong>
+                                    <span>{{ host.data.vmid or host.data.provider or 'node' }}</span>
+                                </div>
+                                <p>{{ host.data.ip or host.data.fqdn or 'network pending' }}</p>
+                                <p>{{ host.data.os_name or host.data.configuration or 'undetermined' }}</p>
+                                <div class="workflow-node-actions">
+                                    <a href="{{ url_for('groups.hosts', group=workflow_group.name) }}">Inspect</a>
+                                    <a href="{{ url_for('admin.admin') }}">Admin</a>
+                                </div>
+                            </article>
+                        {% else %}
+                            <div class="workflow-empty">No resources in this stage.</div>
+                        {% endfor %}
+                    </div>
+                </article>
+            {% endfor %}
+        </section>
+    {% else %}
+        <section class="group-card empty-state">
+            <h4>No workflow groups yet</h4>
+            <p>Use the inventory builder or source sync screens first, then move into stage rails here.</p>
+        </section>
+    {% endfor %}
+{% endblock %}

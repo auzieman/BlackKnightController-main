@@ -1,0 +1,75 @@
+{
+  "deployment_vars": {
+    "environment": "prod"
+  },
+  "groups": [
+    {
+      "name": "web",
+      "group_vars": {
+        "web_server": "apache"
+      },
+      "hosts": [
+        {
+          "name": "web-01",
+          "ip": "192.168.1.101",
+          "auth_mode": "ssh",
+          "username": "admin",
+          "password": "password",
+          "key_file": null
+        },
+        {
+          "name": "web-02",
+          "ip": "192.168.1.102",
+          "auth_mode": "ssh",
+          "username": "admin",
+          "password": "password",
+          "key_file": "/path/to/keyfile"
+        }
+      ],
+      "templates": [
+        {
+          "name": "web-config",
+          "template": "templates/web-config.j2",
+          "output": "/etc/httpd/conf/httpd.conf",
+          "os": "linux",
+          "auth_mode": "ssh",
+          "vars": {
+            "web_root": "/var/www/html",
+            "log_dir": "/var/log/httpd"
+          }
+        }
+      ]
+    },
+    {
+      "name": "db",
+      "group_vars": {
+        "db_server": "mysql"
+      },
+      "hosts": [
+        {
+          "name": "db-01",
+          "ip": "192.168.1.201",
+          "auth_mode": "wmi",
+          "username": "admin",
+          "password": "password",
+          "key_file": null
+        }
+      ],
+      "templates": [
+        {
+          "name": "db-config",
+          "template": "templates/db-config.j2",
+          "output": "C:/Program Files/MySQL/my.ini",
+          "os": "windows",
+          "auth_mode": "wmi",
+          "vars": {
+            "db_name": "mydb",
+            "db_user": "dbuser",
+            "db_password": "dbpass"
+          }
+        }
+      ]
+    }
+  ]
+}
+

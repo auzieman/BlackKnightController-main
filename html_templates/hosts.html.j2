@@ -1,0 +1,232 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Group Hosts{% endblock %}
+{% block page_heading %}Group Flight Deck{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Group detail</p>
+            <h2>{{ group }}</h2>
+        </div>
+        <div class="button-row">
+            <a class="button secondary" href="{{ url_for('groups.edit_group', group=group) }}">Edit group metadata</a>
+            <a class="button" href="{{ url_for('add_nodes.add_nodes') }}">Bulk add nodes</a>
+        </div>
+    </section>
+
+    <section class="meta-panel">
+        <p><strong>Env:</strong> {{ group_data.locals.env if group_data.locals else 'unset' }}</p>
+        <p><strong>Datacenter:</strong> {{ group_data.locals.datacenter if group_data.locals else 'unset' }}</p>
+        <p><strong>Release:</strong> {{ group_data.locals.release if group_data.locals else 'unset' }}</p>
+        <p><strong>Workflow:</strong> {{ group_data.locals.workflow if group_data.locals else 'build -> provision -> configure -> deploy' }}</p>
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Workflow board</p>
+            <h3>User-defined stage lanes</h3>
+        </div>
+    </section>
+
+    <section class="workflow-board">
+        {% for column in workflow_columns %}
+            <article class="workflow-column">
+                <div class="workflow-column-header">
+                    <h4>{{ column.name }}</h4>
+                    <span>{{ column.hosts | length }}</span>
+                </div>
+                <div class="workflow-column-body">
+                    {% for host in column.hosts %}
+                        <article class="workflow-node-card">
+                            <div class="workflow-node-top">
+                                <strong>{{ host.name }}</strong>
+                                <span>{{ host.data.vmid or host.data.provider or 'node' }}</span>
+                            </div>
+                            <p>{{ host.data.configuration or 'unset' }} / {{ host.data.provisioner or 'unset' }}</p>
+                            <p>{{ host.data.state or 'unset' }}</p>
+                            <div class="workflow-node-actions">
+                                <a href="{{ url_for('groups.edit_host', group=group, host=host.name) }}">Edit</a>
+                                <a href="{{ url_for('deploy_host.deploy_host', group=group, host=host.name) }}">Deploy</a>
+                            </div>
+                        </article>
+                    {% else %}
+                        <div class="workflow-empty">No nodes in this stage.</div>
+                    {% endfor %}
+                </div>
+            </article>
+        {% endfor %}
+    </section>
+
+    <form method="post" class="table-card">
+        <input type="hidden" name="action" value="probe">
+        <table>
+            <thead>
+                <tr>
+                    <th>Select</th>
+                    <th>Host</th>
+                    <th>VMID</th>
+                    <th>Provider</th>
+                    <th>Provisioner</th>
+                    <th>Configuration</th>
+                    <th>State</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for host_name, host_data in hosts %}
+                <tr>
+                    <td><input type="checkbox" name="selected_hosts" value="{{ host_name }}"></td>
+                    <td>{{ host_name }}</td>
+                    <td>{{ host_data.vmid or host_data.provider or 'unset' }}</td>
+                    <td>{{ host_data.provider or 'unset' }}</td>
+                    <td>{{ host_data.provisioner or 'unset' }}</td>
+                    <td>{{ host_data.configuration or 'unset' }}</td>
+                        <td>{{ host_data.state or 'unset' }}</td>
+                        <td>
+                            <a href="{{ url_for('groups.edit_host', group=group, host=host_name) }}">Edit</a>
+                            |
+                            <a href="{{ url_for('deploy_host.deploy_host', group=group, host=host_name) }}">Deploy view</a>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="8">No nodes are attached to this group yet.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="button-row top-gap">
+            <button class="button" type="submit">Probe selected hosts</button>
+            <span class="status-pill muted">If nothing is checked, BKC probes the whole group.</span>
+        </div>
+    </form>
+
+    <form method="post" class="button-row top-gap">
+        <input type="hidden" name="action" value="reconcile">
+        <button class="button secondary" type="submit">Reconcile related inventory records</button>
+    </form>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Resolved settings</p>
+                <h3>Effective host configuration</h3>
+            </div>
+        </div>
+        <section class="table-card embedded-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Host</th>
+                        <th>User</th>
+                        <th>Password</th>
+                        <th>Key</th>
+                        <th>IP</th>
+                        <th>Port</th>
+                        <th>Provider</th>
+                        <th>Configuration</th>
+                        <th>Sources</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for host_name, node_data, resolved in resolved_hosts %}
+                        <tr>
+                            <td>{{ host_name }}</td>
+                            <td>{{ resolved.user or 'unset' }}</td>
+                            <td>{{ 'set' if resolved.password else 'unset' }}</td>
+                            <td>{{ resolved.private_key or 'unset' }}</td>
+                            <td>{{ resolved.ip or 'unset' }}</td>
+                            <td>{{ resolved.port or 'unset' }}</td>
+                            <td>{{ resolved.provider or 'unset' }}</td>
+                            <td>{{ resolved.configuration or 'unset' }}</td>
+                            <td>{{ resolved.provider_sources | join(', ') if resolved.provider_sources else 'unset' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="9">No hosts to resolve.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Observed facts</p>
+                <h3>Actionable inventory</h3>
+            </div>
+        </div>
+        <section class="table-card embedded-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Host</th>
+                        <th>Identity</th>
+                        <th>FQDN</th>
+                        <th>OS</th>
+                        <th>IPs</th>
+                        <th>Pkg mgr</th>
+                        <th>Services</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for host_name, node_data, resolved in resolved_hosts %}
+                        <tr>
+                            <td>{{ host_name }}</td>
+                            <td>{{ resolved.hostname or resolved.identity or 'unset' }}</td>
+                            <td>{{ resolved.fqdn or 'unset' }}</td>
+                            <td>{{ resolved.os_name or 'unset' }}</td>
+                            <td>{{ resolved.observed_ips | join(', ') if resolved.observed_ips else (resolved.ip or 'unset') }}</td>
+                            <td>{{ resolved.package_manager or 'unset' }}</td>
+                            <td>{{ resolved.services_detected | join(', ') if resolved.services_detected else 'unset' }}</td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7">No observed facts yet.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </section>
+
+    {% if probe_results %}
+        <section class="form-shell top-gap">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Latest probe</p>
+                    <h3>Probe results</h3>
+                </div>
+            </div>
+            <section class="table-card embedded-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Host</th>
+                            <th>Status</th>
+                            <th>IP</th>
+                            <th>OS</th>
+                            <th>Services</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result in probe_results %}
+                            <tr>
+                                <td>{{ result.target }}</td>
+                                <td>{{ result.status }}</td>
+                                <td>{{ result.ip or 'unset' }}</td>
+                                <td>{{ result.os_name or 'unset' }}</td>
+                                <td>{{ result.services_detected | join(', ') if result.services_detected else 'unset' }}</td>
+                                <td>{{ result.error or result.auth_method or 'ok' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends 'base.html.j2' %}
+
+{% block content %}
+        <ul>
+            {% for group in groups %}
+            <li><a href="{{ url_for('hosts', group=group) }}">{{ group }}</a></li>
+            {% endfor %}
+        </ul>
+{% endblock %}

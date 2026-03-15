@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}BlackKnightController{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+</head>
+<body>
+    <div class="starfield"></div>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="brand-block">
+                <p class="eyebrow">BlackKnightController</p>
+                <h1>Orbital Ops</h1>
+                <p class="sidebar-copy">A control surface for Proxmox, Ansible, and stage-driven automation with a little Black Knight satellite mythology built in.</p>
+                <div class="status-chip">Telemetry-linked workflow console</div>
+            </div>
+            <nav>
+                <ul class="nav-list">
+                    <li><a href="{{ url_for('index.index') }}">Overview</a></li>
+                    <li><a href="{{ url_for('groups.list_groups') }}">Groups</a></li>
+                    <li><a href="{{ url_for('workflow_view.workflow') }}">Workflow</a></li>
+                    <li><a href="{{ url_for('builder.builder') }}">Inventory Builder</a></li>
+                    <li><a href="{{ url_for('admin.admin') }}">Admin Mode</a></li>
+                    <li><a href="{{ url_for('integrations.integrations') }}">Integrations</a></li>
+                    <li><a href="{{ url_for('proxmox_ops.proxmox_ops') }}">Proxmox Ops</a></li>
+                    <li><a href="{{ url_for('add_nodes.add_nodes') }}">Bulk Add Nodes</a></li>
+                    <li><a href="{{ url_for('templates.list_templates') }}">Templates</a></li>
+                </ul>
+            </nav>
+        </aside>
+        <main class="main">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Operator View</p>
+                    <h2>{% block page_heading %}Flight Deck{% endblock %}</h2>
+                </div>
+                <div class="topbar-badges">
+                    <span class="status-pill">Hybrid Proxmox + Kanban</span>
+                    <span class="status-pill muted">Human / AI ops surface</span>
+                </div>
+            </header>
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <section class="flash-stack">
+                        {% for message in messages %}
+                            <div class="flash">{{ message }}</div>
+                        {% endfor %}
+                    </section>
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>
