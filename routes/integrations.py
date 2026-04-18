@@ -1,16 +1,19 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-
+from flask_login import current_user
+from services import bkc_db
+from services.access_control import register_integrations_post_guard
 from services.ansible import AnsibleScanError, scan_ansible_controller
 from services.ansible_inventory import parse_ansible_hosts, sync_ansible_inventory_to_rules
 from services.integration_store import (
-    ANSIBLE_SNAPSHOT_PATH,
-    PROXMOX_SNAPSHOT_PATH,
+    load_ansible_snapshot,
     load_integrations,
-    load_snapshot,
+    load_proxmox_snapshot,
+    save_ansible_snapshot,
     save_integrations,
-    save_snapshot,
+    save_proxmox_snapshot,
 )
 from services.inventory_model import reconcile_rules_inventory
+from services.job_queue import enqueue_job, job_queue_enabled
 from services.proxmox import (
     ProxmoxAPIError,
     ProxmoxClient,
@@ -21,9 +24,41 @@ from services.proxmox import (
 )
 from services.rules_store import load_rules, save_rules
 from services.ssh_keys import ensure_key_pair, read_key_pair
-
+from services.tenant_context import get_current_tenant_id, get_effective_tenant_slug
 
 integrations_blueprint = Blueprint("integrations", __name__)
+register_integrations_post_guard(integrations_blueprint)
+
+_INTEGRATION_ASYNC_JOBS = {
+    "pull-proxmox-inventory": "services.job_tasks.pull_proxmox_inventory_job",
+    "sync-proxmox-inventory": "services.job_tasks.sync_proxmox_inventory_job",
+    "scan-ansible": "services.job_tasks.scan_ansible_job",
+    "sync-ansible-inventory": "services.job_tasks.sync_ansible_inventory_job",
+}
+
+
+def _try_enqueue_integration_job(action: str):
+    if not job_queue_enabled():
+        return None
+    fn = _INTEGRATION_ASYNC_JOBS.get(action)
+    if not fn:
+        return None
+    tenant_slug = get_effective_tenant_slug()
+    tenant_id = get_current_tenant_id()
+    user_id = int(current_user.id)
+    job = enqueue_job(
+        fn,
+        (tenant_slug, tenant_id, user_id, request.remote_addr),
+        job_timeout=900,
+        meta={
+            "user_id": user_id,
+            "tenant_slug": tenant_slug,
+            "action": action,
+            "kind": "integrations",
+        },
+    )
+    flash(f"Queued background job {job.id} ({action}). Open Jobs to watch progress.")
+    return redirect(url_for("jobs.job_status", job_id=job.id))
 
 
 def _clean(value: str) -> str:
@@ -46,8 +81,8 @@ def integrations():
         integrations["proxmox"].get("username", ""),
         integrations["proxmox"].get("token_name", ""),
     )
-    proxmox_inventory = load_snapshot(PROXMOX_SNAPSHOT_PATH)
-    ansible_scan = load_snapshot(ANSIBLE_SNAPSHOT_PATH)
+    proxmox_inventory = load_proxmox_snapshot()
+    ansible_scan = load_ansible_snapshot()
 
     if request.method == "POST":
         action = request.form.get("action", "save")
@@ -67,6 +102,14 @@ def integrations():
             }
             save_integrations(integrations)
             flash("Saved Proxmox settings.")
+            bkc_db.append_audit(
+                int(current_user.id),
+                get_current_tenant_id(),
+                "integrations.save_proxmox",
+                "integrations",
+                {},
+                request.remote_addr,
+            )
             return redirect(url_for("integrations.integrations"))
 
         if action == "save-ansible":
@@ -80,6 +123,14 @@ def integrations():
             }
             save_integrations(integrations)
             flash("Saved Ansible settings.")
+            bkc_db.append_audit(
+                int(current_user.id),
+                get_current_tenant_id(),
+                "integrations.save_ansible",
+                "integrations",
+                {},
+                request.remote_addr,
+            )
             return redirect(url_for("integrations.integrations"))
 
         if action == "save-ssh":
@@ -91,6 +142,14 @@ def integrations():
             }
             save_integrations(integrations)
             flash("Saved SSH key settings.")
+            bkc_db.append_audit(
+                int(current_user.id),
+                get_current_tenant_id(),
+                "integrations.save_ssh",
+                "integrations",
+                {},
+                request.remote_addr,
+            )
             return redirect(url_for("integrations.integrations"))
 
         if action == "test-proxmox":
@@ -105,9 +164,12 @@ def integrations():
             return redirect(url_for("integrations.integrations"))
 
         if action == "pull-proxmox-inventory":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
             try:
                 proxmox_inventory = summarize_inventory(ProxmoxClient(load_proxmox_config()))
-                save_snapshot(PROXMOX_SNAPSHOT_PATH, proxmox_inventory)
+                save_proxmox_snapshot(proxmox_inventory)
                 flash(
                     f"Fetched Proxmox inventory: "
                     f"{len(proxmox_inventory['nodes'])} nodes, "
@@ -127,9 +189,12 @@ def integrations():
                 flash(f"Proxmox inventory pull failed: {exc}")
 
         if action == "sync-proxmox-inventory":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
             try:
                 proxmox_inventory = summarize_inventory(ProxmoxClient(load_proxmox_config()))
-                save_snapshot(PROXMOX_SNAPSHOT_PATH, proxmox_inventory)
+                save_proxmox_snapshot(proxmox_inventory)
                 rules = load_rules()
                 result = sync_inventory_to_rules(rules, proxmox_inventory)
                 reconcile = reconcile_rules_inventory(rules)
@@ -153,9 +218,12 @@ def integrations():
                 flash(f"Proxmox sync failed: {exc}")
 
         if action == "scan-ansible":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
             try:
                 ansible_scan = scan_ansible_controller()
-                save_snapshot(ANSIBLE_SNAPSHOT_PATH, ansible_scan)
+                save_ansible_snapshot(ansible_scan)
                 flash(
                     f"Scanned Ansible controller: "
                     f"{len(ansible_scan['playbooks'])} playbooks found."
@@ -164,9 +232,12 @@ def integrations():
                 flash(f"Ansible scan failed: {exc}")
 
         if action == "sync-ansible-inventory":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
             try:
                 ansible_scan = scan_ansible_controller()
-                save_snapshot(ANSIBLE_SNAPSHOT_PATH, ansible_scan)
+                save_ansible_snapshot(ansible_scan)
                 parsed = parse_ansible_hosts(ansible_scan["inventory_content"])
                 rules = load_rules()
                 result = sync_ansible_inventory_to_rules(rules, parsed)

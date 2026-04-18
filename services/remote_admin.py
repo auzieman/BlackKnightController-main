@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import paramiko
-
 from services.integration_store import load_integrations
 from services.inventory_model import merge_host_config
 from services.rules_store import load_rules

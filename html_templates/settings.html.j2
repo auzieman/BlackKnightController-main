@@ -1,0 +1,173 @@
+{% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
+{% block title %}Platform settings · BlackKnightController{% endblock %}
+{% block page_heading %}Platform settings{% endblock %}
+
+{% block content %}
+    <p class="sidebar-copy" style="max-width: 52rem;">
+        Superuser tools: tenants, users, API keys, and recent audit events. Inventory still lives under
+        <code>dictionaries/tenants/&lt;slug&gt;/</code> per tenant.
+    </p>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Tenants</p>
+                <h2>Create tenant</h2>
+            </div>
+        </div>
+        <form method="post" action="{{ url_for('settings.create_tenant') }}" class="form-grid">
+            {{ csrf_field() }}
+            <label>Name <input type="text" name="name" required class="input-like" placeholder="Acme Corp"></label>
+            <label>Slug <input type="text" name="slug" required class="input-like" placeholder="acme"></label>
+            <div class="wide"><button type="submit" class="button">Create tenant</button></div>
+        </form>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Users</p>
+                <h2>Create user</h2>
+            </div>
+        </div>
+        <form method="post" action="{{ url_for('settings.create_user') }}" class="form-grid">
+            {{ csrf_field() }}
+            <label>Username <input type="text" name="username" required class="input-like"></label>
+            <label>Password <input type="password" name="password" required class="input-like"></label>
+            <label>Role
+                <select name="role" class="input-like">
+                    <option value="viewer">viewer</option>
+                    <option value="operator">operator</option>
+                    <option value="owner">owner</option>
+                </select>
+            </label>
+            <label>Tenant
+                <select name="tenant_id" class="input-like">
+                    {% for t in tenants %}
+                        <option value="{{ t.id }}">{{ t.slug }} — {{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" name="is_superuser"> Platform superuser (full access + this screen)
+            </label>
+            <div class="wide"><button type="submit" class="button">Create user</button></div>
+        </form>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Membership</p>
+                <h2>Assign tenant role</h2>
+            </div>
+        </div>
+        <form method="post" action="{{ url_for('settings.set_membership_route') }}" class="form-grid">
+            {{ csrf_field() }}
+            <label>User
+                <select name="user_id" class="input-like">
+                    {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Tenant
+                <select name="tenant_id" class="input-like">
+                    {% for t in tenants %}
+                        <option value="{{ t.id }}">{{ t.slug }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Role
+                <select name="role" class="input-like">
+                    <option value="viewer">viewer</option>
+                    <option value="operator">operator</option>
+                    <option value="owner">owner</option>
+                </select>
+            </label>
+            <div class="wide"><button type="submit" class="button">Save membership</button></div>
+        </form>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">API keys</p>
+                <h2>Create API key</h2>
+            </div>
+        </div>
+        <p class="sidebar-copy">Bearer keys call <code>GET /api/v1/me</code> and/or <code>GET /api/v1/inventory</code> depending on scopes. Leave rate limit blank to use <code>BKC_API_KEY_RATE_LIMIT</code> (default 120/min per key).</p>
+        <form method="post" action="{{ url_for('settings.create_api_key') }}" class="form-grid">
+            {{ csrf_field() }}
+            <label>Name <input type="text" name="name" class="input-like" value="automation"></label>
+            <label>Tenant
+                <select name="tenant_id" class="input-like">
+                    {% for t in tenants %}
+                        <option value="{{ t.id }}">{{ t.slug }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <fieldset class="wide" style="border: 0; padding: 0; margin: 0;">
+                <legend class="eyebrow" style="margin-bottom: 0.35rem;">Scopes</legend>
+                <label class="checkbox-row"><input type="checkbox" name="scope_me" checked> <code>read:me</code></label>
+                <label class="checkbox-row"><input type="checkbox" name="scope_inventory" checked> <code>read:inventory</code></label>
+                <label class="checkbox-row"><input type="checkbox" name="scope_all"> Full access (<code>*</code>)</label>
+            </fieldset>
+            <label>Max requests / minute (optional) <input type="number" name="rate_limit_per_minute" class="input-like" min="1" placeholder="120"></label>
+            <div class="wide"><button type="submit" class="button">Create key</button></div>
+        </form>
+        {% if api_keys %}
+            <table class="data-table top-gap">
+                <thead><tr><th>ID</th><th>Tenant</th><th>Name</th><th>Prefix</th><th>Scopes</th><th>RPM</th><th>Created</th></tr></thead>
+                <tbody>
+                    {% for k in api_keys %}
+                        <tr>
+                            <td>{{ k.id }}</td>
+                            <td>{{ k.tenant_slug }}</td>
+                            <td>{{ k.name }}</td>
+                            <td><code>{{ k.prefix }}…</code></td>
+                            <td><code>{{ k.scopes or '—' }}</code></td>
+                            <td>{{ k.rate_limit_per_minute if k.rate_limit_per_minute is not none else 'default' }}</td>
+                            <td>{{ k.created_at }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Audit</p>
+                <h2>Recent events</h2>
+            </div>
+            <div class="button-row">
+                <a class="button secondary" href="{{ url_for('settings.audit_export', format='json', limit=50000) }}">Export JSON</a>
+                <a class="button secondary" href="{{ url_for('settings.audit_export', format='csv', limit=50000) }}">Export CSV</a>
+            </div>
+        </div>
+        {% if audit %}
+            <div class="table-scroll">
+                <table class="data-table">
+                    <thead><tr><th>When</th><th>User</th><th>Tenant</th><th>Action</th><th>Resource</th><th>IP</th></tr></thead>
+                    <tbody>
+                        {% for row in audit %}
+                            <tr>
+                                <td>{{ row.created_at }}</td>
+                                <td>{{ row.username or '—' }}</td>
+                                <td>{{ row.tenant_id or '—' }}</td>
+                                <td><code>{{ row.action }}</code></td>
+                                <td>{{ row.resource }}</td>
+                                <td>{{ row.ip or '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="muted">No audit entries yet.</p>
+        {% endif %}
+    </section>
+{% endblock %}

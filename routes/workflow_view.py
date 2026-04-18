@@ -1,8 +1,6 @@
 from flask import Blueprint, render_template
-
 from services.rules_store import load_rules
 from services.workflow import build_stage_columns
-
 
 workflow_blueprint = Blueprint("workflow_view", __name__)
 

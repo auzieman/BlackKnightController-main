@@ -1,9 +1,9 @@
 from flask import Blueprint, abort, redirect, render_template, request, url_for
-
+from services.access_control import register_inventory_post_guard
 from services.rules_store import get_templates_path
 
-
 templates = Blueprint("templates", __name__)
+register_inventory_post_guard(templates)
 
 
 @templates.route("/templates", methods=["GET"])

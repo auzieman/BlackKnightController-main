@@ -3,7 +3,6 @@ import socket
 from pathlib import Path
 
 import paramiko
-
 from services.integration_store import load_integrations
 from services.ssh_keys import read_key_pair
 
@@ -25,11 +24,10 @@ def _expand_targets(target: str) -> list[str]:
         return [str(address) for address in network.hosts()]
 
     if "-" in target:
-        start, end = target.rsplit(".", 1)[0], target.rsplit(".", 1)[1]
+        prefix, end = target.rsplit(".", 1)
         if "-" not in end:
             raise DiscoveryError(f"Invalid range: {target}")
         start_octet, end_octet = end.split("-", 1)
-        prefix = target.rsplit(".", 1)[0]
         try:
             first = int(start_octet)
             last = int(end_octet)

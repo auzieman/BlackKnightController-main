@@ -1,10 +1,12 @@
 {% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
 
 {% block content %}
     <section class="form-shell">
         <p class="eyebrow">Template editor</p>
         <h2>{{ template }}</h2>
         <form method="post" class="form-grid">
+            {{ csrf_field() }}
             <label class="wide">
                 Content
                 <textarea name="content" rows="20">{{ content }}</textarea>

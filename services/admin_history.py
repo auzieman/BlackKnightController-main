@@ -2,7 +2,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
 ADMIN_HISTORY_PATH = BASE_DIR / "dictionaries" / "admin_history.json"
 

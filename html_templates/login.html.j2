@@ -1,0 +1,27 @@
+{% extends 'base.html.j2' %}
+{% block title %}Sign in · BlackKnightController{% endblock %}
+
+{% block content %}
+    <section class="form-shell">
+        {% if no_users %}
+            <p class="sidebar-copy" style="margin-bottom: 1rem;">
+                No operator accounts exist yet. Set <code>BKC_BOOTSTRAP_ADMIN_PASSWORD</code> in the environment,
+                restart the app, then sign in with <code>BKC_BOOTSTRAP_ADMIN_USERNAME</code> (defaults to <code>admin</code>).
+            </p>
+        {% endif %}
+        <form method="post" class="form-grid">
+            {{ form.hidden_tag() }}
+            <label class="wide">
+                Username
+                {{ form.username(class_='input-like') }}
+            </label>
+            <label class="wide">
+                Password
+                {{ form.password(class_='input-like') }}
+            </label>
+            <div class="wide">
+                <button class="button" type="submit">Sign in</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

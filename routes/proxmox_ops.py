@@ -1,5 +1,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-
+from flask_login import current_user
+from services import bkc_db
+from services.access_control import register_proxmox_ops_post_guard
 from services.inventory_model import reconcile_rules_inventory
 from services.proxmox import (
     ProxmoxAPIError,
@@ -11,9 +13,10 @@ from services.proxmox import (
     sync_inventory_to_rules,
 )
 from services.rules_store import load_rules, save_rules
-
+from services.tenant_context import get_current_tenant_id
 
 proxmox_ops_blueprint = Blueprint("proxmox_ops", __name__)
+register_proxmox_ops_post_guard(proxmox_ops_blueprint)
 
 
 @proxmox_ops_blueprint.route("/proxmox", methods=["GET", "POST"])
@@ -61,6 +64,14 @@ def proxmox_ops():
                     f"Inventory sync created {sync_result['created_nodes']} node(s) and reconciled "
                     f"{reconcile_result['clusters']} cluster(s)."
                 )
+                bkc_db.append_audit(
+                    int(current_user.id),
+                    get_current_tenant_id(),
+                    "proxmox.clone_qemu",
+                    "hypervisor",
+                    {"name": name, "source_vmid": source_vmid, "new_vmid": new_vmid},
+                    request.remote_addr,
+                )
                 return redirect(url_for("proxmox_ops.proxmox_ops"))
 
             elif action == "clone-lxc":
@@ -89,6 +100,14 @@ def proxmox_ops():
                     f"Submitted LXC clone for {hostname} from {source_vmid} on {source_node}. "
                     f"Inventory sync created {sync_result['created_nodes']} node(s) and reconciled "
                     f"{reconcile_result['clusters']} cluster(s)."
+                )
+                bkc_db.append_audit(
+                    int(current_user.id),
+                    get_current_tenant_id(),
+                    "proxmox.clone_lxc",
+                    "hypervisor",
+                    {"hostname": hostname, "source_vmid": source_vmid, "new_vmid": new_vmid},
+                    request.remote_addr,
                 )
                 return redirect(url_for("proxmox_ops.proxmox_ops"))
 

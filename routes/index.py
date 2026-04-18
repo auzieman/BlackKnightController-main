@@ -1,8 +1,6 @@
 from flask import Blueprint, render_template
-
 from services.rules_store import load_rules
 from services.workflow import parse_workflow_stages
-
 
 index_blueprint = Blueprint("index", __name__)
 

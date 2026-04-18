@@ -1,0 +1,20 @@
+{% extends 'base.html.j2' %}
+{% block title %}Jobs{% endblock %}
+{% block page_heading %}Background jobs{% endblock %}
+
+{% block content %}
+    <section class="form-shell">
+        {% if not job_queue_enabled %}
+            <p class="sidebar-copy">
+                Background jobs are <strong>off</strong>. Set <code>BKC_JOB_QUEUE_URL</code> on the BKC container (for example
+                <code>redis://redis:6379/2</code>) and start the <code>bkc-worker</code> service from <code>docker-compose.yml</code>.
+            </p>
+        {% else %}
+            <p class="sidebar-copy">
+                Long-running integration and discovery tasks run in <strong>bkc-worker</strong>. After you queue a job, follow the
+                flash link to <code>/jobs/&lt;id&gt;</code> for live status (page auto-refreshes).
+            </p>
+        {% endif %}
+        <p class="top-gap"><a class="button" href="{{ url_for('index.index') }}">Overview</a></p>
+    </section>
+{% endblock %}

@@ -1,12 +1,12 @@
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
-
+from services.access_control import register_inventory_post_guard
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.inventory_probe import probe_hosts
 from services.rules_store import load_rules, save_rules
 from services.workflow import build_stage_columns, parse_workflow_stages
 
-
 groups = Blueprint("groups", __name__)
+register_inventory_post_guard(groups)
 
 
 @groups.route("/group", methods=["GET"])

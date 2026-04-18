@@ -1,11 +1,11 @@
 import json
 
 from flask import Blueprint, redirect, render_template, request, url_for
-
+from services.access_control import register_inventory_post_guard
 from services.rules_store import load_rules, save_rules
 
-
 builder_blueprint = Blueprint("builder", __name__)
+register_inventory_post_guard(builder_blueprint)
 
 
 def _normalize_text(value: str, default: str = "") -> str:

@@ -1,0 +1,22 @@
+# Reverse proxy in front of BKC (TLS profile in docker-compose).
+# Binds :80 inside the container; map host 8080:80 or 80:80 as you prefer.
+
+{
+	admin off
+}
+
+:80 {
+	encode gzip zstd
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+	}
+
+	reverse_proxy bkc:5000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+}

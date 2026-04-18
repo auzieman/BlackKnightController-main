@@ -8,10 +8,11 @@
 </head>
 <body>
     <div class="starfield"></div>
-    <div class="shell">
+    <div class="shell {% if request.endpoint == 'auth.login' %}shell-login{% endif %}">
+        {% if request.endpoint != 'auth.login' %}
         <aside class="sidebar">
             <div class="brand-block">
-                <p class="eyebrow">BlackKnightController</p>
+                <p class="eyebrow">BlackKnightController CE</p>
                 <h1>Orbital Ops</h1>
                 <p class="sidebar-copy">A control surface for Proxmox, Ansible, and stage-driven automation with a little Black Knight satellite mythology built in.</p>
                 <div class="status-chip">Telemetry-linked workflow console</div>
@@ -27,25 +28,65 @@
                     <li><a href="{{ url_for('proxmox_ops.proxmox_ops') }}">Proxmox Ops</a></li>
                     <li><a href="{{ url_for('add_nodes.add_nodes') }}">Bulk Add Nodes</a></li>
                     <li><a href="{{ url_for('templates.list_templates') }}">Templates</a></li>
+                    {% if bkc_job_queue %}
+                        <li><a href="{{ url_for('jobs.jobs_home') }}">Jobs</a></li>
+                    {% endif %}
+                    {% if bkc_user and bkc_user.is_superuser %}
+                        <li><a href="{{ url_for('settings.settings_home') }}">Platform settings</a></li>
+                    {% endif %}
                 </ul>
             </nav>
         </aside>
-        <main class="main">
+        {% endif %}
+        <main class="main {% if request.endpoint == 'auth.login' %}main-login{% endif %}">
+            {% if request.endpoint != 'auth.login' %}
             <header class="topbar">
                 <div>
                     <p class="eyebrow">Operator View</p>
                     <h2>{% block page_heading %}Flight Deck{% endblock %}</h2>
                 </div>
-                <div class="topbar-badges">
-                    <span class="status-pill">Hybrid Proxmox + Kanban</span>
-                    <span class="status-pill muted">Human / AI ops surface</span>
+                <div class="topbar-actions">
+                    {% if current_user.is_authenticated %}
+                        {% if bkc_memberships|length > 1 or (bkc_user and bkc_user.is_superuser) %}
+                            <form method="post" action="{{ url_for('auth.switch_tenant') }}" class="tenant-switch">
+                                {% from '_macros.html.j2' import csrf_field %}{{ csrf_field() }}
+                                <label class="eyebrow-inline">Tenant
+                                    <select name="slug" class="input-like input-compact" onchange="this.form.submit()">
+                                        {% if bkc_user and bkc_user.is_superuser %}
+                                            {% for t in bkc_all_tenants %}
+                                                <option value="{{ t.slug }}" {% if t.slug == bkc_tenant_slug %}selected{% endif %}>{{ t.slug }}</option>
+                                            {% endfor %}
+                                        {% else %}
+                                            {% for m in bkc_memberships %}
+                                                <option value="{{ m.slug }}" {% if m.slug == bkc_tenant_slug %}selected{% endif %}>{{ m.slug }}</option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                </label>
+                                <noscript><button type="submit" class="button button-quiet">Switch</button></noscript>
+                            </form>
+                        {% endif %}
+                        <span class="status-pill muted">{{ bkc_username }}</span>
+                        <form method="post" action="{{ url_for('auth.logout') }}" class="inline-logout">
+                            {% from '_macros.html.j2' import csrf_field %}{{ csrf_field() }}
+                            <button type="submit" class="button button-quiet">Sign out</button>
+                        </form>
+                    {% endif %}
                 </div>
             </header>
-            {% with messages = get_flashed_messages() %}
+            {% else %}
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Session</p>
+                    <h2>Sign in</h2>
+                </div>
+            </header>
+            {% endif %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     <section class="flash-stack">
-                        {% for message in messages %}
-                            <div class="flash">{{ message }}</div>
+                        {% for category, message in messages %}
+                            <div class="flash {% if category == 'error' %}flash-error{% endif %}">{{ message }}</div>
                         {% endfor %}
                     </section>
                 {% endif %}

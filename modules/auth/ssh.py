@@ -1,5 +1,6 @@
 import paramiko
 
+
 def run_template(host, username, password, key_file, template_output):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())

@@ -132,6 +132,7 @@ a {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
@@ -514,6 +515,76 @@ th {
 
 .flash {
   padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.flash-error {
+  border-color: rgba(220, 90, 90, 0.45);
+  background: rgba(60, 18, 18, 0.35);
+}
+
+.shell-login {
+  grid-template-columns: 1fr;
+}
+
+.main-login {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-top: 32px;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.tenant-switch {
+  margin: 0;
+}
+
+.inline-logout {
+  margin: 0;
+}
+
+.button-quiet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.input-compact {
+  min-width: 8rem;
+}
+
+.eyebrow-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.table-scroll {
+  overflow-x: auto;
 }
 
 .empty-state {

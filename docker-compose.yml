@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: blackknightcontroller-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   bkc:
     build:
       context: .
@@ -6,12 +16,63 @@ services:
     container_name: blackknightcontroller
     ports:
       - "5000:5000"
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
+      FLASK_ENV: development
+      # Rate limits shared across all BKC workers (required for replicas > 1).
+      BKC_RATELIMIT_STORAGE_URI: redis://redis:6379/0
+      # Background jobs (Ansible/Proxmox sync, subnet scan) — requires bkc-worker service.
+      BKC_JOB_QUEUE_URL: redis://redis:6379/2
+      # BKC_BOOTSTRAP_ADMIN_PASSWORD: "change-me-on-first-boot"
+      # BKC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+      # BKC_SECRET_KEY: "long-random-string-for-sessions"
+      # JSON access logs for docker logs / Loki (one JSON object per line):
+      # BKC_ACCESS_LOG_FORMAT: "json"
+      # When fronting BKC with the `tls` Caddy profile (or any proxy), trust forwarded headers:
+      # BKC_BEHIND_PROXY: "1"
+    volumes:
+      - ./dictionaries:/app/dictionaries
+      - ./file_templates:/app/file_templates
+      - ./keys:/app/keys
+    restart: unless-stopped
+
+  bkc-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blackknightcontroller-worker
+    command: ["python", "bkc_worker.py"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      bkc:
+        condition: service_started
+    environment:
+      BKC_JOB_QUEUE_URL: redis://redis:6379/2
+      BKC_RATELIMIT_STORAGE_URI: redis://redis:6379/0
       FLASK_ENV: development
     volumes:
       - ./dictionaries:/app/dictionaries
       - ./file_templates:/app/file_templates
       - ./keys:/app/keys
+    restart: unless-stopped
+
+  # Optional edge: HTTP reverse proxy with security headers (map 8080:80 or 80:80 on the host).
+  # Start with: docker compose --profile tls up --build
+  caddy:
+    image: caddy:2-alpine
+    container_name: blackknightcontroller-caddy
+    profiles:
+      - tls
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      bkc:
+        condition: service_started
     restart: unless-stopped
 
   pxe-lab:

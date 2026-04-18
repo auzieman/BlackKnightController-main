@@ -15,6 +15,8 @@ dictionaries/ansible_scan.json
 dictionaries/admin_history.json
 dictionaries/secrets_meta.json
 dictionaries/rules.local.json
+dictionaries/bkc.db
+dictionaries/tenants/
 
 *.log
 *.out

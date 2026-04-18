@@ -1,8 +1,12 @@
 {% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
 {% block title %}Admin Mode{% endblock %}
 {% block page_heading %}Admin Mode{% endblock %}
 
 {% block content %}
+    {% if not bkc_perm.remote_exec %}
+        <p class="sidebar-copy">Your role is read-only for remote admin. Ask an owner to run SSH or Ansible actions.</p>
+    {% endif %}
     <section class="builder-layout">
         <section class="form-shell">
             <div class="section-header">
@@ -11,7 +15,9 @@
                     <h2>Run host command</h2>
                 </div>
             </div>
+            {% if bkc_perm.remote_exec %}
             <form method="post" class="form-grid">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="host-command">
                 <label>
                     Group
@@ -50,6 +56,7 @@
                     <span class="status-pill muted">If nothing is checked, BKC runs the command across the selected group.</span>
                 </div>
             </form>
+            {% endif %}
         </section>
 
         <section class="form-shell">
@@ -59,7 +66,9 @@
                     <h2>Run playbook</h2>
                 </div>
             </div>
+            {% if bkc_perm.remote_exec %}
             <form method="post" class="form-grid">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="ansible-playbook">
                 <label>
                     Playbook
@@ -82,6 +91,7 @@
                     <button class="button" type="submit">Run playbook</button>
                 </div>
             </form>
+            {% endif %}
         </section>
     </section>
 

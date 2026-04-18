@@ -1,6 +1,5 @@
-from copy import deepcopy
 import ipaddress
-
+from copy import deepcopy
 
 DEFAULT_NODE_FIELDS = {
     "user": "",

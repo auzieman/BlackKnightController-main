@@ -1,0 +1,35 @@
+{% extends 'base.html.j2' %}
+{% block title %}Job {{ job_id[:8] }}…{% endblock %}
+{% block page_heading %}Background job{% endblock %}
+
+{% block content %}
+    <section class="form-shell">
+        <p class="eyebrow">Job ID</p>
+        <p><code>{{ job_id }}</code></p>
+        <p class="eyebrow top-gap">Status</p>
+        <p><strong>{{ job.get_status() }}</strong></p>
+        {% if meta.tenant_slug %}
+            <p class="muted">Tenant: {{ meta.tenant_slug }}</p>
+        {% endif %}
+        {% if job.is_finished and job.result is not none %}
+            <p class="eyebrow top-gap">Result</p>
+            <pre class="json-preview">{{ job.result | tojson(indent=2) }}</pre>
+        {% endif %}
+        {% if job.is_failed %}
+            <p class="eyebrow top-gap">Error</p>
+            <pre class="json-preview">{{ job.exc_info or 'No traceback stored.' }}</pre>
+        {% endif %}
+        <p class="top-gap button-row">
+            <a class="button secondary" href="{{ url_for('jobs.job_status', job_id=job_id) }}">Refresh</a>
+            {% if meta.kind == 'integrations' %}
+                <a class="button" href="{{ url_for('integrations.integrations') }}">Integrations</a>
+            {% elif meta.kind == 'add_nodes' %}
+                <a class="button" href="{{ url_for('add_nodes.add_nodes') }}">Add nodes</a>
+            {% endif %}
+            <a class="button secondary" href="{{ url_for('jobs.jobs_home') }}">Jobs home</a>
+        </p>
+    </section>
+    <script>
+        setTimeout(function () { location.reload(); }, 4000);
+    </script>
+{% endblock %}

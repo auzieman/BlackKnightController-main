@@ -1,7 +1,5 @@
 from flask import Blueprint, abort, render_template
-
 from services.rules_store import load_rules
-
 
 deploy_host_blueprint = Blueprint("deploy_host", __name__)
 

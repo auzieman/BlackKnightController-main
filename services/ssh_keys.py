@@ -2,7 +2,6 @@ from pathlib import Path
 
 from paramiko import RSAKey
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
 KEYS_DIR = BASE_DIR / "keys"
 

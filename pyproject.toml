@@ -1,0 +1,26 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["services", "routes", "tests", "app.py", "bkc_server.py", "bkc_cli.py", "bkc_worker.py"]
+extend-exclude = [
+    "dictionaries",
+    "html_templates",
+    "static",
+    "file_templates",
+    ".venv",
+    "venv",
+    "attic",
+    "modules",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = [
+    "E402",  # module import not at top (Flask apps, scripts)
+    "E501",  # line length (legacy lines)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"bkc_cli.py" = ["E402"]
+"bkc_server.py" = ["E402"]
+"bkc_worker.py" = ["E402"]

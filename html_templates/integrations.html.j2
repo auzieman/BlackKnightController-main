@@ -1,4 +1,5 @@
 {% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
 
 {% block title %}Integrations{% endblock %}
 
@@ -14,6 +15,7 @@
         <article class="form-shell">
             <h3>Proxmox API</h3>
             <form method="post" class="form-grid">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="save-proxmox">
                 <label class="wide">
                     API URL
@@ -44,14 +46,17 @@
                 </div>
             </form>
             <form method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="test-proxmox">
                 <button class="button secondary" type="submit">Test Proxmox connection</button>
             </form>
             <form method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="pull-proxmox-inventory">
                 <button class="button secondary" type="submit">Pull Proxmox inventory</button>
             </form>
             <form method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="sync-proxmox-inventory">
                 <button class="button secondary" type="submit">Sync Proxmox inventory into BKC</button>
             </form>
@@ -60,6 +65,7 @@
         <article class="form-shell">
             <h3>Ansible Controller</h3>
             <form method="post" class="form-grid">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="save-ansible">
                 <label>
                     Controller host
@@ -90,10 +96,12 @@
                 </div>
             </form>
             <form method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="scan-ansible">
                 <button class="button secondary" type="submit">Scan Ansible config</button>
             </form>
             <form method="post" class="inline-form">
+                {{ csrf_field() }}
                 <input type="hidden" name="action" value="sync-ansible-inventory">
                 <button class="button secondary" type="submit">Sync Ansible inventory into BKC</button>
             </form>
@@ -103,6 +111,7 @@
     <section class="form-shell">
         <h3>SSH Automation Key</h3>
         <form method="post" class="form-grid">
+            {{ csrf_field() }}
             <input type="hidden" name="action" value="save-ssh">
             <label>
                 Key name
@@ -113,6 +122,7 @@
             </div>
         </form>
         <form method="post" class="inline-form">
+            {{ csrf_field() }}
             <input type="hidden" name="action" value="generate-ssh-key">
             <button class="button secondary" type="submit">Generate SSH key pair</button>
         </form>
