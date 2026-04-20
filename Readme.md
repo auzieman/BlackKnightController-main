@@ -232,6 +232,15 @@ Clone a VM from a template:
 python3 bkc_cli.py proxmox-clone --node pve01 --source-vmid 9000 --new-vmid 101 --name web-101
 ```
 
+Generate a Fedora fresh-build plan with ISO download commands and a minimal Kickstart scaffold:
+
+```bash
+python3 bkc_cli.py fresh-build-plan \
+  --hostname swarm4.morgans.lan \
+  --network-mode dhcp \
+  --nameserver-host ns1.morgans.lan
+```
+
 ### Web UI controls
 
 The web UI now exposes integration settings under `/integrations`.

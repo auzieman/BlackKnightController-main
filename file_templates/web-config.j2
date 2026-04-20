@@ -1,0 +1,6 @@
+# Managed by BlackKnightController
+
+server_name {{ fqdn or host_name }};
+document_root {{ web_root | default('/var/www/html') }};
+log_directory {{ log_dir | default('/var/log/httpd') }};
+environment {{ environment | default(env | default('lab')) }};

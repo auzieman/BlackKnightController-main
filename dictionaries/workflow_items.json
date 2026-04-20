@@ -1,0 +1,42 @@
+{
+  "items": [
+    {
+      "created_at": "2026-03-20T00:00:00+00:00",
+      "dns_servers": "10.20.0.10,10.20.0.1",
+      "execution_asset_id": "proxmox:clone-resource",
+      "firstboot_asset_id": "firstboot:network-personalize",
+      "gateway": "10.20.0.1",
+      "group": "proxmox-node-a",
+      "id": "sample-clone-swarm4",
+      "network_mode": "existing-lan-static",
+      "notes": "Create swarm4 from an existing swarm node, then hand it off for template and playbook steps.",
+      "requested_ip": "10.20.1.41",
+      "source_group": "proxmox-node-a",
+      "source_host": "app-201",
+      "stage": "accepted",
+      "status": "planned",
+      "target_host": "swarm4",
+      "title": "Clone swarm source into swarm4",
+      "validation_profile": "ssh-22,docker-swarm"
+    },
+    {
+      "created_at": "2026-03-20T00:05:00+00:00",
+      "dns_servers": "10.20.0.10,10.20.0.1",
+      "execution_asset_id": "ansible:docker-swarm.yml",
+      "firstboot_asset_id": "",
+      "gateway": "10.20.0.1",
+      "group": "proxmox-node-a",
+      "id": "sample-configure-swarm4",
+      "network_mode": "existing-lan-static",
+      "notes": "After bootstrap and key install, run the swarm playbook against the new node.",
+      "requested_ip": "10.20.1.41",
+      "source_group": "proxmox-node-a",
+      "source_host": "swarm4",
+      "stage": "configure",
+      "status": "planned",
+      "target_host": "swarm4",
+      "title": "Configure swarm4 with Docker Swarm playbook",
+      "validation_profile": "ssh-22,docker-swarm"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "assets": [
+    {
+      "command": "apt-get update && apt-get install -y docker.io",
+      "description": "Bootstrap a Linux Docker host over SSH.",
+      "id": "ssh:docker-bootstrap",
+      "label": "ssh / docker bootstrap",
+      "name": "docker-bootstrap",
+      "type": "ssh-command"
+    },
+    {
+      "description": "Run the Docker Swarm playbook from the configured Ansible controller.",
+      "id": "ansible:docker-swarm.yml",
+      "label": "ansible / docker-swarm.yml",
+      "name": "docker-swarm",
+      "playbook": "docker-swarm.yml",
+      "type": "ansible-playbook"
+    },
+    {
+      "description": "Clone a Proxmox VM or CT before bootstrap and configuration.",
+      "id": "proxmox:clone-resource",
+      "label": "proxmox / clone resource",
+      "name": "clone-resource",
+      "type": "proxmox-action"
+    }
+  ]
+}

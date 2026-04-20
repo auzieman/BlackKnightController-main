@@ -14,6 +14,7 @@ from routes.health_public import health_public_blueprint
 from routes.index import index_blueprint
 from routes.integrations import integrations_blueprint
 from routes.jobs import jobs_blueprint
+from routes.inventory_console import inventory_console_blueprint
 from routes.proxmox_ops import proxmox_ops_blueprint
 from routes.settings import settings_blueprint
 from routes.templates import templates
@@ -27,6 +28,7 @@ app.register_blueprint(auth_blueprint)
 app.register_blueprint(api_blueprint)
 app.register_blueprint(settings_blueprint)
 app.register_blueprint(index_blueprint)
+app.register_blueprint(inventory_console_blueprint)
 app.register_blueprint(groups)
 app.register_blueprint(templates)
 app.register_blueprint(add_nodes_blueprint)

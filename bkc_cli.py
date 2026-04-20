@@ -2,15 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
-from services.discovery import DiscoveryError, scan_subnet_ssh
-from services.integration_store import load_integrations, save_integrations
-from services.proxmox import (
-    ProxmoxAPIError,
-    ProxmoxClient,
-    ProxmoxConfigError,
-    load_proxmox_config,
-    summarize_inventory,
-)
+from services.fresh_build_library import fresh_build_plan
 from services.rules_store import get_rules_path, load_rules, save_rules
 
 
@@ -76,6 +68,7 @@ def main() -> int:
             "proxmox-clone",
             "scan-subnet",
             "migrate-secrets",
+            "fresh-build-plan",
         ],
         nargs="?",
         default="summary",
@@ -97,6 +90,14 @@ def main() -> int:
     )
     parser.add_argument("--username", help="SSH username for subnet discovery.")
     parser.add_argument("--password", default="", help="SSH password for subnet discovery/bootstrap.")
+    parser.add_argument("--release", default="43", help="Fedora release number for fresh build planning.")
+    parser.add_argument("--arch", default="x86_64", help="Architecture for Fedora ISO planning.")
+    parser.add_argument("--hostname", help="Hostname for fresh build planning, e.g. swarm4.morgans.lan.")
+    parser.add_argument("--network-mode", default="dhcp", choices=["dhcp", "static"], help="Network mode for Kickstart generation.")
+    parser.add_argument("--ip-address", default="", help="Static IP for Kickstart generation.")
+    parser.add_argument("--gateway", default="", help="Gateway for static Kickstart generation.")
+    parser.add_argument("--dns-servers", default="", help="Comma-separated DNS server list for static Kickstart generation.")
+    parser.add_argument("--nameserver-host", default="ns1.morgans.lan", help="Host that will serve Kickstart files.")
     parser.add_argument(
         "--install-key",
         action="store_true",
@@ -125,6 +126,14 @@ def main() -> int:
         return 1
 
     if args.command in {"proxmox-check", "proxmox-inventory", "proxmox-clone"}:
+        from services.proxmox import (
+            ProxmoxAPIError,
+            ProxmoxClient,
+            ProxmoxConfigError,
+            load_proxmox_config,
+            summarize_inventory,
+        )
+
         try:
             proxmox = ProxmoxClient(load_proxmox_config())
         except ProxmoxConfigError as exc:
@@ -164,6 +173,8 @@ def main() -> int:
             return 1
 
     if args.command == "scan-subnet":
+        from services.discovery import DiscoveryError, scan_subnet_ssh
+
         if not args.subnet or not args.username:
             print("scan-subnet requires --subnet and --username.")
             return 2
@@ -183,11 +194,34 @@ def main() -> int:
             return 1
 
     if args.command == "migrate-secrets":
+        from services.integration_store import load_integrations, save_integrations
+
         integrations = load_integrations()
         save_integrations(integrations)
         save_rules(rules)
         print("Encrypted secrets rewritten to dictionaries/integrations.json and dictionaries/rules.json.")
         print("Back up keys/bkc_master_key and dictionaries/secrets_meta.json to preserve recovery.")
+        return 0
+
+    if args.command == "fresh-build-plan":
+        if not args.hostname:
+            print("fresh-build-plan requires --hostname.")
+            return 2
+        plan = fresh_build_plan(
+            hostname=args.hostname,
+            release=args.release,
+            arch=args.arch,
+            username=args.username or "deployer",
+            password=args.password or "changeme",
+            network_mode=args.network_mode,
+            ip_address=args.ip_address,
+            gateway=args.gateway,
+            dns_servers=args.dns_servers,
+            nameserver_host=args.nameserver_host,
+        )
+        print(json.dumps(plan, indent=2))
+        if args.output:
+            args.output.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
         return 0
 
     print(json.dumps(rules, indent=2))

@@ -17,6 +17,7 @@ dictionaries/secrets_meta.json
 dictionaries/rules.local.json
 dictionaries/bkc.db
 dictionaries/tenants/
+dictionaries/workflow_items.local.json
 
 *.log
 *.out

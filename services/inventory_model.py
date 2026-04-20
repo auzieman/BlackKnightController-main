@@ -45,6 +45,53 @@ def resolve_group_hosts(rules: dict, group_name: str) -> list[tuple[str, dict, d
     return results
 
 
+def route_target_for_host(host_name: str, resolved: dict) -> str:
+    for candidate in [
+        resolved.get("ip", ""),
+        resolved.get("fqdn", ""),
+        resolved.get("hostname", ""),
+        host_name,
+    ]:
+        normalized = (candidate or "").strip()
+        if not normalized:
+            continue
+        if _looks_like_ip(normalized) or "." in normalized:
+            return normalized
+    return ""
+
+
+def command_ready(host_name: str, resolved: dict) -> tuple[bool, str]:
+    route_target = route_target_for_host(host_name, resolved)
+    if not route_target:
+        return False, "no route target"
+    if not resolved.get("user"):
+        return False, "no user"
+    if not resolved.get("password") and not resolved.get("private_key"):
+        return False, "no auth"
+    return True, "ready"
+
+
+def build_actionable_inventory(rules: dict) -> list[dict]:
+    actionable_groups = []
+    for group_name in sorted(rules.get("groups", {}).keys()):
+        hosts = []
+        for host_name, node_data, resolved in resolve_group_hosts(rules, group_name):
+            ready, reason = command_ready(host_name, resolved)
+            route_target = route_target_for_host(host_name, resolved)
+            hosts.append(
+                {
+                    "group": group_name,
+                    "name": host_name,
+                    "route_target": route_target,
+                    "ready": ready,
+                    "reason": reason,
+                    "resolved": resolved,
+                }
+            )
+        actionable_groups.append({"name": group_name, "hosts": hosts})
+    return actionable_groups
+
+
 def _looks_like_ip(value: str) -> bool:
     if not value:
         return False

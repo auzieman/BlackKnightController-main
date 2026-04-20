@@ -8,19 +8,193 @@
         <div>
             <p class="eyebrow">Mission board</p>
             <h2>Stage-driven workflow across groups</h2>
-            <p class="hero-copy">This is the first dedicated workflow view: group-level rails with cards as managed resources. It is intentionally closer to Kanboard than a dashboard, so inventory can turn into actual work instead of static metadata.</p>
+            <p class="hero-copy">Work items now sit above inventory: plan a clone, link it to a template or playbook, then let the underlying nodes and groups remain the assets those steps operate on.</p>
         </div>
         <div class="hero-panel">
-            <p><strong>Model:</strong> swimlane-ready workflow rails</p>
-            <p><strong>Cards:</strong> hosts, VMs, containers, and discovered nodes</p>
-            <p><strong>Next:</strong> attach real actions to stage movement</p>
+            <p><strong>Model:</strong> work items linked to execution assets</p>
+            <p><strong>Cards:</strong> planned jobs, not just discovered resources</p>
+            <p><strong>Next:</strong> attach execution and status updates to each step</p>
         </div>
+    </section>
+
+    <section class="builder-layout top-gap">
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Create work item</p>
+                    <h2>Plan a linked step</h2>
+                </div>
+            </div>
+            <form method="post" class="form-grid">
+                {{ csrf_input() }}
+                <label>
+                    Title
+                    <input type="text" name="title" placeholder="Clone swarm1 to swarm4 and configure Docker">
+                </label>
+                <label>
+                    Stage
+                    <select name="stage">
+                        {% for stage in workflow_stages %}
+                            <option value="{{ stage }}">{{ stage }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Target group
+                    <select name="group">
+                        {% for group_name, group_data in rules.groups.items() %}
+                            <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Target host/resource
+                    <input type="text" name="target_host" placeholder="swarm4">
+                </label>
+                <label>
+                    Source resource
+                    <select name="source_ref">
+                        <option value="">No linked source resource</option>
+                        {% for item in inventory_choices %}
+                            <option value="{{ item.value }}">{{ item.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="wide">
+                    Execution asset
+                    <select name="execution_asset_id">
+                        <option value="">No linked asset yet</option>
+                        {% for asset in execution_assets %}
+                            <option value="{{ asset.id }}">{{ asset.label or asset.name }} ({{ asset.type }})</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Network mode
+                    <select name="network_mode">
+                        <option value="existing-lan-dhcp">existing-lan-dhcp</option>
+                        <option value="existing-lan-static">existing-lan-static</option>
+                        <option value="isolated-provisioning-net">isolated-provisioning-net</option>
+                    </select>
+                </label>
+                <label>
+                    Requested IP
+                    <input type="text" name="requested_ip" placeholder="192.168.1.17">
+                </label>
+                <label>
+                    Gateway
+                    <input type="text" name="gateway" placeholder="192.168.1.1">
+                </label>
+                <label>
+                    DNS servers
+                    <input type="text" name="dns_servers" placeholder="192.168.1.10,192.168.1.1">
+                </label>
+                <label>
+                    Firstboot asset
+                    <select name="firstboot_asset_id">
+                        <option value="">No firstboot step yet</option>
+                        {% for asset in execution_assets %}
+                            {% if asset.type == 'firstboot' or asset.type == 'bkc-template' %}
+                                <option value="{{ asset.id }}">{{ asset.label or asset.name }} ({{ asset.type }})</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    Validation profile
+                    <input type="text" name="validation_profile" placeholder="ssh-22,https-443,docker-swarm">
+                </label>
+                <label class="wide">
+                    Notes
+                    <textarea name="notes" rows="4" placeholder="Clone the existing swarm node, wait for IP, then apply the Docker baseline."></textarea>
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Create work item</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Execution assets</p>
+                    <h2>Linked actions</h2>
+                </div>
+            </div>
+            <section class="table-card embedded-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Name</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in execution_assets %}
+                            <tr>
+                                <td>{{ asset.type }}</td>
+                                <td>{{ asset.label or asset.name }}</td>
+                                <td>{{ asset.output or asset.playbook or asset.command or asset.template_file or 'linked asset' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="3">No execution assets available yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Planned work</p>
+            <h3>Work item board</h3>
+        </div>
+    </section>
+
+    <section class="workflow-board">
+        {% for column in work_item_columns %}
+            <article class="workflow-column">
+                <div class="workflow-column-header">
+                    <h4>{{ column.name }}</h4>
+                    <span>{{ column["items"] | length }}</span>
+                </div>
+                <div class="workflow-column-body">
+                    {% for item in column["items"] %}
+                        <article class="workflow-node-card">
+                            <div class="workflow-node-top">
+                                <strong>{{ item.title }}</strong>
+                                <span>{{ item.target_host }}</span>
+                            </div>
+                            <p>{{ item.group }}{% if item.source_host %} <- {{ item.source_group or item.group }} / {{ item.source_host }}{% endif %}</p>
+                            <p>{{ item.asset.label or item.execution_asset_id or 'no linked asset' }}</p>
+                            <p>{{ item.network_mode or 'network unset' }}{% if item.requested_ip %} / {{ item.requested_ip }}{% endif %}</p>
+                            {% if item.source_resolved %}
+                                <p>Source profile: {{ item.source_resolved.os_name or item.source_resolved.configuration or 'unknown' }}{% if item.source_resolved.ip %} / {{ item.source_resolved.ip }}{% endif %}</p>
+                            {% endif %}
+                            {% if item.firstboot_asset.label or item.firstboot_asset_id %}
+                                <p>Firstboot: {{ item.firstboot_asset.label or item.firstboot_asset_id }}</p>
+                            {% endif %}
+                            {% if item.validation_profile %}
+                                <p>Validate: {{ item.validation_profile }}</p>
+                            {% endif %}
+                            <p>{{ item.notes or 'no notes' }}</p>
+                        </article>
+                    {% else %}
+                        <div class="workflow-empty">No work items in this stage.</div>
+                    {% endfor %}
+                </div>
+            </article>
+        {% endfor %}
     </section>
 
     {% for workflow_group in workflow_groups %}
         <section class="section-header">
             <div>
-                <p class="eyebrow">Workflow rail</p>
+                <p class="eyebrow">Inventory rail</p>
                 <h3>{{ workflow_group.name }}</h3>
             </div>
             <div class="topbar-badges">

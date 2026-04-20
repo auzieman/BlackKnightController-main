@@ -1,0 +1,9 @@
+# Managed by BlackKnightController
+
+[client]
+user={{ db_user | default('dbuser') }}
+password={{ db_password | default('change-me') }}
+
+[database]
+name={{ db_name | default('appdb') }}
+environment={{ environment | default(env | default('lab')) }}

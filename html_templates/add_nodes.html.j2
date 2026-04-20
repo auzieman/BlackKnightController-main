@@ -11,6 +11,7 @@
                 </div>
             </div>
             <form method="post" class="form-grid">
+                {{ csrf_input() }}
                 <input type="hidden" name="action" value="manual">
                 {{ add_node_form.hidden_tag() }}
                 <label class="wide">
@@ -35,6 +36,7 @@
                 </div>
             </div>
             <form method="post" class="form-grid">
+                {{ csrf_input() }}
                 <input type="hidden" name="action" value="scan">
                 {{ scan_subnet_form.hidden_tag() }}
                 <label>

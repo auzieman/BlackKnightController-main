@@ -22,8 +22,8 @@
                 <label>
                     Group
                     <select name="group">
-                        {% for group_name, group_data in groups %}
-                            <option value="{{ group_name }}">{{ group_name }}</option>
+                        {% for group_data in actionable_inventory %}
+                            <option value="{{ group_data.name }}"{% if prefill_group == group_data.name %} selected{% endif %}>{{ group_data.name }}</option>
                         {% endfor %}
                     </select>
                 </label>
@@ -32,17 +32,17 @@
                     <input type="text" name="command" placeholder="hostname && uname -a">
                 </label>
                 <div class="wide inventory-picklist">
-                    {% for group_name, group_data in groups %}
+                    {% for group_data in actionable_inventory %}
                         <section class="picklist-group">
                             <div class="picklist-header">
-                                <strong>{{ group_name }}</strong>
-                                <span>{{ group_data.nodes | length }} hosts</span>
+                                <strong>{{ group_data.name }}</strong>
+                                <span>{{ group_data.hosts | length }} hosts</span>
                             </div>
                             <div class="picklist-items">
-                                {% for host_name, host_data in group_data.nodes.items() %}
+                                {% for host in group_data.hosts %}
                                     <label class="pick-item">
-                                        <input type="checkbox" name="selected_hosts" value="{{ group_name }}|{{ host_name }}">
-                                        <span>{{ host_name }}</span>
+                                        <input type="checkbox" name="selected_hosts" value="{{ group_data.name }}|{{ host.name }}" {% if prefill_group == group_data.name and prefill_host == host.name %}checked{% endif %} {% if not host.ready %}disabled{% endif %}>
+                                        <span>{{ host.name }}{% if host.route_target %} -> {{ host.route_target }}{% endif %} {% if not host.ready %}({{ host.reason }}){% endif %}</span>
                                     </label>
                                 {% else %}
                                     <span class="workflow-empty">No hosts in this group.</span>
@@ -53,7 +53,7 @@
                 </div>
                 <div class="wide button-row">
                     <button class="button" type="submit">Run command on selected hosts</button>
-                    <span class="status-pill muted">If nothing is checked, BKC runs the command across the selected group.</span>
+                    <span class="status-pill muted">Explicit host selection is required for remote execution.</span>
                 </div>
             </form>
             {% endif %}
@@ -95,6 +95,94 @@
         </section>
     </section>
 
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">BKC Template Assets</p>
+                <h2>Render and push template</h2>
+            </div>
+        </div>
+        <form method="post" class="form-grid">
+            {{ csrf_field() }}
+            <input type="hidden" name="action" value="bkc-template">
+                <label>
+                    Target group
+                    <select name="template_group">
+                        {% for group_data in actionable_inventory %}
+                            <option value="{{ group_data.name }}"{% if prefill_group == group_data.name %} selected{% endif %}>{{ group_data.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            <label>
+                Template asset
+                <select name="template_asset">
+                    {% for asset in template_assets %}
+                        <option value="{{ asset.id }}">{{ asset.group }} / {{ asset.name }} -> {{ asset.output }}</option>
+                    {% else %}
+                        <option value="">No template assets defined</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="wide inventory-picklist">
+                {% for group_data in actionable_inventory %}
+                    <section class="picklist-group">
+                        <div class="picklist-header">
+                            <strong>{{ group_data.name }}</strong>
+                            <span>{{ group_data.hosts | length }} hosts</span>
+                        </div>
+                        <div class="picklist-items">
+                            {% for host in group_data.hosts %}
+                                <label class="pick-item">
+                                    <input type="checkbox" name="template_selected_hosts" value="{{ group_data.name }}|{{ host.name }}" {% if prefill_group == group_data.name and prefill_host == host.name %}checked{% endif %} {% if not host.ready %}disabled{% endif %}>
+                                    <span>{{ host.name }}{% if host.route_target %} -> {{ host.route_target }}{% endif %} {% if not host.ready %}({{ host.reason }}){% endif %}</span>
+                                </label>
+                            {% else %}
+                                <span class="workflow-empty">No hosts in this group.</span>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endfor %}
+            </div>
+            <div class="wide button-row">
+                <button class="button" type="submit">Apply template asset</button>
+                <span class="status-pill muted">This follows the older BKC loop: render template with vars, then push it over SSH.</span>
+            </div>
+        </form>
+    </section>
+
+    <section class="form-shell top-gap">
+        <div class="section-header">
+            <div>
+                <p class="eyebrow">Actionable inventory</p>
+                <h2>Resolved command targets</h2>
+            </div>
+        </div>
+        <section class="table-card embedded-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Group</th>
+                        <th>Host</th>
+                        <th>Route</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group_data in actionable_inventory %}
+                        {% for host in group_data.hosts %}
+                            <tr>
+                                <td>{{ group_data.name }}</td>
+                                <td>{{ host.name }}</td>
+                                <td>{{ host.route_target or 'unset' }}</td>
+                                <td>{{ 'ready' if host.ready else host.reason }}</td>
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </section>
+
     {% if result %}
         <section class="form-shell top-gap">
             <div class="section-header">
@@ -123,7 +211,6 @@
                 </section>
             {% else %}
                 <section class="meta-panel">
-                    <p><strong>Auth:</strong> {{ result.auth_method }}</p>
                     <p><strong>Exit status:</strong> {{ result.exit_status }}</p>
                     <p><strong>Command:</strong> {{ result.command }}</p>
                 </section>
