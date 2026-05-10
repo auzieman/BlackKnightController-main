@@ -71,6 +71,59 @@ def test_inventory_allowed_with_star_scope(client, api_setup):
     assert r.status_code == 200
 
 
+def test_automation_trigger_and_readback(client, api_setup):
+    tid = api_setup["tenant_id"]
+    uid = api_setup["user_id"]
+    raw, _kid = bkc_db.create_api_key(
+        tid,
+        "automation",
+        uid,
+        scopes="read:automation,write:automation",
+    )
+    h = {"Authorization": f"Bearer {raw}"}
+
+    trigger = client.post(
+        "/api/v1/automation/trigger",
+        headers=h,
+        json={
+            "repo": "tabor-linux-forge",
+            "workflow": "auzix-test-loop",
+            "ref": "refs/heads/main",
+            "commit": "abc1234",
+        },
+    )
+    assert trigger.status_code == 202
+    body = trigger.get_json()
+    assert body["queued"] is False
+    assert body["workflow"] == "auzix-test-loop"
+
+    run_id = body["run_id"]
+    detail = client.get(f"/api/v1/automation/runs/{run_id}", headers=h)
+    assert detail.status_code == 200
+    run = detail.get_json()
+    assert run["repo"] == "tabor-linux-forge"
+    assert run["status"] == "planned"
+    assert run["stages"][0]["name"] == "repo-sync"
+
+    listing = client.get("/api/v1/automation/runs", headers=h)
+    assert listing.status_code == 200
+    runs = listing.get_json()["runs"]
+    assert any(item["id"] == run_id for item in runs)
+
+
+def test_automation_trigger_forbidden_without_scope(client, api_setup):
+    tid = api_setup["tenant_id"]
+    uid = api_setup["user_id"]
+    raw, _kid = bkc_db.create_api_key(tid, "read-only", uid, scopes="read:me,read:inventory")
+    r = client.post(
+        "/api/v1/automation/trigger",
+        headers={"Authorization": f"Bearer {raw}"},
+        json={"repo": "tabor-linux-forge"},
+    )
+    assert r.status_code == 403
+    assert r.get_json()["required"] == "write:automation"
+
+
 def test_me_rate_limit_env(client, api_setup, monkeypatch):
     monkeypatch.setenv("BKC_API_KEY_RATE_LIMIT", "2 per minute")
     tid = api_setup["tenant_id"]

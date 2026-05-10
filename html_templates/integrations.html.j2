@@ -106,6 +106,43 @@
                 <button class="button secondary" type="submit">Sync Ansible inventory into BKC</button>
             </form>
         </article>
+
+        <article class="form-shell">
+            <h3>Docker Swarm Manager</h3>
+            <form method="post" class="form-grid">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="save-docker">
+                <label>
+                    Manager host
+                    <input type="text" name="manager_host" value="{{ integrations.docker.manager_host }}" placeholder="swarm1.lab.auzietek.com">
+                </label>
+                <label>
+                    Manager user
+                    <input type="text" name="manager_user" value="{{ integrations.docker.manager_user }}" placeholder="root">
+                </label>
+                <label>
+                    Manager password
+                    <input type="password" name="manager_password" value="{{ integrations.docker.manager_password }}">
+                </label>
+                <label>
+                    Preferred stack
+                    <input type="text" name="stack_name" value="{{ integrations.docker.stack_name }}" placeholder="blackknight">
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Save Docker settings</button>
+                </div>
+            </form>
+            <form method="post" class="inline-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="scan-docker">
+                <button class="button secondary" type="submit">Scan Docker Swarm</button>
+            </form>
+            <form method="post" class="inline-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="sync-docker-inventory">
+                <button class="button secondary" type="submit">Sync Docker inventory into BKC</button>
+            </form>
+        </article>
     </section>
 
     <section class="form-shell">
@@ -223,6 +260,77 @@
                         {% else %}
                             <tr>
                                 <td>No YAML playbooks found under the configured root.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    {% endif %}
+
+    {% if docker_scan %}
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Scanned from Docker</p>
+                    <h3>Docker Swarm snapshot</h3>
+                </div>
+            </div>
+            <section class="meta-panel">
+                <p><strong>Manager:</strong> {{ docker_scan.manager_user }}@{{ docker_scan.manager_host }}</p>
+                <p><strong>Auth:</strong> {{ docker_scan.auth_method }}</p>
+                <p><strong>Local node state:</strong> {{ docker_scan.swarm.LocalNodeState | default('unknown', true) }}</p>
+                <p><strong>Nodes:</strong> {{ docker_scan.nodes | length }}</p>
+                <p><strong>Stacks:</strong> {{ docker_scan.stacks | length }}</p>
+                <p><strong>Services:</strong> {{ docker_scan.services | length }}</p>
+            </section>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Status</th>
+                            <th>Availability</th>
+                            <th>Manager</th>
+                            <th>Engine</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for node in docker_scan.nodes %}
+                            <tr>
+                                <td>{{ node.Hostname or node.Name or node.raw or 'unknown' }}</td>
+                                <td>{{ node.Status or 'unknown' }}</td>
+                                <td>{{ node.Availability or 'unknown' }}</td>
+                                <td>{{ node.ManagerStatus or '-' }}</td>
+                                <td>{{ node.EngineVersion or '-' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="5">No swarm nodes returned.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Stack</th>
+                            <th>Services</th>
+                            <th>Orchestrator</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stack in docker_scan.stacks %}
+                            <tr>
+                                <td>{{ stack.Name or stack.raw or 'unknown' }}</td>
+                                <td>{{ stack.Services or '-' }}</td>
+                                <td>{{ stack.Orchestrator or '-' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="3">No stacks returned.</td>
                             </tr>
                         {% endfor %}
                     </tbody>

@@ -44,8 +44,9 @@
                                 <strong>{{ host.name }}</strong>
                                 <span>{{ host.data.vmid or host.data.provider or 'node' }}</span>
                             </div>
+                            <p>{{ host.data.application or host.data.configuration or 'unset' }}</p>
                             <p>{{ host.data.configuration or 'unset' }} / {{ host.data.provisioner or 'unset' }}</p>
-                            <p>{{ host.data.state or 'unset' }}</p>
+                            <p>{{ host.data.state or 'unset' }}{% if host.data.docker_replicas %} / {{ host.data.docker_replicas }}{% endif %}</p>
                             <div class="workflow-node-actions">
                                 <a href="{{ url_for('groups.edit_host', group=group, host=host.name) }}">Edit</a>
                                 <a href="{{ url_for('deploy_host.deploy_host', group=group, host=host.name) }}">Deploy</a>
@@ -67,6 +68,7 @@
                 <tr>
                     <th>Select</th>
                     <th>Host</th>
+                    <th>Application</th>
                     <th>VMID</th>
                     <th>Provider</th>
                     <th>Provisioner</th>
@@ -80,11 +82,12 @@
                 <tr>
                     <td><input type="checkbox" name="selected_hosts" value="{{ host_name }}"></td>
                     <td>{{ host_name }}</td>
+                    <td>{{ host_data.application or 'unset' }}</td>
                     <td>{{ host_data.vmid or host_data.provider or 'unset' }}</td>
                     <td>{{ host_data.provider or 'unset' }}</td>
                     <td>{{ host_data.provisioner or 'unset' }}</td>
                     <td>{{ host_data.configuration or 'unset' }}</td>
-                        <td>{{ host_data.state or 'unset' }}</td>
+                        <td>{{ host_data.state or 'unset' }}{% if host_data.docker_replicas %} / {{ host_data.docker_replicas }}{% endif %}</td>
                         <td>
                             <a href="{{ url_for('groups.edit_host', group=group, host=host_name) }}">Edit</a>
                             |
@@ -93,7 +96,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="8">No nodes are attached to this group yet.</td>
+                        <td colspan="9">No nodes are attached to this group yet.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -129,6 +132,7 @@
                         <th>Port</th>
                         <th>Provider</th>
                         <th>Configuration</th>
+                        <th>Application</th>
                         <th>Sources</th>
                     </tr>
                 </thead>
@@ -143,11 +147,12 @@
                             <td>{{ resolved.port or 'unset' }}</td>
                             <td>{{ resolved.provider or 'unset' }}</td>
                             <td>{{ resolved.configuration or 'unset' }}</td>
+                            <td>{{ resolved.application or 'unset' }}</td>
                             <td>{{ resolved.provider_sources | join(', ') if resolved.provider_sources else 'unset' }}</td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="9">No hosts to resolve.</td>
+                            <td colspan="10">No hosts to resolve.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -173,6 +178,7 @@
                         <th>IPs</th>
                         <th>Pkg mgr</th>
                         <th>Services</th>
+                        <th>Runtime</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -185,10 +191,17 @@
                             <td>{{ resolved.observed_ips | join(', ') if resolved.observed_ips else (resolved.ip or 'unset') }}</td>
                             <td>{{ resolved.package_manager or 'unset' }}</td>
                             <td>{{ resolved.services_detected | join(', ') if resolved.services_detected else 'unset' }}</td>
+                            <td>
+                                {% if resolved.docker_service %}
+                                    {{ resolved.docker_stack or 'stack' }} / {{ resolved.docker_replicas or 'unset' }}
+                                {% else %}
+                                    unset
+                                {% endif %}
+                            </td>
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="7">No observed facts yet.</td>
+                            <td colspan="8">No observed facts yet.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

@@ -74,9 +74,12 @@ def edit_host(group, host):
 
     if request.method == "POST":
         host_data["user"] = request.form["user"].strip()
+        host_data["password"] = request.form.get("password", "").strip()
         host_data["port"] = int(request.form["port"])
         host_data["private_key"] = request.form["private_key"].strip()
         host_data["provider"] = request.form["provider"].strip()
+        host_data["ip"] = request.form.get("ip", "").strip()
+        host_data["vmid"] = request.form.get("vmid", "").strip()
         host_data["provisioner"] = request.form["provisioner"].strip()
         host_data["configuration"] = request.form["configuration"].strip()
         host_data["state"] = request.form["state"].strip()

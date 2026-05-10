@@ -6,8 +6,12 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, g, jsonify, request
 from flask_limiter.util import get_remote_address
 from services import bkc_db
+from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
+from services.automation_runs import get_run, load_runs
 from services.api_key_scopes import ENDPOINT_REQUIRED_SCOPE, parse_scopes, scope_allowed
 from services.health_checks import readiness_report
+from services.job_queue import enqueue_job, job_queue_enabled
+from services.pipeline_executor import workflow_job_timeout
 from services.rate_limit import limiter
 from services.rules_store import load_rules
 from services.tenant_context import set_request_tenant
@@ -106,3 +110,91 @@ def me():
 @limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
 def inventory():
     return jsonify(load_rules())
+
+
+@api_blueprint.get("/automation/runs")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def automation_runs():
+    runs = load_runs()
+    tenant_slug = g.get("bkc_api_key_row", {}).get("tenant_slug", "default")
+    visible = [run for run in runs if run.get("tenant_slug") == tenant_slug]
+    return jsonify({"runs": visible})
+
+
+@api_blueprint.get("/automation/runs/<run_id>")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def automation_run_detail(run_id: str):
+    run = get_run(run_id)
+    tenant_slug = g.get("bkc_api_key_row", {}).get("tenant_slug", "default")
+    if not run or run.get("tenant_slug") != tenant_slug:
+        abort(404)
+    return jsonify(run)
+
+
+@api_blueprint.post("/automation/trigger")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def automation_trigger():
+    payload = request.get_json(silent=True) or {}
+    repo = str(payload.get("repo", "")).strip()
+    workflow = str(payload.get("workflow", "auzix-test-loop")).strip() or "auzix-test-loop"
+    if not repo:
+        return jsonify({"error": "repo_required"}), 400
+
+    api_row = g.get("bkc_api_key_row") or {}
+    tenant_slug = str(api_row.get("tenant_slug") or "default")
+    key_name = str(api_row.get("name") or "api")
+    run = create_automation_run(
+        tenant_slug=tenant_slug,
+        requested_by=f"api-key:{key_name}",
+        trigger_source="api",
+        repo=repo,
+        workflow=workflow,
+        ref=str(payload.get("ref", "")),
+        commit=str(payload.get("commit", "")),
+        notes=str(payload.get("notes", "")),
+        extra={"request_payload": payload},
+    )
+
+    queued = False
+    job_id = ""
+    if job_queue_enabled():
+        try:
+            timeout = workflow_job_timeout(workflow, action_mode="deploy")
+            job = enqueue_job(
+                "services.job_tasks.automation_pipeline_job",
+                (
+                    run["id"],
+                    tenant_slug,
+                    api_row.get("tenant_id"),
+                    api_row.get("created_by"),
+                    request.remote_addr,
+                ),
+                job_timeout=timeout,
+                meta={
+                    "kind": "automation",
+                    "run_id": run["id"],
+                    "tenant_slug": tenant_slug,
+                    "repo": repo,
+                    "workflow": workflow,
+                    "job_timeout": timeout,
+                },
+            )
+            queued = True
+            job_id = job.id
+            run = mark_run_queued(run["id"], job.id) or run
+        except Exception as exc:
+            run = mark_run_blocked(run["id"], f"Queue backend unavailable: {exc}") or run
+
+    return (
+        jsonify(
+            {
+                "run_id": run["id"],
+                "status": run["status"],
+                "queued": queued,
+                "job_id": job_id,
+                "workflow": run["workflow"],
+                "queue_available": queued,
+            }
+        ),
+        202,
+    )

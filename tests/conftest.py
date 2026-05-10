@@ -20,6 +20,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     os.environ.setdefault("BKC_SECRET_KEY", "pytest-bkc-secret")
     os.environ.setdefault("BKC_SECRET_KEY_OVERRIDE", "pytest-bkc-secret")
+    os.environ["BKC_RUNTIME_ROOT"] = str(root)
     # Avoid optional Redis readiness failures in /api/v1/ready during tests
     os.environ.pop("BKC_RATELIMIT_STORAGE_URI", None)
     os.environ.pop("RATELIMIT_STORAGE_URI", None)

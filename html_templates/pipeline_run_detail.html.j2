@@ -1,0 +1,254 @@
+{% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
+
+{% block title %}Pipeline Run{% endblock %}
+{% block page_heading %}Pipeline Run{% endblock %}
+
+{% block head_extra %}
+    <meta http-equiv="refresh" content="8">
+{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div>
+            <p class="eyebrow">{{ run.repo }}</p>
+            <h2>{{ run.workflow }}</h2>
+            <p class="hero-copy">{{ run.notes or 'No notes recorded for this run.' }}</p>
+            <div class="pipeline-run-meta top-gap-sm">
+                <span class="status-pill">Run {{ run.id }}</span>
+                <span class="status-pill muted">{{ run.status }}</span>
+                <span class="status-pill muted">{{ run.ref or 'ref unset' }}</span>
+                {% if run.commit %}
+                    <span class="status-pill muted">{{ run.commit[:12] }}</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="hero-panel">
+            <p><strong>Created:</strong> {{ run.created_at }}</p>
+            <p><strong>Updated:</strong> {{ run.updated_at }}</p>
+            <p><strong>Requested by:</strong> {{ run.requested_by }}</p>
+            <p><strong>Stage summary:</strong> {{ run.stage_summary.complete }} complete / {{ run.stages|length }} total</p>
+            {% if run.extra.parent_run_id %}
+                <p><strong>Parent run:</strong> {{ run.extra.parent_run_id }}</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="card-grid">
+        <article class="card metric-card">
+            <p class="metric-label">Complete Stages</p>
+            <p class="metric-value">{{ run.stage_summary.complete }}</p>
+            <p class="metric-copy">Stages that finished with a concrete result.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Active or Waiting</p>
+            <p class="metric-value">{{ run.stage_summary.active }}</p>
+            <p class="metric-copy">Stages still moving, blocked, or waiting on executor work.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Failed Stages</p>
+            <p class="metric-value">{{ run.stage_summary.failed }}</p>
+            <p class="metric-copy">Direct failure points for retry or deeper triage.</p>
+        </article>
+        <article class="card metric-card">
+            <p class="metric-label">Planned Stages</p>
+            <p class="metric-value">{{ run.stage_summary.planned }}</p>
+            <p class="metric-copy">Stages still waiting for upstream work to complete.</p>
+        </article>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Operator actions</p>
+                <h3>Run controls</h3>
+            </div>
+            <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Back to Pipelines</a>
+        </div>
+        <div class="pipeline-card-actions top-gap-sm">
+            {% if pipeline_definition %}
+                <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_edit', pipeline_id=pipeline_definition.id) }}">Edit Lane</a>
+            {% endif %}
+            <form method="post" action="{{ url_for('pipelines.pipeline_run_action', run_id=run.id) }}" class="inline-action-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="retry">
+                <button class="button" type="submit">Retry</button>
+            </form>
+            <form method="post" action="{{ url_for('pipelines.pipeline_run_action', run_id=run.id) }}" class="inline-action-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="redeploy">
+                <button class="button button-quiet" type="submit">Redeploy</button>
+            </form>
+            {% if supports_undeploy %}
+                <form method="post" action="{{ url_for('pipelines.pipeline_run_action', run_id=run.id) }}" class="inline-action-form">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="action" value="undeploy">
+                    <button class="button button-quiet" type="submit">Undeploy</button>
+                </form>
+            {% endif %}
+        </div>
+    </section>
+
+    {% if external_links %}
+        <section class="section-header">
+            <div>
+                <p class="eyebrow">External consoles</p>
+                <h3>Jump points</h3>
+            </div>
+        </section>
+
+        <section class="overview-link-grid">
+            {% for link in external_links %}
+                <article class="card overview-link-card">
+                    <p class="eyebrow">{{ run.workflow }}</p>
+                    <h4>{{ link.label }}</h4>
+                    <p class="metric-copy">{{ link.url }}</p>
+                    <a class="button" href="{{ link.url }}">Open</a>
+                </article>
+            {% endfor %}
+        </section>
+    {% endif %}
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Stage board</p>
+            <h3>Execution state</h3>
+        </div>
+    </section>
+
+    <section class="pipeline-stage-board">
+        {% for stage in run.stages %}
+            <a class="pipeline-stage-status stage-link status-{{ stage.status|lower|replace(' ', '-') }}"
+               href="{% if pipeline_definition %}{{ url_for('pipelines.pipeline_stage_edit', pipeline_id=pipeline_definition.id, stage_name=stage.name) }}{% else %}#{% endif %}">
+                <strong>{{ stage.name }}</strong>
+                <span>{{ stage.status }}</span>
+                {% if stage.detail %}
+                    <small>{{ stage.detail }}</small>
+                {% endif %}
+                <small>{{ stage.updated_at }}</small>
+            </a>
+        {% endfor %}
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Stage definitions</p>
+            <h3>Expected lane shape</h3>
+        </div>
+    </section>
+
+    <section class="pipeline-grid">
+        {% if pipeline_definition %}
+            {% for stage_name in pipeline_definition.stages %}
+                {% set logic = (workflow_stage_details | selectattr('name', 'equalto', stage_name) | list | first) %}
+                <article class="pipeline-card">
+                    <div class="pipeline-card-top">
+                        <div>
+                            <p class="eyebrow">{{ pipeline_definition.name }}</p>
+                            <h3>{{ stage_name }}</h3>
+                        </div>
+                        <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_stage_edit', pipeline_id=pipeline_definition.id, stage_name=stage_name) }}">Edit Stage</a>
+                    </div>
+                    {% if logic %}
+                        <p class="metric-copy">{{ logic.active }}</p>
+                        <div class="pipeline-run-meta">
+                            <span class="status-pill muted">{{ logic.transport }}</span>
+                            <span class="status-pill muted">{{ logic.target or logic.kind or 'internal' }}</span>
+                            {% if logic.timeout %}
+                                <span class="status-pill muted">{{ logic.timeout }}s timeout</span>
+                            {% endif %}
+                        </div>
+                        {% if logic.command %}
+                            <pre class="terminal-log compact-terminal">{{ logic.command }}</pre>
+                        {% endif %}
+                    {% else %}
+                        <p class="metric-copy">This stage is part of the saved lane order, but executor logic is not yet wired for direct inspection.</p>
+                    {% endif %}
+                </article>
+            {% endfor %}
+        {% else %}
+            <article class="group-card empty-state">
+                <h4>No pipeline definition found</h4>
+                <p>This run does not map cleanly to the current pipeline catalog.</p>
+            </article>
+        {% endif %}
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Run events</p>
+            <h3>Event log</h3>
+        </div>
+    </section>
+
+    <section class="pipeline-event-log-card">
+        <div class="pipeline-event-log">
+            {% for event in run.events|default([], true)|reverse %}
+                <div class="pipeline-event-row level-{{ event.level|default('info', true) }}">
+                    <span class="event-at">{{ event.at }}</span>
+                    <span class="event-stage">{{ event.stage }}</span>
+                    <span class="event-message">{{ event.message }}</span>
+                </div>
+            {% else %}
+                <div class="workflow-empty">No events recorded yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if logs_snapshot %}
+        <section class="section-header">
+            <div>
+                <p class="eyebrow">Docker tier</p>
+                <h3>Runtime snapshot</h3>
+            </div>
+        </section>
+
+        <section class="pipeline-grid">
+            <article class="pipeline-card">
+                <div class="pipeline-card-top">
+                    <div>
+                        <p class="eyebrow">Swarm services</p>
+                        <h3>Replica status</h3>
+                    </div>
+                </div>
+                <div class="pipeline-service-list top-gap-sm">
+                    {% for service in logs_snapshot.services %}
+                        <div class="pipeline-service-row">
+                            <strong>{{ service.name }}</strong>
+                            <span>{{ service.replicas }}</span>
+                            <small>{{ service.image }}</small>
+                        </div>
+                    {% else %}
+                        <div class="workflow-empty">No monitoring services found.</div>
+                    {% endfor %}
+                </div>
+                {% if logs_snapshot.error %}
+                    <div class="pipeline-event-row level-error top-gap-sm">
+                        <span class="event-at">live</span>
+                        <span class="event-stage">docker</span>
+                        <span class="event-message">{{ logs_snapshot.error }}</span>
+                    </div>
+                {% endif %}
+            </article>
+        </section>
+
+        <section class="pipeline-run-list">
+            {% for log in logs_snapshot.logs %}
+                <article class="pipeline-run-card">
+                    <div class="pipeline-card-top">
+                        <div>
+                            <p class="eyebrow">Service logs</p>
+                            <h3>{{ log.service }}</h3>
+                        </div>
+                    </div>
+                    <pre class="terminal-log">{{ log.content }}</pre>
+                </article>
+            {% else %}
+                <section class="group-card empty-state">
+                    <h4>No service logs captured</h4>
+                    <p>The stack may be absent or still starting.</p>
+                </section>
+            {% endfor %}
+        </section>
+    {% endif %}
+{% endblock %}

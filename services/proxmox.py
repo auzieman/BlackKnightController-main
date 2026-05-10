@@ -1,4 +1,5 @@
 import os
+import time
 from urllib.parse import urlparse
 
 from services.integration_store import load_integrations
@@ -188,6 +189,55 @@ class ProxmoxClient:
             )
         except Exception as exc:
             raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
+
+    def task_status(self, node: str, upid: str) -> dict:
+        path = f"/nodes/{node}/tasks/{upid}/status"
+        self._trace("GET", path)
+        try:
+            return self.client.nodes(node).tasks(upid).status.get()
+        except Exception as exc:
+            raise ProxmoxAPIError(f"GET {path} failed: {exc}") from exc
+
+    def wait_for_task(self, node: str, upid: str, timeout: int = 300, poll_interval: int = 3) -> dict:
+        deadline = time.time() + timeout
+        last = {}
+        while time.time() < deadline:
+            last = self.task_status(node, upid)
+            status = str(last.get("status", "")).strip().lower()
+            if status != "running":
+                return last
+            time.sleep(poll_interval)
+        raise ProxmoxAPIError(f"Task {upid} on {node} did not complete within {timeout} seconds.")
+
+    def start_vm(self, node: str, vmid: int) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}/status/start"
+        self._trace("POST", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).status.start.post()
+        except Exception as exc:
+            raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
+
+    def vm_status(self, node: str, vmid: int) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}/status/current"
+        self._trace("GET", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).status.current.get()
+        except Exception as exc:
+            raise ProxmoxAPIError(f"GET {path} failed: {exc}") from exc
+
+    def wait_for_vm_status(self, node: str, vmid: int, expected: str, timeout: int = 120, poll_interval: int = 3) -> dict:
+        deadline = time.time() + timeout
+        expected_norm = (expected or "").strip().lower()
+        last = {}
+        while time.time() < deadline:
+            last = self.vm_status(node, vmid)
+            status = str(last.get("status", "")).strip().lower()
+            if status == expected_norm:
+                return last
+            time.sleep(poll_interval)
+        raise ProxmoxAPIError(
+            f"VM {vmid} on {node} did not reach status {expected!r} within {timeout} seconds."
+        )
 
 
 def summarize_inventory(client: ProxmoxClient) -> dict:

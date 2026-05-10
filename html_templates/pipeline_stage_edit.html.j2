@@ -1,0 +1,107 @@
+{% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
+
+{% block title %}Edit Stage{% endblock %}
+{% block page_heading %}Edit Stage{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div>
+            <p class="eyebrow">{{ pipeline.name }}</p>
+            <h2>{{ saved.display_name or stage_name }}</h2>
+            <p class="hero-copy">
+                This is the narrow edit surface for one pipeline brick. Today it captures operator notes and a draft definition block while the executable logic still lives in the repo.
+            </p>
+            <div class="pipeline-run-meta top-gap-sm">
+                <span class="status-pill muted">{{ pipeline.workflow }}</span>
+                <span class="status-pill muted">{{ 'executor wired' if supported else 'planned lane' }}</span>
+                <span class="status-pill muted">{{ stage_name }}</span>
+            </div>
+        </div>
+        <div class="hero-panel">
+            <p><strong>Repo:</strong> {{ pipeline.repo }}</p>
+            <p><strong>Stage:</strong> {{ stage_name }}</p>
+            <p><strong>Transport:</strong> {{ logic.transport if logic else 'not wired' }}</p>
+            <p><strong>Target:</strong> {{ logic.target if logic else 'n/a' }}</p>
+        </div>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Stage metadata</p>
+                <h3>Edit this brick</h3>
+            </div>
+            <div class="pipeline-card-actions">
+                <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_edit', pipeline_id=pipeline.id) }}">Back to Lane</a>
+                <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Back to Pipelines</a>
+            </div>
+        </div>
+        <form method="post" class="pipeline-edit-form top-gap-sm">
+            {{ csrf_field() }}
+            <label>
+                Display Name
+                <input type="text" name="display_name" value="{{ saved.display_name or '' }}" placeholder="{{ stage_name }}">
+            </label>
+            <label>
+                Current Executor State
+                <input type="text" value="{{ 'wired' if logic else 'planned only' }}" disabled>
+            </label>
+            <label class="wide">
+                Operator Notes
+                <textarea name="operator_notes" rows="6" placeholder="Intent, caveats, inputs, expected outputs, rollback notes.">{{ saved.operator_notes or '' }}</textarea>
+            </label>
+            <label class="wide">
+                Draft Definition
+                <textarea name="draft_definition" rows="12" placeholder="Simple text block for a future UI-driven stage definition.">{{ saved.draft_definition or '' }}</textarea>
+            </label>
+            <div class="pipeline-card-actions">
+                <button class="button" type="submit">Save Stage Notes</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Current executor logic</p>
+                <h3>Read-only plumbing</h3>
+            </div>
+        </div>
+        {% if logic %}
+            <p class="metric-copy">{{ logic.active }}</p>
+            <div class="pipeline-run-meta top-gap-sm">
+                <span class="status-pill muted">{{ logic.transport }}</span>
+                <span class="status-pill muted">{{ logic.target or logic.kind or 'internal' }}</span>
+                {% if logic.timeout %}
+                    <span class="status-pill muted">{{ logic.timeout }}s timeout</span>
+                {% endif %}
+            </div>
+            {% if logic.command %}
+                <pre class="terminal-log compact-terminal">{{ logic.command }}</pre>
+            {% elif logic.message %}
+                <pre class="terminal-log compact-terminal">{{ logic.message }}</pre>
+            {% endif %}
+        {% else %}
+            <div class="pipeline-warning top-gap-sm">
+                This stage is still catalog-only. There is no executor definition behind it yet.
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Repo files</p>
+                <h3>Where the real logic lives today</h3>
+            </div>
+        </div>
+        <div class="pipeline-source-list top-gap-sm">
+            {% for path in executor_source_files %}
+                <a class="pipeline-source-row" href="{{ path }}">{{ path }}</a>
+            {% else %}
+                <div class="workflow-empty">No executor source files are mapped yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+{% endblock %}

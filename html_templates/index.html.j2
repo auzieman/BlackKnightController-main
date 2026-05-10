@@ -6,38 +6,153 @@
 {% block content %}
     <section class="hero">
         <div>
-            <p class="eyebrow">Black Knight Satellite</p>
-            <h2>Infrastructure orchestration with a configurable workflow deck</h2>
-            <p class="hero-copy">Think less static inventory editor, more orbital mission control. Groups define their own stage rail, nodes move across it, and the UI should feel like an operations console rather than a form dump.</p>
+            <p class="eyebrow">Operator console</p>
+            <h2>Run the lab here, inspect the deeper consoles when the run needs proof</h2>
+            <p class="hero-copy">BKC is the operator surface for the lab. Ansible and Docker perform the work, Proxmox is the later VM tier, and Grafana, Loki, Portainer, and the public services stay one click away instead of being awkwardly reimplemented in the control plane.</p>
         </div>
         <div class="hero-panel">
             <p><strong>Global environment:</strong> {{ globals_meta.env }}</p>
             <p><strong>Datacenter:</strong> {{ globals_meta.datacenter }}</p>
             <p><strong>Release:</strong> {{ globals_meta.release }}</p>
+            <p><strong>Tracked pipelines:</strong> {{ pipelines | length }}</p>
         </div>
     </section>
 
     <section class="card-grid">
         <article class="card metric-card">
-            <p class="metric-label">Groups</p>
+            <p class="metric-label">Inventory Groups</p>
             <p class="metric-value">{{ groups | length }}</p>
-            <p class="metric-copy">Workflow lanes under management</p>
+            <p class="metric-copy">Current groupings available for inventory and staging</p>
         </article>
         <article class="card metric-card">
-            <p class="metric-label">Model</p>
-            <p class="metric-value">API + SSH</p>
-            <p class="metric-copy">Proxmox lifecycle with config handoff</p>
+            <p class="metric-label">Tracked Hosts</p>
+            <p class="metric-value">{{ total_hosts }}</p>
+            <p class="metric-copy">Hosts currently represented in the tenant inventory</p>
         </article>
         <article class="card metric-card">
-            <p class="metric-label">Style</p>
-            <p class="metric-value">Adaptive</p>
-            <p class="metric-copy">Columns come from each group workflow string</p>
+            <p class="metric-label">Active Runs</p>
+            <p class="metric-value">{{ active_runs }}</p>
+            <p class="metric-copy">Pipelines moving or waiting at the executor boundary</p>
         </article>
         <article class="card metric-card">
-            <p class="metric-label">Theme</p>
-            <p class="metric-value">Orbital</p>
-            <p class="metric-copy">Console-first with a spacy Black Knight mood</p>
+            <p class="metric-label">Failed Runs</p>
+            <p class="metric-value">{{ failed_runs }}</p>
+            <p class="metric-copy">Runs that need operator attention, retry, or tighter stage logic</p>
         </article>
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Quick access</p>
+            <h3>External consoles</h3>
+        </div>
+        <a class="button secondary" href="{{ url_for('pipelines.pipelines') }}">Open pipelines</a>
+    </section>
+
+    <section class="overview-link-grid">
+        {% for link in quick_links %}
+            <article class="card overview-link-card">
+                <p class="eyebrow">Jump out</p>
+                <h4>{{ link.label }}</h4>
+                <p class="metric-copy">{{ link.url }}</p>
+                <a class="button" href="{{ link.url }}">Open</a>
+            </article>
+        {% endfor %}
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Grafana direction</p>
+            <h3>Dashboard targets</h3>
+        </div>
+    </section>
+
+    <section class="overview-link-grid">
+        {% for dashboard in dashboard_cards %}
+            <article class="card overview-link-card">
+                <p class="eyebrow">{{ dashboard.pipeline_name }}</p>
+                <h4>{{ dashboard.name }}</h4>
+                <p class="metric-copy">{{ dashboard.summary }}</p>
+                <div class="pipeline-card-actions top-gap-sm">
+                    <a class="button" href="{{ dashboard.url }}">Open Grafana</a>
+                    <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Open Pipelines</a>
+                </div>
+            </article>
+        {% endfor %}
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Pipeline state</p>
+            <h3>Latest lane status</h3>
+        </div>
+    </section>
+
+    <section class="overview-link-grid">
+        {% for pipeline in pipelines %}
+            {% set latest = latest_runs_by_workflow.get(pipeline.workflow) %}
+            <article class="card overview-link-card">
+                <p class="eyebrow">{{ pipeline.repo }}</p>
+                <h4>{{ pipeline.name }}</h4>
+                <p class="metric-copy">{{ pipeline.description }}</p>
+                {% if latest %}
+                    <div class="pipeline-run-meta">
+                        <span class="status-pill">{{ latest.status }}</span>
+                        <span class="status-pill muted">Run {{ latest.id[:8] }}</span>
+                        <span class="status-pill muted">{{ latest.stage_summary.complete }} / {{ latest.stages|length }}</span>
+                    </div>
+                {% else %}
+                    <div class="pipeline-run-meta">
+                        <span class="status-pill muted">not started</span>
+                    </div>
+                {% endif %}
+                <div class="pipeline-card-actions top-gap-sm">
+                    <a class="button" href="{{ url_for('pipelines.pipelines') }}">Open Pipeline</a>
+                    {% if latest %}
+                        <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_run_detail', run_id=latest.id) }}">Latest Run</a>
+                    {% endif %}
+                </div>
+            </article>
+        {% endfor %}
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Recent automation</p>
+            <h3>Run ledger</h3>
+        </div>
+        <a class="button secondary" href="{{ url_for('pipelines.pipelines') }}">Open all runs</a>
+    </section>
+
+    <section class="pipeline-run-list">
+        {% for run in recent_runs %}
+            <article class="pipeline-run-card">
+                <div class="pipeline-card-top">
+                    <div>
+                        <p class="eyebrow">{{ run.repo }}</p>
+                        <h3>{{ run.workflow }}</h3>
+                    </div>
+                    <span class="status-pill">{{ run.status }}</span>
+                </div>
+                <p class="metric-copy">{{ run.notes or 'No notes recorded for this run.' }}</p>
+                <div class="pipeline-stage-board compact-stage-board">
+                    {% for stage in run.stages %}
+                        <div class="pipeline-stage-status status-{{ stage.status|lower|replace(' ', '-') }}">
+                            <strong>{{ stage.name }}</strong>
+                            <span>{{ stage.status }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="pipeline-card-actions top-gap-sm">
+                    <a class="button" href="{{ url_for('pipelines.pipeline_run_detail', run_id=run.id) }}">Open Run</a>
+                </div>
+            </article>
+        {% else %}
+            <section class="group-card empty-state">
+                <h4>No automation runs yet</h4>
+                <p>Queue a pipeline and the overview will start reflecting real stage activity.</p>
+            </section>
+        {% endfor %}
     </section>
 
     <section class="section-header">

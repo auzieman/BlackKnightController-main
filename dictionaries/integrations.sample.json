@@ -7,6 +7,12 @@
     "inventory_path": "/etc/ansible/hosts",
     "playbook": "site.yml"
   },
+  "docker": {
+    "manager_host": "swarm-manager.example.lab",
+    "manager_password": "",
+    "manager_user": "root",
+    "stack_name": "blackknight"
+  },
   "proxmox": {
     "api_url": "https://proxmox.example.lab:8006/api2/json",
     "password": "",

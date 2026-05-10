@@ -4,11 +4,14 @@ from services import bkc_db
 from services.access_control import register_integrations_post_guard
 from services.ansible import AnsibleScanError, scan_ansible_controller
 from services.ansible_inventory import parse_ansible_hosts, sync_ansible_inventory_to_rules
+from services.docker_swarm import DockerScanError, scan_docker_controller, sync_docker_inventory_to_rules
 from services.integration_store import (
     load_ansible_snapshot,
+    load_docker_snapshot,
     load_integrations,
     load_proxmox_snapshot,
     save_ansible_snapshot,
+    save_docker_snapshot,
     save_integrations,
     save_proxmox_snapshot,
 )
@@ -34,6 +37,8 @@ _INTEGRATION_ASYNC_JOBS = {
     "sync-proxmox-inventory": "services.job_tasks.sync_proxmox_inventory_job",
     "scan-ansible": "services.job_tasks.scan_ansible_job",
     "sync-ansible-inventory": "services.job_tasks.sync_ansible_inventory_job",
+    "scan-docker": "services.job_tasks.scan_docker_job",
+    "sync-docker-inventory": "services.job_tasks.sync_docker_inventory_job",
 }
 
 
@@ -83,6 +88,7 @@ def integrations():
     )
     proxmox_inventory = load_proxmox_snapshot()
     ansible_scan = load_ansible_snapshot()
+    docker_scan = load_docker_snapshot()
 
     if request.method == "POST":
         action = request.form.get("action", "save")
@@ -127,6 +133,25 @@ def integrations():
                 int(current_user.id),
                 get_current_tenant_id(),
                 "integrations.save_ansible",
+                "integrations",
+                {},
+                request.remote_addr,
+            )
+            return redirect(url_for("integrations.integrations"))
+
+        if action == "save-docker":
+            integrations["docker"] = {
+                "manager_host": _clean(request.form.get("manager_host", "")),
+                "manager_user": _clean(request.form.get("manager_user", "")),
+                "manager_password": _clean(request.form.get("manager_password", "")),
+                "stack_name": _clean(request.form.get("stack_name", "")),
+            }
+            save_integrations(integrations)
+            flash("Saved Docker Swarm settings.")
+            bkc_db.append_audit(
+                int(current_user.id),
+                get_current_tenant_id(),
+                "integrations.save_docker",
                 "integrations",
                 {},
                 request.remote_addr,
@@ -253,6 +278,43 @@ def integrations():
             except AnsibleScanError as exc:
                 flash(f"Ansible inventory sync failed: {exc}")
 
+        if action == "scan-docker":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
+            try:
+                docker_scan = scan_docker_controller()
+                save_docker_snapshot(docker_scan)
+                flash(
+                    f"Scanned Docker Swarm: "
+                    f"{len(docker_scan['nodes'])} nodes, "
+                    f"{len(docker_scan['stacks'])} stacks, "
+                    f"{len(docker_scan['services'])} services."
+                )
+            except DockerScanError as exc:
+                flash(f"Docker scan failed: {exc}")
+
+        if action == "sync-docker-inventory":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
+            try:
+                docker_scan = scan_docker_controller()
+                save_docker_snapshot(docker_scan)
+                rules = load_rules()
+                result = sync_docker_inventory_to_rules(rules, docker_scan)
+                reconcile = reconcile_rules_inventory(rules)
+                save_rules(rules)
+                flash(
+                    f"Synced Docker inventory into BKC: "
+                    f"{result['groups']} groups created, "
+                    f"{result['created_nodes']} nodes created, "
+                    f"{result['updated_nodes']} nodes updated, "
+                    f"{reconcile['clusters']} related node clusters reconciled."
+                )
+            except DockerScanError as exc:
+                flash(f"Docker inventory sync failed: {exc}")
+
         if action == "generate-ssh-key":
             key_info = ensure_key_pair(
                 integrations["ssh"]["private_key_path"],
@@ -272,4 +334,5 @@ def integrations():
         ssh_key=ssh_key,
         proxmox_inventory=proxmox_inventory,
         ansible_scan=ansible_scan,
+        docker_scan=docker_scan,
     )

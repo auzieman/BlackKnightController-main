@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}BlackKnightController{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    {% block head_extra %}{% endblock %}
 </head>
 <body>
     <div class="starfield"></div>
@@ -15,14 +16,14 @@
                 <p class="eyebrow">BlackKnightController CE</p>
                 <h1>Orbital Ops</h1>
                 <p class="sidebar-copy">A control surface for Proxmox, Ansible, and stage-driven automation with a little Black Knight satellite mythology built in.</p>
-                <div class="status-chip">Telemetry-linked workflow console</div>
+                <div class="status-chip">Telemetry-linked pipeline console</div>
             </div>
             <nav>
                 <ul class="nav-list">
                     <li><a href="{{ url_for('index.index') }}">Overview</a></li>
                     <li><a href="{{ url_for('inventory_console.inventory_console') }}">Inventory</a></li>
                     <li><a href="{{ url_for('groups.list_groups') }}">Groups</a></li>
-                    <li><a href="{{ url_for('workflow_view.workflow') }}">Workflow</a></li>
+                    <li><a href="{{ url_for('pipelines.pipelines') }}">Pipelines</a></li>
                     <li><a href="{{ url_for('builder.builder') }}">Inventory Builder</a></li>
                     <li><a href="{{ url_for('admin.admin') }}">Admin Mode</a></li>
                     <li><a href="{{ url_for('integrations.integrations') }}">Integrations</a></li>

@@ -44,9 +44,11 @@ def builder():
                 group = rules["groups"].setdefault(group_name, {"locals": {}, "nodes": {}})
                 group["nodes"][host_name] = {
                     "user": _normalize_text(request.form.get("user", ""), "root"),
+                    "password": _normalize_text(request.form.get("password", "")),
                     "port": int(request.form.get("port", "22") or "22"),
                     "private_key": _normalize_text(request.form.get("private_key", "")),
                     "provider": _normalize_text(request.form.get("provider", ""), "proxmox"),
+                    "ip": _normalize_text(request.form.get("ip", "")),
                     "vmid": _normalize_text(request.form.get("vmid", "")),
                     "provisioner": _normalize_text(request.form.get("provisioner", ""), "cloud-init"),
                     "configuration": _normalize_text(request.form.get("configuration", ""), "ansible"),

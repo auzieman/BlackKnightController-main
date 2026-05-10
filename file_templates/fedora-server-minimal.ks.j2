@@ -1,16 +1,24 @@
+text
+url --mirrorlist=${install_mirror}
 lang en_US.UTF-8
 keyboard us
 timezone America/Los_Angeles --utc
 rootpw --lock
-user --name=${username} --groups=wheel --password=${password}
+user --name=${username} --groups=wheel --password=${password} --plaintext
 ${network_line}
+bootloader --location=mbr
+zerombr
+clearpart --all --initlabel
+autopart --type=lvm
 firewall --enabled --service=ssh
 services --enabled=sshd,NetworkManager,qemu-guest-agent
 selinux --enforcing
-reboot
+skipx
+firstboot --disable
+reboot --eject
 
 %packages
-@^minimal-environment
+@core
 openssh-server
 qemu-guest-agent
 sudo

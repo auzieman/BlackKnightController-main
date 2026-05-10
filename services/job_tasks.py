@@ -128,6 +128,66 @@ def sync_ansible_inventory_job(tenant_slug: str, tenant_id: int | None, user_id:
         return {"sync": result, "reconcile": reconcile}
 
 
+def scan_docker_job(tenant_slug: str, tenant_id: int | None, user_id: int | None, remote_ip: str | None):
+    import os
+
+    os.environ["BKC_TENANT_SLUG"] = tenant_slug
+    from services import bkc_db
+    from services.docker_swarm import scan_docker_controller
+    from services.integration_store import save_docker_snapshot
+
+    app = _app()
+    with app.app_context():
+        scan = scan_docker_controller()
+        save_docker_snapshot(scan)
+        bkc_db.append_audit(
+            user_id,
+            tenant_id,
+            "job.scan_docker",
+            "integrations",
+            {
+                "nodes": len(scan.get("nodes", [])),
+                "stacks": len(scan.get("stacks", [])),
+                "services": len(scan.get("services", [])),
+            },
+            remote_ip,
+        )
+        return {
+            "nodes": len(scan.get("nodes", [])),
+            "stacks": len(scan.get("stacks", [])),
+            "services": len(scan.get("services", [])),
+        }
+
+
+def sync_docker_inventory_job(tenant_slug: str, tenant_id: int | None, user_id: int | None, remote_ip: str | None):
+    import os
+
+    os.environ["BKC_TENANT_SLUG"] = tenant_slug
+    from services import bkc_db
+    from services.docker_swarm import scan_docker_controller, sync_docker_inventory_to_rules
+    from services.integration_store import save_docker_snapshot
+    from services.inventory_model import reconcile_rules_inventory
+    from services.rules_store import load_rules, save_rules
+
+    app = _app()
+    with app.app_context():
+        scan = scan_docker_controller()
+        save_docker_snapshot(scan)
+        rules = load_rules()
+        result = sync_docker_inventory_to_rules(rules, scan)
+        reconcile = reconcile_rules_inventory(rules)
+        save_rules(rules)
+        bkc_db.append_audit(
+            user_id,
+            tenant_id,
+            "job.sync_docker_inventory",
+            "integrations",
+            {**result, "reconcile_clusters": reconcile.get("clusters")},
+            remote_ip,
+        )
+        return {"sync": result, "reconcile": reconcile}
+
+
 def scan_subnet_job(payload: dict[str, Any]):
     """Subnet discovery + import (single dict arg for RQ simplicity)."""
     import os
@@ -178,3 +238,38 @@ def scan_subnet_job(payload: dict[str, Any]):
         except DiscoveryError as exc:
             logger.warning("scan_subnet_job failed: %s", exc)
             raise
+
+
+def automation_pipeline_job(
+    run_id: str,
+    tenant_slug: str,
+    tenant_id: int | None,
+    user_id: int | None,
+    remote_ip: str | None,
+):
+    import os
+
+    os.environ["BKC_TENANT_SLUG"] = tenant_slug
+    from services import bkc_db
+    from services.automation_pipeline import mark_run_failed, mark_run_waiting_executor
+    from services.pipeline_executor import PipelineExecutionError, current_active_stage_name, execute_pipeline_run
+
+    app = _app()
+    with app.app_context():
+        run = mark_run_waiting_executor(run_id)
+        try:
+            run = execute_pipeline_run(run_id)
+        except PipelineExecutionError as exc:
+            run = mark_run_failed(run_id, str(exc), stage_name=current_active_stage_name(run_id)) or run
+        bkc_db.append_audit(
+            user_id,
+            tenant_id,
+            "job.automation_pipeline",
+            "automation",
+            {"run_id": run_id, "status": (run or {}).get("status", "missing")},
+            remote_ip,
+        )
+        return {
+            "run_id": run_id,
+            "status": (run or {}).get("status", "missing"),
+        }

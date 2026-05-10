@@ -33,6 +33,8 @@ def iso_download_commands(release: str = "43", arch: str = "x86_64") -> list[str
 
 def render_fedora_kickstart(
     hostname: str,
+    release: str = "43",
+    arch: str = "x86_64",
     username: str = "deployer",
     password: str = "changeme",
     network_mode: str = "dhcp",
@@ -51,10 +53,13 @@ def render_fedora_kickstart(
         network_line = f"network --bootproto=dhcp --hostname={hostname}"
     return template.safe_substitute(
         hostname=hostname,
+        release=release,
+        arch=arch,
         username=username,
         password=password,
         network_line=network_line,
         nameserver_host=nameserver_host,
+        install_mirror=f"https://mirrors.fedoraproject.org/metalink?repo=fedora-{release}&arch={arch}",
     )
 
 
@@ -73,6 +78,8 @@ def fresh_build_plan(
     iso_plan = default_fedora_iso_plan(release=release, arch=arch)
     kickstart = render_fedora_kickstart(
         hostname=hostname,
+        release=release,
+        arch=arch,
         username=username,
         password=password,
         network_mode=network_mode,

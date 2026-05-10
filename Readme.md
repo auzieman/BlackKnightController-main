@@ -1,16 +1,71 @@
-#Black Knight Controller
+# Black Knight Controller
 
-Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people believe is recording and guiding humanity. 
+Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people believe is recording and guiding humanity.
 
-*However, please note that this project is purely fictional and not based on any factual evidence. And definatly not an indication that 42 is the ultimate answer. Also though this concept may seem alien its just a human and some AI working together :) *
+*However, please note that this project is purely fictional and not based on any factual evidence. And definitely not an indication that 42 is the ultimate answer. Also though this concept may seem alien its just a human and some AI working together :) *
 
-The initial functionality of the Black Knight Controller includes the ability to manage groups and hosts, edit group and host information, and deploy code to specific hosts. The interface is designed with a left navigation menu for easy access to the different sections of the application. The theme is rounded and blue, with a modern look and feel.
+The project started as a group-and-host deployment console. It now also acts as a lightweight lab control plane that can:
+
+- manage tenant-scoped inventory
+- scan and sync Ansible controllers
+- scan and sync Docker Swarm state
+- queue automation runs through Redis/RQ workers
+- track pipelines for lab workflows such as monitoring bring-up and Auzix build/test loops
+- stage toward Proxmox-driven VM lifecycle automation
 
 In addition to the initial functionality, the Black Knight Controller also includes an "Add Nodes" routine. This allows users to add a list of hosts (IP or hostname) to a specific group. The system will test the credentials and save them, or perform a round of interactive steps to copy a preshared key to the destination.
 
 We hope that the Black Knight Controller will help simplify the deployment process and make it more accessible for users of all levels. Please feel free to use, modify, and contribute to this project as you see fit.
 
-Key feature list.
+## Current lab direction
+
+The current working model is:
+
+- **BKC** as the orchestration and operator surface
+- **Ansible / SSH** as one execution tier
+- **Docker Swarm** as another execution tier
+- **Proxmox** as the VM lifecycle tier
+- **Grafana / Loki / Prometheus** as observability
+
+The main user-facing term is now **pipeline**. Pipelines create tracked automation runs with stage state and event history. The older `workflow` term still exists in parts of the internal data model, but operators should think in terms of pipelines.
+
+### System map
+
+```mermaid
+flowchart LR
+    Operator[Operator browser / CLI] --> BKC[BKC web app]
+    BKC --> DB[(SQLite auth, RBAC, audit)]
+    BKC --> Files[(Tenant dictionaries and templates)]
+    BKC --> Redis[(Redis / RQ queue)]
+    Redis --> Worker[BKC worker]
+
+    BKC --> Admin[Admin Mode]
+    Admin --> SSH[BKC native SSH]
+    Admin --> Ansible[Ansible controller]
+    Admin --> Templates[Rendered BKC templates]
+
+    BKC --> Proxmox[Proxmox API]
+    Proxmox --> VMs[VMs, templates, ISO boot, guest lifecycle]
+
+    BKC --> Docker[Docker Swarm manager]
+    Docker --> Stacks[Stacks and services]
+
+    SSH --> Hosts[Linux hosts and lab services]
+    Ansible --> Hosts
+    Templates --> Hosts
+
+    Hosts --> Observability[Grafana / Loki / Prometheus]
+    Stacks --> Observability
+```
+
+The practical split is:
+
+- **Proxmox API** creates, clones, boots, and inventories VMs.
+- **BKC SSH** handles direct host work without requiring operators to learn Ansible.
+- **Ansible** remains useful for existing playbooks and inventories.
+- **Pipelines** tie those pieces into tracked runs with stage history.
+
+## Feature list
 
 ## View and edit configuration files for fabric deployments
 - Add, remove, and edit groups of servers to deploy to
@@ -20,7 +75,17 @@ Key feature list.
 - Ability to add new nodes to an existing group with form validation and handling
 - User-friendly UI with a modern and clean theme
 
-We hope that the Black Knight Controller will help simplify the deployment process and make it more accessible for users of all levels. Please feel free to use, modify, and contribute to this project as you see fit.
+## Docker and pipeline control
+
+Recent additions extend BKC beyond classic host editing:
+
+- Docker Swarm controller integration
+- Swarm node, stack, and service inventory sync
+- Pipeline catalog and queued automation runs
+- Pipeline stage/event tracking
+- Monitoring stack executor wiring
+- Run actions such as retry/redeploy/undeploy
+- Pipeline run detail views with stage state and runtime log snapshots
 
 To ensure you have the right python libraries run your OS's version of this command.
 
@@ -59,6 +124,7 @@ BKC CE targets **trusted homelab or small MSP-style lab** use: sign-in is requir
 - **Auth / RBAC / audit / API key hashes**: `dictionaries/bkc.db` (gitignored).
 - **Inventory overrides per tenant**: `dictionaries/tenants/<slug>/rules.local.json` (gitignored parent). The legacy `dictionaries/rules.local.json` is still read for the `default` tenant until you save from the UI, which writes the tenant path first.
 - **Integrations and snapshots per tenant**: `dictionaries/tenants/<slug>/integrations.json`, `proxmox_inventory.json`, and `ansible_scan.json`. For the `default` tenant only, legacy files under `dictionaries/` (`integrations.json`, etc.) are still read if the per-tenant files do not exist yet.
+- **Docker snapshots per tenant**: `dictionaries/tenants/<slug>/docker_scan.json`
 - **Optional per-tenant file templates**: if `dictionaries/tenants/<slug>/file_templates/` exists, it overrides the global `file_templates/` for that tenant.
 
 CLI and scripts can pick the tenant with `BKC_TENANT_SLUG` (defaults to `default`).
@@ -78,7 +144,11 @@ CLI and scripts can pick the tenant with `BKC_TENANT_SLUG` (defaults to `default
 - `GET /api/v1/health` — liveness, no auth.
 - `GET /api/v1/ready` — readiness: SQLite (`bkc.db`), Redis when `BKC_RATELIMIT_STORAGE_URI` is `redis://…`, and a write probe under `dictionaries/`. Returns **503** if any check fails (for load balancers / Kubernetes).
 - `GET /api/v1/me` and `GET /api/v1/inventory` — `Authorization: Bearer <api_key>` where the key is created under **Platform settings** (superuser only). The plaintext key is shown **once** when created.
+- `GET /api/v1/automation/runs`
+- `GET /api/v1/automation/runs/<run_id>`
+- `POST /api/v1/automation/trigger`
 - **Scopes** (comma-separated, stored on the key): `read:me`, `read:inventory`, or `*` for all current and future read endpoints. Keys without access to an endpoint receive **403** JSON `{"error":"insufficient_scope",...}`.
+- Automation scopes: `read:automation`, `write:automation`
 - **Rate limits:** `GET /api/v1/me` and `GET /api/v1/inventory` are limited **per API key** (Flask-Limiter). Optional per-key **requests/minute** is set when creating the key; otherwise use **`BKC_API_KEY_RATE_LIMIT`** (default `120 per minute`). **`GET /api/v1/health`** and **`GET /api/v1/ready`** are not rate-limited by this rule.
 
 **Same readiness JSON** is also exposed at **`GET /ready`** on the app port (no auth), for probes that do not use the `/api/v1` prefix.
@@ -112,6 +182,103 @@ To migrate existing plaintext secret values into encrypted form, run:
 
 `python3 bkc_cli.py migrate-secrets`
 
+## BKC SSH Mode
+
+BKC SSH mode is the lightweight execution path behind **Admin Mode -> Run host command**. It uses the inventory host metadata BKC already stores: `ip`, `user`, `port`, `password`, and/or `private_key`.
+
+This overlaps with Ansible on purpose. Ansible is still the better fit for large reusable roles, complex dependency graphs, and dry-run/change reporting. BKC SSH mode is better for direct lab operations where a readable shell command is enough: update packages, restart services, inspect logs, stage a config, or apply a small one-off change.
+
+### Host readiness
+
+A host is runnable from Admin Mode when its resolved inventory has:
+
+- `ip` or a DNS-resolvable host name
+- `user`
+- `port`, normally `22`
+- either `password` or `private_key`
+
+Generate or view the BKC automation key under `/integrations`, then install that public key on target hosts. Subnet discovery can also install the key when run with password bootstrap.
+
+### Common SSH Examples
+
+Run updates on Fedora/RHEL-like hosts:
+
+```bash
+if command -v dnf >/dev/null 2>&1; then
+  dnf -y upgrade
+elif command -v yum >/dev/null 2>&1; then
+  yum -y update
+fi
+```
+
+Run updates on Debian/Ubuntu hosts:
+
+```bash
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -y upgrade
+```
+
+Restart a service and verify it:
+
+```bash
+systemctl restart nginx
+systemctl --no-pager --full status nginx
+```
+
+Write a small managed config file:
+
+```bash
+install -d -m 0755 /etc/bkc
+cat > /etc/bkc/lab.conf <<'EOF'
+managed_by=bkc
+environment=lab
+EOF
+chmod 0644 /etc/bkc/lab.conf
+```
+
+Patch a setting without opening an editor:
+
+```bash
+cp -a /etc/ssh/sshd_config /etc/ssh/sshd_config.bkc.bak
+sed -i 's/^#\\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sshd -t
+systemctl reload sshd || systemctl reload ssh
+```
+
+Check Docker state on a swarm manager:
+
+```bash
+docker node ls
+docker stack ls
+docker service ls
+```
+
+Stage a Kickstart file on a simple HTTP host:
+
+```bash
+install -d -m 0755 /srv/http/ks
+cat > /srv/http/ks/test.ks <<'EOF'
+text
+reboot --eject
+%packages
+@core
+%end
+EOF
+if command -v firewall-cmd >/dev/null 2>&1; then
+  firewall-cmd --add-service=http --permanent
+  firewall-cmd --reload
+fi
+```
+
+### Guardrails
+
+- Prefer commands that are idempotent: safe to run twice.
+- Use `systemctl is-active`, `test -f`, `grep -q`, and explicit backups before editing config.
+- Keep long-running package work targeted to a small selected host set first.
+- Move repeated multi-step commands into BKC templates or a pipeline stage once they stabilize.
+- Keep secrets out of command text; store credentials through integrations and encrypted dictionaries.
+
 ## Local Runtime Data
 
 The repo now ships with sanitized sample inventory data in `dictionaries/rules.json` and `dictionaries/integrations.sample.json`.
@@ -121,6 +288,29 @@ The repo now ships with sanitized sample inventory data in `dictionaries/rules.j
 - Git ignores `dictionaries/bkc.db`, `dictionaries/tenants/`, `dictionaries/rules.local.json`, and `dictionaries/integrations.json` so real lab state stays out of the repo.
 
 This keeps the tracked repo safe while still letting the app keep real lab state locally.
+
+## Git handoff without stored credentials
+
+Do not store Git credentials in:
+
+- tracked repo files
+- BKC runtime dictionaries
+- `ns1` automation playbooks
+- swarm service environment files
+
+Recommended pattern:
+
+- keep Git push authority on the workstation
+- sync source snapshots to `ns1` with `rsync`
+- let `ns1` and the swarm build and deploy from those snapshots
+- use SSH agent forwarding or an interactive local push when code needs to go upstream
+
+Practical rule:
+
+- **build/deploy state** can live on `ns1`
+- **Git credentials** stay with the operator session, not the lab runtime
+
+That keeps the automation useful without turning the control plane into a secret spill.
 
 ## Containerized Test Build
 

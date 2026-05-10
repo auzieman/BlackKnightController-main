@@ -6,6 +6,14 @@ from wtforms.validators import DataRequired
 class AddNodesForm(FlaskForm):
     group = SelectField("Group", validators=[DataRequired()], choices=[])
     nodes = TextAreaField("Nodes", validators=[DataRequired()])
+    username = StringField("Username")
+    password = PasswordField("Password")
+    port = StringField("Port")
+    provider = StringField("Provider")
+    provisioner = StringField("Provisioner")
+    configuration = StringField("Configuration")
+    state = StringField("State")
+    application = StringField("Application")
 
 
 class ScanSubnetForm(FlaskForm):

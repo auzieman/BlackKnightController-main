@@ -29,22 +29,45 @@ def add_nodes():
             node_entries = [
                 entry.strip() for entry in add_node_form.nodes.data.splitlines() if entry.strip()
             ]
+            username = (add_node_form.username.data or "").strip() or "root"
+            password = add_node_form.password.data or ""
+            try:
+                port = int((add_node_form.port.data or "").strip() or "22")
+            except ValueError:
+                port = 22
+            provider = (add_node_form.provider.data or "").strip() or "manual-entry"
+            provisioner = (add_node_form.provisioner.data or "").strip() or "ssh-bootstrap"
+            configuration = (add_node_form.configuration.data or "").strip() or "ansible"
+            state = (add_node_form.state.data or "").strip() or "planned"
+            application = (add_node_form.application.data or "").strip() or "bkc-managed"
             group = rules["groups"].setdefault(group_name, {"locals": {}, "nodes": {}})
             for node in node_entries:
-                group["nodes"].setdefault(
+                record = group["nodes"].setdefault(
                     node,
                     {
-                        "user": "root",
+                        "user": "",
                         "password": "",
                         "port": 22,
                         "private_key": "",
-                        "provider": "manual-entry",
-                        "provisioner": "cloud-init",
-                        "configuration": "ansible",
-                        "state": "planned",
-                        "application": "bkc-managed",
+                        "provider": "",
+                        "provisioner": "",
+                        "configuration": "",
+                        "state": "",
+                        "application": "",
+                        "ip": "",
                     },
                 )
+                record["user"] = username or record.get("user", "") or "root"
+                record["port"] = port or int(record.get("port") or 22)
+                if password:
+                    record["password"] = password
+                record["provider"] = provider or record.get("provider", "") or "manual-entry"
+                record["provisioner"] = provisioner or record.get("provisioner", "") or "ssh-bootstrap"
+                record["configuration"] = configuration or record.get("configuration", "") or "ansible"
+                record["state"] = state or record.get("state", "") or "planned"
+                record["application"] = application or record.get("application", "") or "bkc-managed"
+                if "." in node and ":" not in node and not record.get("ip"):
+                    record["ip"] = node
             save_rules(rules)
             flash(f"Added {len(node_entries)} node(s) to {group_name}.")
             return redirect(url_for("groups.hosts", group=group_name))

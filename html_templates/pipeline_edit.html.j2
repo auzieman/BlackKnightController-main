@@ -1,0 +1,166 @@
+{% extends 'base.html.j2' %}
+{% from '_macros.html.j2' import csrf_field %}
+
+{% block title %}Edit Pipeline{% endblock %}
+{% block page_heading %}Edit Pipeline{% endblock %}
+
+{% block content %}
+    <section class="hero">
+        <div>
+            <p class="eyebrow">{{ pipeline.repo }}</p>
+            <h2>{{ pipeline.name }}</h2>
+            <p class="hero-copy">{{ pipeline.description }}</p>
+            <div class="pipeline-run-meta top-gap-sm">
+                <span class="status-pill muted">{{ pipeline.workflow }}</span>
+                <span class="status-pill muted">{{ 'executor wired' if supported else 'planned lane' }}</span>
+            </div>
+        </div>
+        <div class="hero-panel">
+            <p><strong>Repo:</strong> {{ pipeline.repo }}</p>
+            <p><strong>Workflow:</strong> {{ pipeline.workflow }}</p>
+            <p><strong>Stages:</strong> {{ pipeline.stages|length }}</p>
+            <p><strong>Saved notes:</strong> {{ pipeline.notes or 'none' }}</p>
+        </div>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Lane metadata</p>
+                <h3>Edit saved pipeline fields</h3>
+            </div>
+            <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Back to Pipelines</a>
+        </div>
+        <form method="post" class="pipeline-edit-form top-gap-sm">
+            {{ csrf_field() }}
+            <label>
+                Name
+                <input type="text" name="name" value="{{ pipeline.name }}">
+            </label>
+            <label>
+                Repo
+                <input type="text" name="repo" value="{{ pipeline.repo }}">
+            </label>
+            <label class="wide">
+                Description
+                <textarea name="description" rows="4">{{ pipeline.description }}</textarea>
+            </label>
+            <label class="wide">
+                Notes
+                <textarea name="notes" rows="4">{{ pipeline.notes }}</textarea>
+            </label>
+            <label class="wide">
+                Stage Order JSON
+                <textarea name="stages_json" rows="8">{{ stages_json }}</textarea>
+            </label>
+            <label class="wide">
+                Links JSON
+                <textarea name="links_json" rows="10">{{ links_json }}</textarea>
+            </label>
+            <label class="wide">
+                Dashboards JSON
+                <textarea name="dashboards_json" rows="12">{{ dashboards_json }}</textarea>
+            </label>
+            <div class="pipeline-card-actions">
+                <button class="button" type="submit">Save Lane</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Engineer flow</p>
+                <h3>How this lane should be authored</h3>
+            </div>
+        </div>
+        <div class="pipeline-run-meta top-gap-sm">
+            <span class="status-pill muted">Web UI</span>
+            <span class="status-pill muted">Git-backed</span>
+            <span class="status-pill muted">VS Code friendly</span>
+        </div>
+        <p class="metric-copy top-gap-sm">
+            The UI is now good enough to adjust lane metadata, stage order, and operator links. The executor logic still lives in the repo, which keeps review and version control in Git. The intended workflow is: shape the lane in the UI, then move stable executor logic into repo-backed definitions that an engineer can edit locally in VS Code and ship through the normal BKC deploy path.
+        </p>
+        {% if not supported %}
+            <div class="pipeline-warning top-gap-sm">
+                This lane is still planned. The catalog metadata exists, but the executor path is not wired yet, so BKC will not queue it from the main pipeline view.
+            </div>
+        {% endif %}
+    </section>
+
+    {% if pipeline.candidate %}
+        <section class="pipeline-card top-gap">
+            <div class="pipeline-card-top">
+                <div>
+                    <p class="eyebrow">Candidate source</p>
+                    <h3>{{ pipeline.candidate.name }}</h3>
+                </div>
+            </div>
+            <p class="metric-copy">{{ pipeline.candidate.summary }}</p>
+            <div class="pipeline-run-meta top-gap-sm">
+                <span class="status-pill muted">{{ pipeline.candidate.source }}</span>
+                <span class="status-pill muted">{{ pipeline.candidate.kind }}</span>
+            </div>
+        </section>
+    {% endif %}
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Source of truth</p>
+                <h3>Files an engineer should edit</h3>
+            </div>
+        </div>
+        <div class="pipeline-source-list top-gap-sm">
+            {% for path in executor_source_files %}
+                <a class="pipeline-source-row" href="{{ path }}">{{ path }}</a>
+            {% else %}
+                <div class="workflow-empty">No executor source files are mapped yet.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Executor logic</p>
+            <h3>Stage plumbing</h3>
+        </div>
+    </section>
+
+    <section class="pipeline-grid">
+        {% for stage in workflow_stage_details %}
+            {% set saved = pipeline.stage_overrides.get(stage.name, {}) if pipeline.stage_overrides else {} %}
+            <article class="pipeline-card">
+                <div class="pipeline-card-top">
+                    <div>
+                        <p class="eyebrow">{{ pipeline.workflow }}</p>
+                        <h3>{{ stage.name }}</h3>
+                    </div>
+                    <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_stage_edit', pipeline_id=pipeline.id, stage_name=stage.name) }}">Edit Stage</a>
+                </div>
+                <p class="metric-copy">{{ stage.active }}</p>
+                <div class="pipeline-run-meta">
+                    <span class="status-pill muted">{{ stage.transport }}</span>
+                    <span class="status-pill muted">{{ stage.target or stage.kind or 'internal' }}</span>
+                    {% if stage.timeout %}
+                        <span class="status-pill muted">{{ stage.timeout }}s timeout</span>
+                    {% endif %}
+                    {% if saved.operator_notes %}
+                        <span class="status-pill muted">notes saved</span>
+                    {% endif %}
+                </div>
+                {% if stage.command %}
+                    <pre class="terminal-log compact-terminal">{{ stage.command }}</pre>
+                {% elif stage.message %}
+                    <pre class="terminal-log compact-terminal">{{ stage.message }}</pre>
+                {% endif %}
+            </article>
+        {% else %}
+            <section class="group-card empty-state">
+                <h4>No executor metadata yet</h4>
+                <p>This lane is still planned or the executor wiring has not been declared.</p>
+            </section>
+        {% endfor %}
+    </section>
+{% endblock %}
