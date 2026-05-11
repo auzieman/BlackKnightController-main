@@ -437,6 +437,18 @@ def pipelines():
             flash(f"{pipeline['name']} is still a planned lane. Its executor is not wired yet.", "error")
             return redirect(url_for("pipelines.pipelines"))
 
+        extra = {"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]}
+        if str(pipeline.get("workflow", "")).strip().lower() == "fedora-cosmic-postinstall":
+            target_host = request.form.get("target_host", "").strip()
+            target_name = request.form.get("target_name", "").strip()
+            target_vmid = request.form.get("target_vmid", "").strip()
+            if target_host:
+                extra["target_host"] = target_host
+            if target_name:
+                extra["target_name"] = target_name
+            if target_vmid:
+                extra["target_vmid"] = target_vmid
+
         run = create_automation_run(
             tenant_slug=tenant_slug,
             requested_by=f"user:{getattr(current_user, 'id', 'unknown')}",
@@ -446,7 +458,7 @@ def pipelines():
             ref=ref,
             commit=commit,
             notes=notes or pipeline.get("notes", ""),
-            extra={"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]},
+            extra=extra,
         )
 
         queued = _queue_run(

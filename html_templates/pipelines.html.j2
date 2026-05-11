@@ -110,6 +110,20 @@
                                 Commit
                                 <input type="text" name="commit" placeholder="optional commit sha">
                             </label>
+                            {% if pipeline.workflow == 'fedora-cosmic-postinstall' %}
+                                <label>
+                                    Target host
+                                    <input type="text" name="target_host" placeholder="192.168.1.129">
+                                </label>
+                                <label>
+                                    Target VMID
+                                    <input type="text" name="target_vmid" placeholder="optional">
+                                </label>
+                                <label class="wide">
+                                    Target name
+                                    <input type="text" name="target_name" placeholder="fedora-template-118">
+                                </label>
+                            {% endif %}
                             <label class="wide">
                                 Notes
                                 <textarea name="notes" rows="3" placeholder="{{ pipeline.notes }}"></textarea>
