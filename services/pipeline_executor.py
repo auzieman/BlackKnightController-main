@@ -1131,6 +1131,10 @@ def _k3s_plan() -> dict:
         "api_url": "https://kube1.lab.auzietek.com:6443",
         "ci_user": "root",
         "bridge": "vmbr0",
+        "network_prefix": 24,
+        "gateway": "192.168.1.1",
+        "nameserver": "192.168.1.10",
+        "searchdomain": "lab.auzietek.com",
         "nodes": [dict(node) for node in K3S_NODE_PLAN],
     }
 
@@ -1157,12 +1161,22 @@ def _run_k3s_clone_plan(run_id: str, stage_name: str) -> None:
     target = dict(extra.get("k3s_target") or _select_proxmox_target(ProxmoxClient(load_proxmox_config())))
     clone_plan = []
     for node in plan.get("nodes", []):
+        name = str(node.get("name", "")).strip()
+        expected_ip = ""
+        try:
+            expected_ip = socket.gethostbyname(name)
+        except OSError:
+            expected_ip = ""
+        ipconfig0 = "ip=dhcp"
+        if expected_ip:
+            ipconfig0 = f"ip={expected_ip}/{int(plan.get('network_prefix') or 24)},gw={plan.get('gateway') or '192.168.1.1'}"
         clone_plan.append(
             {
-                "name": str(node.get("name", "")).strip(),
+                "name": name,
                 "short": str(node.get("short", "")).strip(),
                 "role": str(node.get("role", "")).strip(),
-                "cloudinit": {"ci_user": plan.get("ci_user", "root"), "ipconfig0": "ip=dhcp"},
+                "expected_ip": expected_ip,
+                "cloudinit": {"ci_user": plan.get("ci_user", "root"), "ipconfig0": ipconfig0},
             }
         )
     _store_run_extra(run_id, {"k3s_plan": plan, "k3s_target": target, "k3s_clone_plan": clone_plan})
@@ -1178,6 +1192,9 @@ def _k3s_configure_vm(
     cloudinit_storage: str,
     public_key: str,
     ci_user: str,
+    ipconfig0: str,
+    nameserver: str,
+    searchdomain: str,
 ) -> str:
     proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(proxmox_config)
     key_path = f"/tmp/bkc-k3s-{vmid}.pub"
@@ -1189,12 +1206,15 @@ def _k3s_configure_vm(
         f"hostname={shlex.quote(vm_name)}; "
         f"key_path={shlex.quote(key_path)}; "
         f"pubkey={shlex.quote(public_key)}; "
+        f"ipconfig0={shlex.quote(ipconfig0)}; "
+        f"nameserver={shlex.quote(nameserver)}; "
+        f"searchdomain={shlex.quote(searchdomain)}; "
         "printf \"%s\\n\" \"$pubkey\" > \"$key_path\"; "
         "qm set \"$vmid\" --boot order=scsi0; "
         "qm set \"$vmid\" --ide2 \"$cloudinit_storage:cloudinit\"; "
-        "qm set \"$vmid\" --ciuser \"$ci_user\" --ipconfig0 ip=dhcp --sshkey \"$key_path\"; "
+        "qm set \"$vmid\" --ciuser \"$ci_user\" --ipconfig0 \"$ipconfig0\" --sshkey \"$key_path\"; "
         "qm set \"$vmid\" --agent enabled=1; "
-        "qm set \"$vmid\" --name \"$hostname\" --nameserver 192.168.1.10 --searchdomain lab.auzietek.com; "
+        "qm set \"$vmid\" --name \"$hostname\" --nameserver \"$nameserver\" --searchdomain \"$searchdomain\"; "
         "echo k3s-vm-configured'"
     )
     return run_remote_command(
@@ -1211,6 +1231,7 @@ def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
     client = ProxmoxClient(proxmox_config)
     run = get_run(run_id) or {}
     extra = run.get("extra", {})
+    plan = dict(extra.get("k3s_plan") or _k3s_plan())
     target = dict(extra.get("k3s_target") or _select_proxmox_target(client))
     template = dict(extra.get("k3s_template") or _select_fedora_template())
     clone_plan = list(extra.get("k3s_clone_plan") or _k3s_plan()["nodes"])
@@ -1250,6 +1271,9 @@ def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
             cloudinit_storage=str(target["cloudinit_storage"]),
             public_key=public_key,
             ci_user=str((node.get("cloudinit") or {}).get("ci_user") or "root"),
+            ipconfig0=str((node.get("cloudinit") or {}).get("ipconfig0") or "ip=dhcp"),
+            nameserver=str(plan.get("nameserver") or "192.168.1.10"),
+            searchdomain=str(plan.get("searchdomain") or "lab.auzietek.com"),
         )
         cloned.append({**dict(node), "vmid": new_vmid, "proxmox_node": source_node, "clone_upid": str(upid)})
 
