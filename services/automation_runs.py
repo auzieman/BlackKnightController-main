@@ -68,6 +68,20 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["repo-sync", "manifest-resolve", "image-compose", "artifact-publish"]
     if normalized in {"fedora-cloud-import", "fedora-template-deploy"}:
         return ["source-select", "proxmox-import", "instance-configure", "boot", "ssh-validate"]
+    if normalized == "k3s-fedora-cluster":
+        return [
+            "source-select",
+            "clone-plan",
+            "proxmox-clone",
+            "boot",
+            "discover-ssh",
+            "base-os-bootstrap",
+            "install-k3s-server",
+            "capture-k3s-token",
+            "install-k3s-agent",
+            "verify-cluster",
+            "register-resources",
+        ]
     if normalized == "wordpress-appliance-import":
         return ["source-select", "proxmox-clone", "boot", "ssh-validate"]
     if normalized == "blackknight-sync":

@@ -14,10 +14,12 @@ from services.tenant_context import get_effective_tenant_slug
 
 RESOURCE_KIND_META = {
     "api": {"label": "APIs", "short": "API", "order": 10},
-    "group": {"label": "Groups", "short": "GRP", "order": 20},
+    "cluster": {"label": "Clusters", "short": "K8S", "order": 20},
+    "group": {"label": "Groups", "short": "GRP", "order": 21},
     "host": {"label": "Hosts", "short": "HST", "order": 30},
     "vm": {"label": "VMs", "short": "VM", "order": 31},
     "container": {"label": "Containers", "short": "CTR", "order": 32},
+    "kubernetes-node": {"label": "Kubernetes Nodes", "short": "KND", "order": 33},
     "repo": {"label": "Repositories", "short": "GIT", "order": 40},
     "pipeline": {"label": "Pipelines", "short": "PLN", "order": 50},
     "action": {"label": "Actions", "short": "ACT", "order": 60},
@@ -28,6 +30,7 @@ RELATIONSHIP_CONSTRAINTS = [
     {"source": "group", "type": "contains", "target": "host"},
     {"source": "group", "type": "contains", "target": "vm"},
     {"source": "group", "type": "contains", "target": "container"},
+    {"source": "cluster", "type": "contains", "target": "kubernetes-node"},
     {"source": "api", "type": "discovers", "target": "host"},
     {"source": "api", "type": "discovers", "target": "vm"},
     {"source": "api", "type": "discovers", "target": "container"},
@@ -104,6 +107,9 @@ def _add_relationship(graph: dict, source_id: str, relation_type: str, target_id
 
 
 def _node_kind(node_data: dict, resolved: dict) -> str:
+    resource_kind = str(resolved.get("resource_kind") or node_data.get("resource_kind") or "").lower()
+    if resource_kind in RESOURCE_KIND_META:
+        return resource_kind
     provider = str(resolved.get("provider") or node_data.get("provider") or "").lower()
     node_type = str(resolved.get("type") or node_data.get("type") or node_data.get("resource_type") or "").lower()
     if provider in {"proxmox", "qemu"} or node_type in {"vm", "qemu"}:
@@ -334,14 +340,17 @@ def build_resource_graph() -> dict:
             _add_relationship(graph, key_id, "authenticates", api_id, "SSH mode uses this key material.")
 
     for group_name, group_data in sorted(rules.get("groups", {}).items()):
-        group_id = f"group:{group_name}"
         hosts = resolve_group_hosts(rules, group_name)
         locals_meta = group_data.get("locals", {})
+        group_kind = str(locals_meta.get("resource_kind") or "").strip().lower()
+        if group_kind not in RESOURCE_KIND_META:
+            group_kind = "group"
+        group_id = f"{group_kind}:{group_name}"
         _add_resource(
             graph,
             {
                 "id": group_id,
-                "kind": "group",
+                "kind": group_kind,
                 "name": group_name,
                 "state": locals_meta.get("state", "defined"),
                 "summary": f"{len(hosts)} resources in this inventory group.",
@@ -350,6 +359,8 @@ def build_resource_graph() -> dict:
                     "environment": locals_meta.get("env") or rules.get("globals", {}).get("env", "unset"),
                     "datacenter": locals_meta.get("datacenter") or rules.get("globals", {}).get("datacenter", "unset"),
                     "workflow": locals_meta.get("workflow", "unset"),
+                    "engine": locals_meta.get("cluster_engine", "unset"),
+                    "api": locals_meta.get("api_url", "unset"),
                 },
                 "actions": [
                     {"label": "Open group", "href": f"/group/{group_name}/hosts"},

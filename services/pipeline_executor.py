@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import shlex
+import socket
+import time
 
 from services.ansible import scan_ansible_controller
 from services.ansible_inventory import parse_ansible_hosts, sync_ansible_inventory_to_rules
@@ -26,6 +29,11 @@ class PipelineExecutionError(RuntimeError):
 
 
 FEDORA_TEMPLATE_RELEASE = "44"
+K3S_CLUSTER_NAME = "k3s-lab"
+K3S_NODE_PLAN = [
+    {"name": "kube1.lab.auzietek.com", "short": "kube1", "role": "server"},
+    {"name": "kube2.lab.auzietek.com", "short": "kube2", "role": "agent"},
+]
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -142,6 +150,100 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "Fedora template deploy pipeline completed.",
+    },
+    "k3s-fedora-cluster": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-select",
+                "transport": "internal",
+                "kind": "k3s-source-select",
+                "active": "Selecting the Fedora 44 Proxmox source and target defaults for the k3s lab cluster.",
+                "complete": "Fedora source and Proxmox target selected for k3s.",
+                "timeout": 30,
+            },
+            {
+                "name": "clone-plan",
+                "transport": "internal",
+                "kind": "k3s-clone-plan",
+                "active": "Planning kube1 and kube2 clone roles, names, and first-boot settings.",
+                "complete": "K3s clone plan prepared.",
+                "timeout": 30,
+            },
+            {
+                "name": "proxmox-clone",
+                "transport": "internal",
+                "kind": "k3s-proxmox-clone",
+                "active": "Cloning and cloud-init configuring the Fedora guests for kube1 and kube2.",
+                "complete": "K3s Fedora guests cloned and configured.",
+                "timeout": 3600,
+            },
+            {
+                "name": "boot",
+                "transport": "internal",
+                "kind": "k3s-proxmox-start",
+                "active": "Starting kube1 and kube2 in Proxmox.",
+                "complete": "K3s Fedora guests are running.",
+                "timeout": 300,
+            },
+            {
+                "name": "discover-ssh",
+                "transport": "internal",
+                "kind": "k3s-discover-ssh",
+                "active": "Resolving kube DNS names and waiting for BKC SSH access.",
+                "complete": "K3s guests are reachable over SSH.",
+                "timeout": 900,
+            },
+            {
+                "name": "base-os-bootstrap",
+                "transport": "internal",
+                "kind": "k3s-base-bootstrap",
+                "active": "Applying Fedora base OS prerequisites for k3s.",
+                "complete": "K3s base OS prerequisites applied.",
+                "timeout": 1800,
+            },
+            {
+                "name": "install-k3s-server",
+                "transport": "internal",
+                "kind": "k3s-install-server",
+                "active": "Installing the k3s server on kube1.",
+                "complete": "K3s server installed on kube1.",
+                "timeout": 1200,
+            },
+            {
+                "name": "capture-k3s-token",
+                "transport": "internal",
+                "kind": "k3s-capture-token",
+                "active": "Capturing the kube1 join token for the worker stage.",
+                "complete": "K3s join token captured for the worker stage.",
+                "timeout": 120,
+            },
+            {
+                "name": "install-k3s-agent",
+                "transport": "internal",
+                "kind": "k3s-install-agent",
+                "active": "Joining kube2 to the k3s cluster.",
+                "complete": "Kube2 joined the k3s cluster.",
+                "timeout": 1200,
+            },
+            {
+                "name": "verify-cluster",
+                "transport": "internal",
+                "kind": "k3s-verify-cluster",
+                "active": "Verifying both k3s nodes report Ready through kubectl.",
+                "complete": "K3s cluster reports both nodes Ready.",
+                "timeout": 600,
+            },
+            {
+                "name": "register-resources",
+                "transport": "internal",
+                "kind": "k3s-register-resources",
+                "active": "Registering the k3s cluster and node resources in BKC inventory.",
+                "complete": "K3s cluster resources registered.",
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "K3s Fedora cluster pipeline completed.",
     },
     "fedora-workstation-spin": {
         "supports_undeploy": False,
@@ -1023,6 +1125,351 @@ def _run_fedora_template_start(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, f"{name} reached running state on {node} (vmid {vmid}).")
 
 
+def _k3s_plan() -> dict:
+    return {
+        "cluster_name": K3S_CLUSTER_NAME,
+        "api_url": "https://kube1.lab.auzietek.com:6443",
+        "ci_user": "root",
+        "bridge": "vmbr0",
+        "nodes": [dict(node) for node in K3S_NODE_PLAN],
+    }
+
+
+def _run_k3s_source_select(run_id: str, stage_name: str) -> None:
+    client = ProxmoxClient(load_proxmox_config())
+    target = _select_proxmox_target(client)
+    template = _select_fedora_template()
+    plan = _k3s_plan()
+    _store_run_extra(run_id, {"k3s_plan": plan, "k3s_template": template, "k3s_target": target})
+    _set_stage(run_id, stage_name, "complete", "Fedora source and Proxmox target selected for k3s.")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        f"Selected {template.get('name')} on {template.get('node')} (vmid {template.get('vmid')}) for {plan['cluster_name']}.",
+    )
+
+
+def _run_k3s_clone_plan(run_id: str, stage_name: str) -> None:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {})
+    plan = dict(extra.get("k3s_plan") or _k3s_plan())
+    target = dict(extra.get("k3s_target") or _select_proxmox_target(ProxmoxClient(load_proxmox_config())))
+    clone_plan = []
+    for node in plan.get("nodes", []):
+        clone_plan.append(
+            {
+                "name": str(node.get("name", "")).strip(),
+                "short": str(node.get("short", "")).strip(),
+                "role": str(node.get("role", "")).strip(),
+                "cloudinit": {"ci_user": plan.get("ci_user", "root"), "ipconfig0": "ip=dhcp"},
+            }
+        )
+    _store_run_extra(run_id, {"k3s_plan": plan, "k3s_target": target, "k3s_clone_plan": clone_plan})
+    _set_stage(run_id, stage_name, "complete", "K3s clone plan prepared.")
+    append_event(run_id, "info", stage_name, json.dumps({"cluster": plan["cluster_name"], "nodes": clone_plan}, sort_keys=True))
+
+
+def _k3s_configure_vm(
+    *,
+    proxmox_config: dict,
+    vmid: int,
+    vm_name: str,
+    cloudinit_storage: str,
+    public_key: str,
+    ci_user: str,
+) -> str:
+    proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(proxmox_config)
+    key_path = f"/tmp/bkc-k3s-{vmid}.pub"
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        f"vmid={vmid}; "
+        f"cloudinit_storage={shlex.quote(cloudinit_storage)}; "
+        f"ci_user={shlex.quote(ci_user)}; "
+        f"hostname={shlex.quote(vm_name)}; "
+        f"key_path={shlex.quote(key_path)}; "
+        f"pubkey={shlex.quote(public_key)}; "
+        "printf \"%s\\n\" \"$pubkey\" > \"$key_path\"; "
+        "qm set \"$vmid\" --boot order=scsi0; "
+        "qm set \"$vmid\" --ide2 \"$cloudinit_storage:cloudinit\"; "
+        "qm set \"$vmid\" --ciuser \"$ci_user\" --ipconfig0 ip=dhcp --sshkey \"$key_path\"; "
+        "qm set \"$vmid\" --agent enabled=1; "
+        "qm set \"$vmid\" --name \"$hostname\" --nameserver 192.168.1.10 --searchdomain lab.auzietek.com; "
+        "echo k3s-vm-configured'"
+    )
+    return run_remote_command(
+        host=proxmox_host,
+        user=proxmox_user,
+        password=proxmox_password,
+        command=command,
+        timeout=240,
+    )
+
+
+def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
+    proxmox_config = load_proxmox_config()
+    client = ProxmoxClient(proxmox_config)
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {})
+    target = dict(extra.get("k3s_target") or _select_proxmox_target(client))
+    template = dict(extra.get("k3s_template") or _select_fedora_template())
+    clone_plan = list(extra.get("k3s_clone_plan") or _k3s_plan()["nodes"])
+    source_node = str(template.get("node", "")).strip()
+    source_vmid = int(template.get("vmid", 0))
+    if not source_node or not source_vmid:
+        raise PipelineExecutionError("K3s Fedora source metadata is incomplete. Re-run source selection.")
+
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    public_key = str(key_info.get("public_key", "")).strip()
+    if not public_key:
+        raise PipelineExecutionError("BKC SSH public key is missing. Generate or install it before cloning k3s guests.")
+
+    cloned = []
+    for node in clone_plan:
+        vm_name = str(node.get("name", "")).strip()
+        role = str(node.get("role", "")).strip()
+        if not vm_name or role not in {"server", "agent"}:
+            raise PipelineExecutionError(f"Invalid k3s node plan entry: {node!r}")
+        new_vmid = int(client.next_vmid())
+        upid = client.clone_vm(
+            node=source_node,
+            source_vmid=source_vmid,
+            new_vmid=new_vmid,
+            name=vm_name,
+            full=True,
+        )
+        task = client.wait_for_task(source_node, str(upid), timeout=2400)
+        exit_status = str(task.get("exitstatus", ""))
+        if exit_status and exit_status != "OK":
+            raise PipelineExecutionError(f"Proxmox clone failed for {vm_name}: {exit_status}")
+        _k3s_configure_vm(
+            proxmox_config=proxmox_config,
+            vmid=new_vmid,
+            vm_name=vm_name,
+            cloudinit_storage=str(target["cloudinit_storage"]),
+            public_key=public_key,
+            ci_user=str((node.get("cloudinit") or {}).get("ci_user") or "root"),
+        )
+        cloned.append({**dict(node), "vmid": new_vmid, "proxmox_node": source_node, "clone_upid": str(upid)})
+
+    _store_run_extra(run_id, {"k3s_nodes": cloned})
+    _set_stage(run_id, stage_name, "complete", "K3s Fedora guests cloned and configured.")
+    append_event(run_id, "info", stage_name, json.dumps({"cloned": cloned}, sort_keys=True))
+
+
+def _k3s_nodes(run_id: str) -> list[dict]:
+    run = get_run(run_id) or {}
+    nodes = list((run.get("extra", {}) or {}).get("k3s_nodes") or [])
+    if not nodes:
+        raise PipelineExecutionError("K3s node metadata is missing. Re-run the lane from clone planning.")
+    return [dict(node) for node in nodes]
+
+
+def _run_k3s_proxmox_start(run_id: str, stage_name: str) -> None:
+    client = ProxmoxClient(load_proxmox_config())
+    started = []
+    for node in _k3s_nodes(run_id):
+        proxmox_node = str(node.get("proxmox_node", "")).strip()
+        vmid = int(node.get("vmid", 0))
+        name = str(node.get("name", "")).strip()
+        if not proxmox_node or not vmid:
+            raise PipelineExecutionError(f"K3s node Proxmox metadata is incomplete for {name or node!r}.")
+        upid = client.start_vm(proxmox_node, vmid)
+        task = client.wait_for_task(proxmox_node, str(upid), timeout=120)
+        exit_status = str(task.get("exitstatus", ""))
+        if exit_status and exit_status != "OK":
+            raise PipelineExecutionError(f"Proxmox start failed for {name}: {exit_status}")
+        status = client.wait_for_vm_status(proxmox_node, vmid, "running", timeout=120)
+        started.append({**node, "start_upid": str(upid), "status": status.get("status")})
+    _store_run_extra(run_id, {"k3s_nodes": started})
+    _set_stage(run_id, stage_name, "complete", "K3s Fedora guests are running.")
+    append_event(run_id, "info", stage_name, json.dumps({"started": started}, sort_keys=True))
+
+
+def _k3s_ssh_command(node: dict, command: str, timeout: int = 120) -> str:
+    host = str(node.get("ip") or node.get("name") or "").strip()
+    if not host:
+        raise PipelineExecutionError(f"K3s node SSH target is missing: {node!r}")
+    return run_remote_command(host=host, user="root", password="", command=command, timeout=timeout)
+
+
+def _run_k3s_discover_ssh(run_id: str, stage_name: str) -> None:
+    deadline = time.monotonic() + 900
+    resolved = []
+    for node in _k3s_nodes(run_id):
+        name = str(node.get("name", "")).strip()
+        ip = ""
+        ready = False
+        last_error = ""
+        while time.monotonic() < deadline:
+            try:
+                ip = socket.gethostbyname(name)
+                probe_node = {**node, "ip": ip}
+                _k3s_ssh_command(probe_node, "true", timeout=20)
+                ready = True
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)
+                time.sleep(10)
+        if not ready:
+            raise PipelineExecutionError(f"SSH did not become ready for {name} before timeout: {last_error}")
+        resolved.append({**node, "ip": ip})
+    _store_run_extra(run_id, {"k3s_nodes": resolved})
+    _set_stage(run_id, stage_name, "complete", "K3s guests are reachable over SSH.")
+    append_event(run_id, "info", stage_name, json.dumps({"ssh_ready": resolved}, sort_keys=True))
+
+
+def _run_k3s_base_bootstrap(run_id: str, stage_name: str) -> None:
+    outputs = []
+    for node in _k3s_nodes(run_id):
+        fqdn = str(node.get("name", "")).strip()
+        command = (
+            "bash -lc 'set -euo pipefail; "
+            f"hostnamectl set-hostname {shlex.quote(fqdn)}; "
+            "dnf -y install curl jq tar iptables-nft container-selinux qemu-guest-agent; "
+            "systemctl enable --now qemu-guest-agent || true; "
+            "swapoff -a || true; "
+            "sed -ri.bkc-k3s \"/\\sswap\\s/s/^/#/\" /etc/fstab || true; "
+            "modprobe br_netfilter || true; modprobe overlay || true; "
+            "printf \"overlay\\nbr_netfilter\\n\" >/etc/modules-load.d/k3s.conf; "
+            "printf \"net.bridge.bridge-nf-call-iptables = 1\\nnet.ipv4.ip_forward = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\" >/etc/sysctl.d/90-k3s.conf; "
+            "sysctl --system >/dev/null; "
+            "if command -v firewall-cmd >/dev/null 2>&1; then "
+            "firewall-cmd --permanent --add-port=6443/tcp || true; "
+            "firewall-cmd --permanent --add-port=10250/tcp || true; "
+            "firewall-cmd --permanent --add-port=8472/udp || true; "
+            "firewall-cmd --reload || true; "
+            "fi; "
+            "echo k3s-base-ready'"
+        )
+        output = _k3s_ssh_command(node, command, timeout=1800)
+        outputs.append({"node": fqdn, "output": output[-300:] if output else "k3s-base-ready"})
+    _set_stage(run_id, stage_name, "complete", "K3s base OS prerequisites applied.")
+    append_event(run_id, "info", stage_name, json.dumps(outputs, sort_keys=True))
+
+
+def _k3s_node_by_role(run_id: str, role: str) -> dict:
+    for node in _k3s_nodes(run_id):
+        if str(node.get("role", "")).strip() == role:
+            return node
+    raise PipelineExecutionError(f"K3s node role '{role}' is missing from run metadata.")
+
+
+def _run_k3s_install_server(run_id: str, stage_name: str) -> None:
+    server = _k3s_node_by_role(run_id, "server")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "if systemctl is-active --quiet k3s 2>/dev/null; then echo k3s-server-present; exit 0; fi; "
+        "curl -sfL https://get.k3s.io | "
+        "INSTALL_K3S_CHANNEL=stable sh -s - server "
+        "--write-kubeconfig-mode 644 "
+        "--disable traefik "
+        f"--node-name {shlex.quote(str(server.get('short') or 'kube1'))} "
+        f"--tls-san {shlex.quote(str(server.get('name') or 'kube1.lab.auzietek.com'))}; "
+        "systemctl is-active --quiet k3s; "
+        "echo k3s-server-ready'"
+    )
+    output = _k3s_ssh_command(server, command, timeout=1200)
+    _store_run_extra(run_id, {"k3s_api_url": "https://kube1.lab.auzietek.com:6443", "k3s_kubeconfig_path": "/etc/rancher/k3s/k3s.yaml"})
+    _set_stage(run_id, stage_name, "complete", "K3s server installed on kube1.")
+    append_event(run_id, "info", stage_name, output[-600:] if output else "k3s-server-ready")
+
+
+def _run_k3s_capture_token(run_id: str, stage_name: str) -> None:
+    server = _k3s_node_by_role(run_id, "server")
+    token = _k3s_ssh_command(server, "bash -lc 'set -euo pipefail; cat /var/lib/rancher/k3s/server/node-token'", timeout=120).strip()
+    if not token:
+        raise PipelineExecutionError("K3s server did not return a join token.")
+    _store_run_extra(run_id, {"k3s_join_token": token, "k3s_join_token_captured": True})
+    _set_stage(run_id, stage_name, "complete", "K3s join token captured for the worker stage.")
+    append_event(run_id, "info", stage_name, "Join token captured from kube1 and staged for kube2.")
+
+
+def _run_k3s_install_agent(run_id: str, stage_name: str) -> None:
+    run = get_run(run_id) or {}
+    token = str((run.get("extra", {}) or {}).get("k3s_join_token", "")).strip()
+    if not token:
+        raise PipelineExecutionError("K3s join token is missing. Re-run capture-k3s-token.")
+    agent = _k3s_node_by_role(run_id, "agent")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "if systemctl is-active --quiet k3s-agent 2>/dev/null; then echo k3s-agent-present; exit 0; fi; "
+        "curl -sfL https://get.k3s.io | "
+        f"INSTALL_K3S_CHANNEL=stable K3S_URL={shlex.quote('https://kube1.lab.auzietek.com:6443')} K3S_TOKEN={shlex.quote(token)} "
+        "sh -s - agent "
+        f"--node-name {shlex.quote(str(agent.get('short') or 'kube2'))}; "
+        "systemctl is-active --quiet k3s-agent; "
+        "echo k3s-agent-ready'"
+    )
+    output = _k3s_ssh_command(agent, command, timeout=1200)
+    _store_run_extra(run_id, {"k3s_join_token": "", "k3s_join_token_used": True})
+    _set_stage(run_id, stage_name, "complete", "Kube2 joined the k3s cluster.")
+    append_event(run_id, "info", stage_name, output[-600:] if output else "k3s-agent-ready")
+
+
+def _run_k3s_verify_cluster(run_id: str, stage_name: str) -> None:
+    server = _k3s_node_by_role(run_id, "server")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "for _ in $(seq 1 60); do "
+        "ready=$(k3s kubectl get nodes --no-headers 2>/dev/null | awk '\\''$2==\"Ready\"{c++} END{print c+0}'\\''); "
+        "[ \"$ready\" -ge 2 ] && k3s kubectl get nodes -o wide && exit 0; "
+        "sleep 5; "
+        "done; "
+        "k3s kubectl get nodes -o wide || true; "
+        "exit 1'"
+    )
+    output = _k3s_ssh_command(server, command, timeout=600)
+    _store_run_extra(run_id, {"k3s_verify_output": output[-1200:]})
+    _set_stage(run_id, stage_name, "complete", "K3s cluster reports both nodes Ready.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-ready")
+
+
+def _run_k3s_register_resources(run_id: str, stage_name: str) -> None:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    nodes = _k3s_nodes(run_id)
+    rules = load_rules()
+    groups = rules.setdefault("groups", {})
+    group = groups.setdefault(K3S_CLUSTER_NAME, {"locals": {}, "nodes": {}})
+    group.setdefault("locals", {}).update(
+        {
+            "provider": "kubernetes",
+            "resource_kind": "cluster",
+            "cluster_engine": "k3s",
+            "api_url": extra.get("k3s_api_url", "https://kube1.lab.auzietek.com:6443"),
+            "kubeconfig_path": extra.get("k3s_kubeconfig_path", "/etc/rancher/k3s/k3s.yaml"),
+            "managed_by": "blackknightcontroller",
+            "workflow": "k3s-fedora-cluster",
+        }
+    )
+    inventory = group.setdefault("nodes", {})
+    ssh = load_integrations()["ssh"]
+    private_key = str(ssh.get("private_key_path", "")).strip()
+    for node in nodes:
+        name = str(node.get("name", "")).strip()
+        inventory[name] = {
+            "provider": "proxmox",
+            "resource_kind": "kubernetes-node",
+            "configuration": "k3s",
+            "cluster": K3S_CLUSTER_NAME,
+            "kubernetes_role": str(node.get("role", "")),
+            "vmid": int(node.get("vmid", 0)),
+            "proxmox_node": str(node.get("proxmox_node", "")),
+            "fqdn": name,
+            "host": str(node.get("ip") or name),
+            "user": "root",
+            "port": 22,
+            "private_key": private_key,
+            "state": "ready",
+        }
+    reconcile = reconcile_rules_inventory(rules)
+    save_rules(rules)
+    _set_stage(run_id, stage_name, "complete", "K3s cluster resources registered.")
+    append_event(run_id, "info", stage_name, json.dumps({"cluster": K3S_CLUSTER_NAME, "reconcile": reconcile}, sort_keys=True))
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -1062,6 +1509,50 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "fedora-cloud-start" or kind == "fedora-template-start":
             _run_fedora_template_start(run_id, stage_name)
+            continue
+
+        if kind == "k3s-source-select":
+            _run_k3s_source_select(run_id, stage_name)
+            continue
+
+        if kind == "k3s-clone-plan":
+            _run_k3s_clone_plan(run_id, stage_name)
+            continue
+
+        if kind == "k3s-proxmox-clone":
+            _run_k3s_proxmox_clone(run_id, stage_name)
+            continue
+
+        if kind == "k3s-proxmox-start":
+            _run_k3s_proxmox_start(run_id, stage_name)
+            continue
+
+        if kind == "k3s-discover-ssh":
+            _run_k3s_discover_ssh(run_id, stage_name)
+            continue
+
+        if kind == "k3s-base-bootstrap":
+            _run_k3s_base_bootstrap(run_id, stage_name)
+            continue
+
+        if kind == "k3s-install-server":
+            _run_k3s_install_server(run_id, stage_name)
+            continue
+
+        if kind == "k3s-capture-token":
+            _run_k3s_capture_token(run_id, stage_name)
+            continue
+
+        if kind == "k3s-install-agent":
+            _run_k3s_install_agent(run_id, stage_name)
+            continue
+
+        if kind == "k3s-verify-cluster":
+            _run_k3s_verify_cluster(run_id, stage_name)
+            continue
+
+        if kind == "k3s-register-resources":
+            _run_k3s_register_resources(run_id, stage_name)
             continue
 
         if kind == "wordpress-source-select":
