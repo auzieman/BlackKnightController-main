@@ -5,7 +5,7 @@ from copy import deepcopy
 from urllib.parse import urlparse
 
 from services.automation_runs import load_runs
-from services.integration_store import load_integrations
+from services.integration_store import load_ansible_snapshot, load_docker_snapshot, load_integrations, load_proxmox_snapshot
 from services.inventory_model import resolve_group_hosts
 from services.pipeline_catalog import demo_pipelines
 from services.rules_store import load_rules
@@ -59,6 +59,7 @@ def _add_resource(graph: dict, resource: dict) -> dict:
             if source not in existing["sources"]:
                 existing["sources"].append(source)
         existing.setdefault("facts", {}).update(resource.get("facts", {}))
+        existing.setdefault("sections", {}).update(resource.get("sections", {}))
         existing.setdefault("actions", []).extend(resource.get("actions", []))
         return existing
 
@@ -70,6 +71,7 @@ def _add_resource(graph: dict, resource: dict) -> dict:
         "summary": resource.get("summary", ""),
         "sources": list(resource.get("sources", [])),
         "facts": dict(resource.get("facts", {})),
+        "sections": dict(resource.get("sections", {})),
         "actions": list(resource.get("actions", [])),
         "raw": dict(resource.get("raw", {})),
     }
@@ -135,10 +137,160 @@ def _pipeline_actions(pipeline: dict) -> list[dict]:
     ]
 
 
+def _fmt_bytes(value) -> str:
+    try:
+        size = float(value or 0)
+    except (TypeError, ValueError):
+        return "unset"
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    for unit in units:
+        if abs(size) < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return "unset"
+
+
+def _fmt_percent(value) -> str:
+    try:
+        return f"{float(value or 0) * 100:.1f}%"
+    except (TypeError, ValueError):
+        return "unset"
+
+
+def _fmt_uptime(seconds) -> str:
+    try:
+        total = int(seconds or 0)
+    except (TypeError, ValueError):
+        return "unset"
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, _ = divmod(rem, 60)
+    if days:
+        return f"{days}d {hours}h"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def _kv(**items) -> dict:
+    return {key: ("unset" if value in (None, "") else str(value)) for key, value in items.items()}
+
+
+def _snapshot_indexes() -> dict:
+    proxmox = load_proxmox_snapshot() or {}
+    docker = load_docker_snapshot() or {}
+    ansible = load_ansible_snapshot() or {}
+
+    proxmox_by_name = {}
+    proxmox_by_vmid = {}
+    for item in list(proxmox.get("virtual_machines", [])) + list(proxmox.get("containers", [])):
+        name = str(item.get("name") or "").strip()
+        vmid = str(item.get("vmid") or "").strip()
+        if name:
+            proxmox_by_name[name.lower()] = item
+        if vmid:
+            proxmox_by_vmid[vmid] = item
+
+    docker_nodes = {
+        str(item.get("Hostname") or item.get("Name") or "").strip().lower(): item
+        for item in docker.get("nodes", [])
+        if item.get("Hostname") or item.get("Name")
+    }
+    docker_services = {
+        str(item.get("Name") or "").strip().lower(): item
+        for item in docker.get("services", [])
+        if item.get("Name")
+    }
+
+    return {
+        "proxmox": proxmox,
+        "proxmox_by_name": proxmox_by_name,
+        "proxmox_by_vmid": proxmox_by_vmid,
+        "docker_nodes": docker_nodes,
+        "docker_services": docker_services,
+        "ansible": ansible,
+    }
+
+
+def _operational_sections(kind: str, host_name: str, node_data: dict, resolved: dict, indexes: dict) -> tuple[dict, dict]:
+    facts = {}
+    sections = {}
+    proxmox_item = None
+    vmid = str(resolved.get("vmid") or node_data.get("vmid") or "").strip()
+    if vmid:
+        proxmox_item = indexes["proxmox_by_vmid"].get(vmid)
+    if proxmox_item is None:
+        proxmox_item = indexes["proxmox_by_name"].get(host_name.lower())
+
+    if proxmox_item:
+        facts.update(
+            {
+                "vmid": proxmox_item.get("vmid", vmid),
+                "proxmox node": proxmox_item.get("node", "unset"),
+                "status": proxmox_item.get("status", "unset"),
+            }
+        )
+        sections["compute"] = _kv(
+            cpus=proxmox_item.get("cpus"),
+            memory=f"{_fmt_bytes(proxmox_item.get('mem'))} / {_fmt_bytes(proxmox_item.get('maxmem'))}",
+            cpu_used=_fmt_percent(proxmox_item.get("cpu")),
+            uptime=_fmt_uptime(proxmox_item.get("uptime")),
+            pid=proxmox_item.get("pid"),
+        )
+        sections["storage"] = _kv(
+            disk=f"{_fmt_bytes(proxmox_item.get('disk'))} / {_fmt_bytes(proxmox_item.get('maxdisk'))}",
+            disk_read=_fmt_bytes(proxmox_item.get("diskread")),
+            disk_write=_fmt_bytes(proxmox_item.get("diskwrite")),
+        )
+        sections["network"] = _kv(
+            route=resolved.get("ip") or resolved.get("fqdn") or resolved.get("hostname"),
+            net_in=_fmt_bytes(proxmox_item.get("netin")),
+            net_out=_fmt_bytes(proxmox_item.get("netout")),
+        )
+        sections["management"] = _kv(
+            provider="proxmox",
+            resource_type=proxmox_item.get("type"),
+            user=resolved.get("user") or node_data.get("user"),
+            provisioner=resolved.get("provisioner") or node_data.get("provisioner"),
+        )
+
+    docker_node = indexes["docker_nodes"].get(host_name.lower())
+    docker_service = indexes["docker_services"].get(host_name.lower())
+    if docker_node:
+        facts.update({"docker role": docker_node.get("ManagerStatus") or "worker", "engine": docker_node.get("EngineVersion")})
+        sections.setdefault("compute", {}).update(_kv(engine=docker_node.get("EngineVersion"), availability=docker_node.get("Availability")))
+        sections["management"] = {
+            **sections.get("management", {}),
+            **_kv(provider="docker-swarm", node_id=docker_node.get("ID"), tls=docker_node.get("TLSStatus"), role=docker_node.get("ManagerStatus") or "worker"),
+        }
+    if docker_service:
+        facts.update({"replicas": docker_service.get("Replicas"), "image": docker_service.get("Image")})
+        sections["service"] = _kv(
+            image=docker_service.get("Image"),
+            replicas=docker_service.get("Replicas"),
+            mode=docker_service.get("Mode"),
+            ports=docker_service.get("Ports"),
+        )
+
+    ansible = indexes.get("ansible") or {}
+    inventory_path = ansible.get("inventory_path")
+    if inventory_path and kind in {"host", "vm", "container"}:
+        sections["automation"] = _kv(
+            ansible_controller=ansible.get("controller_host"),
+            inventory=inventory_path,
+            playbooks=len(ansible.get("playbooks", [])),
+        )
+
+    return facts, sections
+
+
 def build_resource_graph() -> dict:
     graph = _blank_graph()
     rules = load_rules()
     tenant_slug = get_effective_tenant_slug()
+    snapshot_indexes = _snapshot_indexes()
 
     integrations = load_integrations()
     for name, config in sorted(integrations.items()):
@@ -211,6 +363,14 @@ def build_resource_graph() -> dict:
             host_id = f"{kind}:{host_name}"
             provider = resolved.get("provider") or node_data.get("provider") or "manual"
             route = resolved.get("ip") or resolved.get("fqdn") or resolved.get("hostname") or ""
+            operational_facts, sections = _operational_sections(kind, host_name, node_data, resolved, snapshot_indexes)
+            facts = {
+                "provider": provider,
+                "route": route or "unset",
+                "os": resolved.get("os_name") or "unset",
+                "user": resolved.get("user") or "unset",
+            }
+            facts.update(operational_facts)
             _add_resource(
                 graph,
                 {
@@ -220,12 +380,8 @@ def build_resource_graph() -> dict:
                     "state": resolved.get("state") or node_data.get("state") or "known",
                     "summary": f"{provider} resource" + (f" reachable at {route}." if route else "."),
                     "sources": ["rules"],
-                    "facts": {
-                        "provider": provider,
-                        "route": route or "unset",
-                        "os": resolved.get("os_name") or "unset",
-                        "user": resolved.get("user") or "unset",
-                    },
+                    "facts": facts,
+                    "sections": sections,
                     "actions": [
                         {"label": "Deploy", "href": f"/deploy/{group_name}/{host_name}"},
                         {"label": "Admin", "href": f"/admin?group={group_name}&host={host_name}"},

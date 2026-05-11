@@ -90,6 +90,23 @@
                 </div>
 
                 {% if tab == 'summary' %}
+                    {% if selected.sections %}
+                        <section class="ops-fact-grid">
+                            {% for section_name, section_facts in selected.sections.items() %}
+                                <article class="ops-fact-panel">
+                                    <p class="eyebrow">{{ section_name }}</p>
+                                    <dl class="ops-fact-list">
+                                        {% for label, value in section_facts.items() %}
+                                            <div>
+                                                <dt>{{ label|replace('_', ' ') }}</dt>
+                                                <dd>{{ value }}</dd>
+                                            </div>
+                                        {% endfor %}
+                                    </dl>
+                                </article>
+                            {% endfor %}
+                        </section>
+                    {% endif %}
                     <section class="resource-summary-grid">
                         <div class="resource-panel">
                             <p class="eyebrow">Primary facts</p>

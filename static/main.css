@@ -1338,6 +1338,10 @@ th {
   gap: 16px;
 }
 
+.inventory-ops-panel {
+  padding: 14px;
+}
+
 .inventory-edge-list {
   margin-top: 0;
 }
@@ -1408,6 +1412,51 @@ th {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
   gap: 16px;
+}
+
+.ops-fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.compact-ops-grid {
+  margin-bottom: 0;
+}
+
+.ops-fact-panel {
+  padding: 14px;
+  border: 1px solid rgba(79, 209, 197, 0.2);
+  border-radius: 10px;
+  background: rgba(79, 209, 197, 0.045);
+}
+
+.ops-fact-panel .eyebrow {
+  color: #80fff2;
+}
+
+.ops-fact-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ops-fact-list div {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.45fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.ops-fact-list dt {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.ops-fact-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .resource-panel {

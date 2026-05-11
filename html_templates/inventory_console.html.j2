@@ -70,6 +70,26 @@
                             <span class="status-pill">{{ selected_resource.state }}</span>
                         </div>
                         <section class="inventory-summary-grid">
+                            {% if selected_resource.sections %}
+                                <div class="resource-panel wide inventory-ops-panel">
+                                    <p class="eyebrow">Operational aspects</p>
+                                    <section class="ops-fact-grid compact-ops-grid">
+                                        {% for section_name, section_facts in selected_resource.sections.items() %}
+                                            <article class="ops-fact-panel">
+                                                <p class="eyebrow">{{ section_name }}</p>
+                                                <dl class="ops-fact-list">
+                                                    {% for label, value in section_facts.items() %}
+                                                        <div>
+                                                            <dt>{{ label|replace('_', ' ') }}</dt>
+                                                            <dd>{{ value }}</dd>
+                                                        </div>
+                                                    {% endfor %}
+                                                </dl>
+                                            </article>
+                                        {% endfor %}
+                                    </section>
+                                </div>
+                            {% endif %}
                             <div class="resource-panel">
                                 <p class="eyebrow">Facts</p>
                                 <dl class="fact-list">
