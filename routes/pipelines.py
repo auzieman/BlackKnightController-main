@@ -101,10 +101,12 @@ def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
     tags = {"runnable" if supported else "planned"}
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
-    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
-    if workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.add("deploy")
+    if workflow == "fedora-cosmic-postinstall":
+        tags.update({"desktop", "ssh"})
     if workflow in {"monitoring-stack", "microblog-publish"}:
         tags.add("deploy")
     if workflow == "monitoring-stack":
@@ -161,10 +163,12 @@ def _run_tags(run: dict) -> list[str]:
     status = str(run.get("status", "")).strip().lower()
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
-    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
-    if workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.add("deploy")
+    if workflow == "fedora-cosmic-postinstall":
+        tags.update({"desktop", "ssh"})
     if workflow in {"monitoring-stack", "microblog-publish"}:
         tags.add("deploy")
     if workflow == "monitoring-stack":
@@ -213,7 +217,7 @@ def _executor_source_files(workflow: str) -> list[str]:
                 "/home/auzieman/Projects/BlackKnightController/file_templates/fedora-server-minimal.ks.j2",
             ]
         )
-    elif workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    elif workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         sources.extend(
             [
                 "/home/auzieman/Projects/BlackKnightController/services/proxmox.py",

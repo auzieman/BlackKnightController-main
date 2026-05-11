@@ -68,6 +68,17 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["repo-sync", "manifest-resolve", "image-compose", "artifact-publish"]
     if normalized in {"fedora-cloud-import", "fedora-template-deploy"}:
         return ["source-select", "proxmox-import", "instance-configure", "boot", "ssh-validate"]
+    if normalized == "fedora-cosmic-postinstall":
+        return [
+            "target-select",
+            "wait-ssh",
+            "package-plan",
+            "desktop-install",
+            "graphical-enable",
+            "reboot",
+            "gui-validate",
+            "register-resource",
+        ]
     if normalized == "k3s-fedora-cluster":
         return [
             "source-select",

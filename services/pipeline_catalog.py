@@ -102,6 +102,38 @@ BUILTIN_PIPELINES = [
         "tags": ["candidate", "hypervisor", "deploy"],
     },
     {
+        "id": "fedora-cosmic-postinstall",
+        "name": "Fedora COSMIC Post Install",
+        "repo": "proxmox-template-deploy",
+        "workflow": "fedora-cosmic-postinstall",
+        "description": "Take over a freshly cloned Fedora VM over BKC SSH, install COSMIC Desktop unattended, enable graphical boot, reboot once, and verify the display manager is online.",
+        "stages": [
+            "target-select",
+            "wait-ssh",
+            "package-plan",
+            "desktop-install",
+            "graphical-enable",
+            "reboot",
+            "gui-validate",
+            "register-resource",
+        ],
+        "notes": "Second-stage VM customization lane. It deliberately avoids firstboot scripts so a broken desktop setup cannot put the installer back into a boot loop.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+            {"label": "Fedora COSMIC", "url": "https://fedoraproject.org/spins/cosmic"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Follow SSH takeover, package install, reboot, and graphical target validation from BKC.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["fedora", "cosmic", "desktop", "ssh", "postinstall"],
+    },
+    {
         "id": "k3s-fedora-cluster",
         "name": "K3s Fedora Cluster",
         "repo": "proxmox-template-deploy",

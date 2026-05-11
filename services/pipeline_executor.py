@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import shlex
 import socket
 import time
@@ -13,11 +14,11 @@ from services.automation_pipeline import (
     mark_run_complete,
     mark_run_failed,
 )
-from services.automation_runs import get_run, update_run, update_stage
+from services.automation_runs import get_run, load_runs, update_run, update_stage
 from services.docker_swarm import scan_docker_controller, sync_docker_inventory_to_rules
 from services.fresh_build_library import fresh_build_plan
 from services.integration_store import load_integrations, load_proxmox_snapshot, save_ansible_snapshot, save_docker_snapshot
-from services.inventory_model import reconcile_rules_inventory
+from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.proxmox import ProxmoxClient, load_proxmox_config
 from services.remote_ops import run_remote_command
 from services.rules_store import load_rules, save_rules
@@ -150,6 +151,76 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "Fedora template deploy pipeline completed.",
+    },
+    "fedora-cosmic-postinstall": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "target-select",
+                "transport": "internal",
+                "kind": "cosmic-target-select",
+                "active": "Selecting the freshest reachable Fedora clone for COSMIC post-install takeover.",
+                "complete": "Fedora COSMIC target selected.",
+                "timeout": 120,
+            },
+            {
+                "name": "wait-ssh",
+                "transport": "internal",
+                "kind": "cosmic-wait-ssh",
+                "active": "Waiting for BKC SSH access on the Fedora target.",
+                "complete": "Fedora target is reachable over SSH.",
+                "timeout": 900,
+            },
+            {
+                "name": "package-plan",
+                "transport": "internal",
+                "kind": "cosmic-package-plan",
+                "active": "Preparing the unattended COSMIC package plan.",
+                "complete": "COSMIC package plan prepared.",
+                "timeout": 60,
+            },
+            {
+                "name": "desktop-install",
+                "transport": "internal",
+                "kind": "cosmic-desktop-install",
+                "active": "Installing COSMIC Desktop packages on the Fedora target.",
+                "complete": "COSMIC Desktop packages installed.",
+                "timeout": 5400,
+            },
+            {
+                "name": "graphical-enable",
+                "transport": "internal",
+                "kind": "cosmic-graphical-enable",
+                "active": "Enabling graphical boot and the COSMIC display manager.",
+                "complete": "Graphical boot and display manager enabled.",
+                "timeout": 300,
+            },
+            {
+                "name": "reboot",
+                "transport": "internal",
+                "kind": "cosmic-reboot",
+                "active": "Rebooting the Fedora target once after COSMIC setup.",
+                "complete": "Fedora target reboot requested.",
+                "timeout": 120,
+            },
+            {
+                "name": "gui-validate",
+                "transport": "internal",
+                "kind": "cosmic-gui-validate",
+                "active": "Waiting for SSH return and validating graphical target/display manager.",
+                "complete": "Fedora COSMIC GUI target is online.",
+                "timeout": 1200,
+            },
+            {
+                "name": "register-resource",
+                "transport": "internal",
+                "kind": "cosmic-register-resource",
+                "active": "Recording COSMIC desktop state in BKC inventory metadata.",
+                "complete": "COSMIC desktop state registered in inventory.",
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "Fedora COSMIC post-install pipeline completed.",
     },
     "k3s-fedora-cluster": {
         "supports_undeploy": False,
@@ -1125,6 +1196,377 @@ def _run_fedora_template_start(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, f"{name} reached running state on {node} (vmid {vmid}).")
 
 
+def _dns_or_blank(value: str) -> str:
+    target = str(value or "").strip()
+    if not target:
+        return ""
+    try:
+        return socket.gethostbyname(target)
+    except OSError:
+        return ""
+
+
+def _route_is_ready(value: str) -> bool:
+    target = str(value or "").strip()
+    if not target:
+        return False
+    try:
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        return bool(_dns_or_blank(target))
+
+
+def _cosmic_candidate_from_route(name: str, route: str, *, vmid: int = 0, proxmox_node: str = "", source: str = "") -> dict:
+    route = str(route or "").strip()
+    ip = _dns_or_blank(route) or route
+    return {
+        "name": str(name or route or "fedora-cosmic-target").strip(),
+        "host": ip,
+        "route": route or ip,
+        "vmid": int(vmid or 0),
+        "proxmox_node": str(proxmox_node or "").strip(),
+        "source": source or "manual",
+        "route_ready": _route_is_ready(route or ip),
+    }
+
+
+def _cosmic_target_from_run_extra(extra: dict) -> dict | None:
+    target_host = str(extra.get("target_host") or extra.get("target_ip") or "").strip()
+    target_name = str(extra.get("target_name") or extra.get("hostname") or "").strip()
+    if target_host:
+        return _cosmic_candidate_from_route(
+            target_name or target_host,
+            target_host,
+            vmid=int(extra.get("target_vmid") or 0),
+            proxmox_node=str(extra.get("target_node") or ""),
+            source="run metadata",
+        )
+    return None
+
+
+def _cosmic_candidates_from_runs() -> list[dict]:
+    candidates = []
+    for run in load_runs()[:20]:
+        workflow = str(run.get("workflow") or "").strip().lower()
+        extra = run.get("extra", {}) or {}
+        if workflow not in {"fedora-template-deploy", "fedora-cloud-import"}:
+            continue
+        name = str(extra.get("fedora_template_vm_name") or "").strip()
+        vmid = int(extra.get("fedora_template_vmid") or 0)
+        route = str(extra.get("fedora_template_ip") or extra.get("target_host") or name).strip()
+        if not name and not route:
+            continue
+        candidate = _cosmic_candidate_from_route(
+            name or route,
+            route,
+            vmid=vmid,
+            proxmox_node=str(extra.get("fedora_template_node") or ""),
+            source="recent fedora pipeline",
+        )
+        candidates.append(candidate)
+    return candidates
+
+
+def _cosmic_candidates_from_rules() -> list[dict]:
+    rules = load_rules()
+    candidates = []
+    for group_name in sorted(rules.get("groups", {})):
+        for host_name, node_data, resolved in resolve_group_hosts(rules, group_name):
+            name_lc = str(host_name).lower()
+            config_lc = str(resolved.get("configuration") or node_data.get("configuration") or "").lower()
+            if not any(token in name_lc or token in config_lc for token in ("fedora", "fc44", "cosmic")):
+                continue
+            route = (
+                resolved.get("host")
+                or resolved.get("ip")
+                or resolved.get("fqdn")
+                or resolved.get("hostname")
+                or node_data.get("host")
+                or node_data.get("ip")
+                or host_name
+            )
+            candidates.append(
+                _cosmic_candidate_from_route(
+                    host_name,
+                    str(route),
+                    vmid=int(resolved.get("vmid") or node_data.get("vmid") or 0),
+                    proxmox_node=str(resolved.get("proxmox_node") or node_data.get("proxmox_node") or ""),
+                    source=f"rules:{group_name}",
+                )
+            )
+    return candidates
+
+
+def _cosmic_candidates_from_proxmox_snapshot() -> list[dict]:
+    snapshot = load_proxmox_snapshot() or {}
+    candidates = []
+    for vm in snapshot.get("virtual_machines", []):
+        name = str(vm.get("name") or "").strip()
+        name_lc = name.lower()
+        if vm.get("template") or not any(token in name_lc for token in ("fedora", "fc44")):
+            continue
+        status = str(vm.get("status") or "").strip().lower()
+        if status and status != "running":
+            continue
+        route = str(vm.get("ip") or vm.get("host") or vm.get("fqdn") or name).strip()
+        candidates.append(
+            _cosmic_candidate_from_route(
+                name,
+                route,
+                vmid=int(vm.get("vmid") or 0),
+                proxmox_node=str(vm.get("node") or ""),
+                source="proxmox snapshot",
+            )
+        )
+    return candidates
+
+
+def _cosmic_candidates_from_proxmox_api() -> list[dict]:
+    candidates = []
+    try:
+        client = ProxmoxClient(load_proxmox_config())
+        for node in client.nodes():
+            node_name = str(node.get("node", "")).strip()
+            if not node_name:
+                continue
+            for vm in client.list_qemu(node_name):
+                name = str(vm.get("name") or "").strip()
+                name_lc = name.lower()
+                if vm.get("template") or str(vm.get("status", "")).lower() != "running":
+                    continue
+                if not any(token in name_lc for token in ("fedora", "fc44")):
+                    continue
+                candidates.append(
+                    _cosmic_candidate_from_route(
+                        name,
+                        str(vm.get("ip") or vm.get("host") or vm.get("fqdn") or name),
+                        vmid=int(vm.get("vmid") or 0),
+                        proxmox_node=node_name,
+                        source="proxmox api",
+                    )
+                )
+    except Exception as exc:  # noqa: BLE001
+        candidates.append({"error": str(exc), "source": "proxmox api"})
+    return candidates
+
+
+def _select_cosmic_target(run_id: str) -> dict:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    explicit = _cosmic_target_from_run_extra(extra)
+    candidates = []
+    if explicit:
+        candidates.append(explicit)
+    candidates.extend(_cosmic_candidates_from_rules())
+    candidates.extend(_cosmic_candidates_from_runs())
+    candidates.extend(_cosmic_candidates_from_proxmox_snapshot())
+    if not any(candidate.get("route_ready") for candidate in candidates):
+        candidates.extend(_cosmic_candidates_from_proxmox_api())
+
+    seen = set()
+    usable = []
+    errors = []
+    for candidate in candidates:
+        if candidate.get("error"):
+            errors.append(f"{candidate.get('source')}: {candidate.get('error')}")
+            continue
+        host = str(candidate.get("host") or "").strip()
+        if not host:
+            continue
+        if not candidate.get("route_ready") and str(candidate.get("source")) != "run metadata":
+            continue
+        key = (host, int(candidate.get("vmid") or 0), str(candidate.get("name") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        usable.append(candidate)
+    if not usable:
+        detail = "; ".join(errors)
+        raise PipelineExecutionError(
+            "No reachable Fedora clone target was discovered for COSMIC post-install. "
+            "Refresh inventory or create the run with target_host/target_ip metadata."
+            + (f" Proxmox lookup detail: {detail}" if detail else "")
+        )
+
+    usable.sort(
+        key=lambda item: (
+            1 if str(item.get("source", "")).startswith("run metadata") else 0,
+            1 if item.get("route_ready") else 0,
+            1 if str(item.get("source", "")).startswith("rules") else 0,
+            int(item.get("vmid") or 0),
+            str(item.get("name") or ""),
+        ),
+        reverse=True,
+    )
+    return usable[0]
+
+
+def _cosmic_target(run_id: str) -> dict:
+    run = get_run(run_id) or {}
+    target = dict((run.get("extra", {}) or {}).get("cosmic_target") or {})
+    if not target:
+        raise PipelineExecutionError("COSMIC target metadata is missing. Re-run target-select.")
+    return target
+
+
+def _cosmic_ssh(run_id: str, command: str, timeout: int = 120) -> str:
+    target = _cosmic_target(run_id)
+    return run_remote_command(host=str(target["host"]), user="root", password="", command=command, timeout=timeout)
+
+
+def _run_cosmic_target_select(run_id: str, stage_name: str) -> None:
+    target = _select_cosmic_target(run_id)
+    _store_run_extra(run_id, {"cosmic_target": target})
+    _set_stage(run_id, stage_name, "complete", "Fedora COSMIC target selected.")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        f"Selected {target.get('name')} at {target.get('host')} from {target.get('source')} (vmid {target.get('vmid') or 'unknown'}).",
+    )
+
+
+def _run_cosmic_wait_ssh(run_id: str, stage_name: str) -> None:
+    deadline = time.monotonic() + 900
+    last_error = ""
+    while time.monotonic() < deadline:
+        try:
+            output = _cosmic_ssh(run_id, "bash -lc 'hostname; id -u; test -d /etc/dnf || test -d /usr/lib/sysimage/rpm'", timeout=20)
+            _set_stage(run_id, stage_name, "complete", "Fedora target is reachable over SSH.")
+            append_event(run_id, "info", stage_name, output or "ssh-ready")
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            time.sleep(10)
+    raise PipelineExecutionError(f"Fedora target SSH did not become ready before timeout: {last_error}")
+
+
+def _run_cosmic_package_plan(run_id: str, stage_name: str) -> None:
+    plan = {
+        "group": "@cosmic-desktop-environment",
+        "fallback_packages": [
+            "cosmic-session",
+            "cosmic-greeter",
+            "cosmic-settings",
+            "cosmic-terminal",
+            "NetworkManager",
+            "qemu-guest-agent",
+        ],
+        "display_manager": "cosmic-greeter",
+        "reboot_policy": "single reboot after graphical target is enabled",
+    }
+    _store_run_extra(run_id, {"cosmic_package_plan": plan})
+    _set_stage(run_id, stage_name, "complete", "COSMIC package plan prepared.")
+    append_event(run_id, "info", stage_name, json.dumps(plan, sort_keys=True))
+
+
+def _run_cosmic_desktop_install(run_id: str, stage_name: str) -> None:
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "dnf -y makecache; "
+        "if rpm -q cosmic-session >/dev/null 2>&1 && rpm -q cosmic-greeter >/dev/null 2>&1; then "
+        "echo cosmic-packages-present; exit 0; "
+        "fi; "
+        "dnf -y install @cosmic-desktop-environment || "
+        "dnf -y group install cosmic-desktop-environment || "
+        "dnf -y install cosmic-session cosmic-greeter cosmic-settings cosmic-terminal NetworkManager qemu-guest-agent; "
+        "dnf -y install qemu-guest-agent openssh-server; "
+        "echo cosmic-packages-installed'"
+    )
+    output = _cosmic_ssh(run_id, command, timeout=5400)
+    _set_stage(run_id, stage_name, "complete", "COSMIC Desktop packages installed.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "cosmic-packages-installed")
+
+
+def _run_cosmic_graphical_enable(run_id: str, stage_name: str) -> None:
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "systemctl enable --now NetworkManager || true; "
+        "systemctl enable --now qemu-guest-agent || true; "
+        "systemctl set-default graphical.target; "
+        "if systemctl list-unit-files cosmic-greeter.service --no-legend 2>/dev/null | grep -q \"^cosmic-greeter.service\"; then "
+        "systemctl enable cosmic-greeter.service; "
+        "ln -sf /usr/lib/systemd/system/cosmic-greeter.service /etc/systemd/system/display-manager.service; "
+        "elif systemctl list-unit-files gdm.service --no-legend 2>/dev/null | grep -q \"^gdm.service\"; then "
+        "systemctl enable gdm.service; "
+        "ln -sf /usr/lib/systemd/system/gdm.service /etc/systemd/system/display-manager.service; "
+        "fi; "
+        "systemctl daemon-reload; "
+        "systemctl get-default; "
+        "echo graphical-enabled'"
+    )
+    output = _cosmic_ssh(run_id, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "Graphical boot and display manager enabled.")
+    append_event(run_id, "info", stage_name, output[-800:] if output else "graphical-enabled")
+
+
+def _run_cosmic_reboot(run_id: str, stage_name: str) -> None:
+    command = "bash -lc 'nohup sh -c \"sleep 2; systemctl reboot\" >/dev/null 2>&1 & echo reboot-requested'"
+    output = _cosmic_ssh(run_id, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "Fedora target reboot requested.")
+    append_event(run_id, "info", stage_name, output or "reboot-requested")
+
+
+def _run_cosmic_gui_validate(run_id: str, stage_name: str) -> None:
+    time.sleep(20)
+    deadline = time.monotonic() + 1200
+    last_error = ""
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "test \"$(systemctl get-default)\" = graphical.target; "
+        "if systemctl is-active --quiet display-manager; then dm=display-manager; "
+        "elif systemctl is-active --quiet cosmic-greeter; then dm=cosmic-greeter; "
+        "elif systemctl is-active --quiet gdm; then dm=gdm; "
+        "else systemctl --no-pager --failed; exit 1; fi; "
+        "printf \"graphical.target %s active\\n\" \"$dm\"'"
+    )
+    while time.monotonic() < deadline:
+        try:
+            output = _cosmic_ssh(run_id, command, timeout=30)
+            _store_run_extra(run_id, {"cosmic_gui_status": output})
+            _set_stage(run_id, stage_name, "complete", "Fedora COSMIC GUI target is online.")
+            append_event(run_id, "info", stage_name, output or "cosmic-gui-online")
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            time.sleep(15)
+    raise PipelineExecutionError(f"COSMIC GUI validation did not pass before timeout: {last_error}")
+
+
+def _run_cosmic_register_resource(run_id: str, stage_name: str) -> None:
+    target = _cosmic_target(run_id)
+    rules = load_rules()
+    group = rules.setdefault("groups", {}).setdefault("fedora-cosmic", {"locals": {}, "nodes": {}})
+    group.setdefault("locals", {}).update(
+        {
+            "provider": "proxmox",
+            "resource_kind": "group",
+            "configuration": "fedora-cosmic",
+            "workflow": "fedora-cosmic-postinstall",
+        }
+    )
+    ssh = load_integrations()["ssh"]
+    name = str(target.get("name") or target.get("host") or "fedora-cosmic").strip()
+    group.setdefault("nodes", {})[name] = {
+        "provider": "proxmox",
+        "resource_kind": "vm",
+        "configuration": "fedora-cosmic",
+        "desktop": "COSMIC",
+        "vmid": int(target.get("vmid") or 0),
+        "proxmox_node": str(target.get("proxmox_node") or ""),
+        "host": str(target.get("host") or ""),
+        "user": "root",
+        "port": 22,
+        "private_key": str(ssh.get("private_key_path") or ""),
+        "state": "gui-online",
+    }
+    reconcile = reconcile_rules_inventory(rules)
+    save_rules(rules)
+    _set_stage(run_id, stage_name, "complete", "COSMIC desktop state registered in inventory.")
+    append_event(run_id, "info", stage_name, json.dumps({"target": name, "reconcile": reconcile}, sort_keys=True))
+
+
 def _k3s_plan() -> dict:
     return {
         "cluster_name": K3S_CLUSTER_NAME,
@@ -1533,6 +1975,38 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "fedora-cloud-start" or kind == "fedora-template-start":
             _run_fedora_template_start(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-target-select":
+            _run_cosmic_target_select(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-wait-ssh":
+            _run_cosmic_wait_ssh(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-package-plan":
+            _run_cosmic_package_plan(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-desktop-install":
+            _run_cosmic_desktop_install(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-graphical-enable":
+            _run_cosmic_graphical_enable(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-reboot":
+            _run_cosmic_reboot(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-gui-validate":
+            _run_cosmic_gui_validate(run_id, stage_name)
+            continue
+
+        if kind == "cosmic-register-resource":
+            _run_cosmic_register_resource(run_id, stage_name)
             continue
 
         if kind == "k3s-source-select":
