@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request
 
 from services.inventory_model import build_actionable_inventory, resolve_group_hosts
+from services.resource_graph import RESOURCE_KIND_META, build_resource_graph, related_to
 from services.rules_store import load_rules
 
 
@@ -10,10 +11,12 @@ inventory_console_blueprint = Blueprint("inventory_console", __name__)
 @inventory_console_blueprint.route("/inventory", methods=["GET"])
 def inventory_console():
     rules = load_rules()
+    resource_graph = build_resource_graph()
     tab = request.args.get("tab", "inventory").strip().lower()
     if tab not in {"inventory", "launch"}:
         tab = "inventory"
     selected_group = request.args.get("group", "").strip()
+    selected_resource_id = request.args.get("resource", "").strip()
     search = request.args.get("q", "").strip().lower()
     sort_key = request.args.get("sort", "node").strip().lower()
     if sort_key not in {"node", "provider", "state", "os"}:
@@ -48,6 +51,11 @@ def inventory_console():
 
     if not selected_group and group_rows:
         selected_group = group_rows[0]["name"]
+    if not selected_resource_id and selected_group:
+        selected_resource_id = f"group:{selected_group}"
+    if selected_resource_id not in resource_graph["resources_by_id"]:
+        selected_resource_id = resource_graph["resources"][0]["id"] if resource_graph["resources"] else ""
+    selected_resource = resource_graph["resources_by_id"].get(selected_resource_id)
 
     shared_hosts = {
         host_name: sorted(groups)
@@ -104,4 +112,9 @@ def inventory_console():
         search=search,
         sort_key=sort_key,
         shared_hosts=shared_hosts,
+        resource_graph=resource_graph,
+        resource_kind_meta=RESOURCE_KIND_META,
+        selected_resource=selected_resource,
+        selected_resource_id=selected_resource_id,
+        selected_relationships=related_to(resource_graph, selected_resource_id) if selected_resource else [],
     )

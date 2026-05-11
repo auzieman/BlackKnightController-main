@@ -1142,6 +1142,41 @@ th {
   align-items: start;
 }
 
+.inventory-resource-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.inventory-resource-metrics {
+  margin-bottom: 20px;
+}
+
+.inventory-resource-tree,
+.inventory-detail-stack {
+  min-width: 0;
+}
+
+.inventory-detail-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.inventory-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  gap: 16px;
+}
+
+.inventory-edge-list {
+  margin-top: 0;
+}
+
+.inventory-detail-stack .filter-bar {
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) 160px auto;
+}
+
 .resource-sidebar,
 .resource-main {
   min-width: 0;
@@ -1378,7 +1413,9 @@ th {
   .ops-overview,
   .console-layout,
   .resource-layout,
+  .inventory-resource-layout,
   .resource-summary-grid,
+  .inventory-summary-grid,
   .builder-layout,
   .card-grid,
   .form-grid,

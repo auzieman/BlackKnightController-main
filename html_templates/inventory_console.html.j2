@@ -6,104 +6,183 @@
 {% block content %}
     <section class="section-header">
         <div>
-            <p class="eyebrow">Cluster inventory</p>
-            <h2>Tree, table, and launch surfaces</h2>
+            <p class="eyebrow">Resource inventory</p>
+            <h2>Resources first, groups and launch paths underneath</h2>
         </div>
         <div class="tab-strip">
-            <a class="tab-link{% if tab == 'inventory' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='inventory') }}">Inventory</a>
+            <a class="tab-link{% if tab == 'inventory' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='inventory') }}">Resources</a>
             <a class="tab-link{% if tab == 'launch' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='launch') }}">Launch</a>
         </div>
     </section>
 
     {% if tab == 'inventory' %}
-        <section class="console-layout">
-            <section class="form-shell">
-                <div class="section-header">
+        <section class="resource-metrics inventory-resource-metrics">
+            {% for kind, meta in resource_kind_meta.items() %}
+                {% if resource_graph.counts.get(kind) %}
+                    <a class="resource-metric" href="{{ url_for('resource_graph.resource_graph', kind=kind) }}">
+                        <span class="resource-icon">{{ meta.short }}</span>
+                        <strong>{{ resource_graph.counts.get(kind) }}</strong>
+                        <span>{{ meta.label }}</span>
+                    </a>
+                {% endif %}
+            {% endfor %}
+        </section>
+
+        <section class="inventory-resource-layout">
+            <aside class="form-shell inventory-resource-tree">
+                <div class="section-header compact-header">
                     <div>
-                        <p class="eyebrow">Group selector</p>
-                        <h3>Clusters, groups, and lanes</h3>
+                        <p class="eyebrow">Inventory tree</p>
+                        <h3>{{ resource_graph.resources|length }} resources</h3>
                     </div>
                 </div>
-                <div class="tree-list">
-                    {% for group in group_rows %}
-                        <a class="tree-link{% if selected_group == group.name %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab=tab, group=group.name, q=search, sort=sort_key) }}">
-                            <strong>{{ group.name }}</strong>
-                            <span>{{ group.host_count }} nodes</span>
-                            <small>{{ group.locals.env or 'env unset' }} / {{ group.locals.datacenter or 'dc unset' }}</small>
-                        </a>
+                <div class="resource-tree">
+                    {% for tree_group in resource_graph.tree %}
+                        <details class="tree-group" open>
+                            <summary>
+                                <span><span class="resource-icon">{{ tree_group.meta.short }}</span> {{ tree_group.meta.label }}</span>
+                                <span>{{ tree_group.resources|length }}</span>
+                            </summary>
+                            <div class="tree-children">
+                                {% for resource in tree_group.resources %}
+                                    <a class="tree-node resource-node{% if selected_resource and selected_resource.id == resource.id %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab=tab, resource=resource.id, group=selected_group, q=search, sort=sort_key) }}">
+                                        <strong>{{ resource.name }}</strong>
+                                        <span>{{ resource.state }} · {{ resource.summary }}</span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </details>
                     {% else %}
-                        <div class="workflow-empty">No groups defined.</div>
+                        <div class="workflow-empty">No resources defined.</div>
                     {% endfor %}
                 </div>
-            </section>
+            </aside>
 
-            <section class="form-shell">
-                <div class="section-header">
-                    <div>
-                        <p class="eyebrow">Status grid</p>
-                        <h3>{{ selected_group_row.name if selected_group_row else 'No group selected' }}</h3>
+            <section class="inventory-detail-stack">
+                <section class="form-shell">
+                    {% if selected_resource %}
+                        <div class="resource-heading">
+                            <div>
+                                <p class="eyebrow">{{ resource_kind_meta.get(selected_resource.kind, {}).get('label', selected_resource.kind|title) }}</p>
+                                <h3><span class="resource-icon">{{ resource_kind_meta.get(selected_resource.kind, {}).get('short', selected_resource.kind[:3]|upper) }}</span> {{ selected_resource.name }}</h3>
+                                <p>{{ selected_resource.summary }}</p>
+                            </div>
+                            <span class="status-pill">{{ selected_resource.state }}</span>
+                        </div>
+                        <section class="inventory-summary-grid">
+                            <div class="resource-panel">
+                                <p class="eyebrow">Facts</p>
+                                <dl class="fact-list">
+                                    {% for label, value in selected_resource.facts.items() %}
+                                        <div>
+                                            <dt>{{ label }}</dt>
+                                            <dd>{{ value }}</dd>
+                                        </div>
+                                    {% else %}
+                                        <div>
+                                            <dt>Status</dt>
+                                            <dd>No facts recorded yet.</dd>
+                                        </div>
+                                    {% endfor %}
+                                </dl>
+                            </div>
+                            <div class="resource-panel">
+                                <p class="eyebrow">Relationships</p>
+                                <div class="overview-edge-list inventory-edge-list">
+                                    {% for relationship in selected_relationships[:5] %}
+                                        <a href="{{ url_for('resource_graph.resource_graph', resource=selected_resource.id, tab='relationships') }}">
+                                            <strong>{{ relationship.source_label }}</strong>
+                                            <span>{{ relationship.type }}</span>
+                                            <strong>{{ relationship.target_label }}</strong>
+                                        </a>
+                                    {% else %}
+                                        <div class="workflow-empty">No relationships inferred yet.</div>
+                                    {% endfor %}
+                                </div>
+                                <a class="button secondary" href="{{ url_for('resource_graph.resource_graph', resource=selected_resource.id, tab='relationships') }}">Open graph detail</a>
+                            </div>
+                        </section>
+                    {% else %}
+                        <div class="workflow-empty">No resource selected.</div>
+                    {% endif %}
+                </section>
+
+                <section class="form-shell">
+                    <div class="section-header">
+                        <div>
+                            <p class="eyebrow">Group status grid</p>
+                            <h3>{{ selected_group_row.name if selected_group_row else 'No group selected' }}</h3>
+                        </div>
+                        <div class="topbar-badges">
+                            <a class="button secondary" href="{{ url_for('groups.hosts', group=selected_group) if selected_group else '#' }}">Open group</a>
+                            <a class="button secondary" href="{{ url_for('groups.edit_group', group=selected_group) if selected_group else '#' }}">Edit group</a>
+                        </div>
                     </div>
-                    <div class="topbar-badges">
-                        <a class="button secondary" href="{{ url_for('groups.hosts', group=selected_group) if selected_group else '#' }}">Open group</a>
-                        <a class="button secondary" href="{{ url_for('groups.edit_group', group=selected_group) if selected_group else '#' }}">Edit group</a>
-                    </div>
-                </div>
-                <form method="get" class="filter-bar">
-                    <input type="hidden" name="tab" value="{{ tab }}">
-                    <input type="hidden" name="group" value="{{ selected_group }}">
-                    <label>
-                        Search
-                        <input type="text" name="q" value="{{ search }}" placeholder="node, route, service, provider">
-                    </label>
-                    <label>
-                        Sort
-                        <select name="sort">
-                            <option value="node"{% if sort_key == 'node' %} selected{% endif %}>Node</option>
-                            <option value="provider"{% if sort_key == 'provider' %} selected{% endif %}>Provider</option>
-                            <option value="state"{% if sort_key == 'state' %} selected{% endif %}>State</option>
-                            <option value="os"{% if sort_key == 'os' %} selected{% endif %}>OS</option>
-                        </select>
-                    </label>
-                    <div class="filter-actions">
-                        <button class="button" type="submit">Apply</button>
-                    </div>
-                </form>
-                <section class="table-card embedded-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Node</th>
-                                <th>Provider</th>
-                                <th>Route</th>
-                                <th>State</th>
-                                <th>OS</th>
-                                <th>Services</th>
-                                <th>Owner groups</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for host in filtered_hosts %}
+                    <form method="get" class="filter-bar">
+                        <input type="hidden" name="tab" value="{{ tab }}">
+                        <input type="hidden" name="resource" value="{{ selected_resource_id }}">
+                        <label>
+                            Group
+                            <select name="group">
+                                {% for group in group_rows %}
+                                    <option value="{{ group.name }}"{% if selected_group == group.name %} selected{% endif %}>{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>
+                            Search
+                            <input type="text" name="q" value="{{ search }}" placeholder="node, route, service, provider">
+                        </label>
+                        <label>
+                            Sort
+                            <select name="sort">
+                                <option value="node"{% if sort_key == 'node' %} selected{% endif %}>Node</option>
+                                <option value="provider"{% if sort_key == 'provider' %} selected{% endif %}>Provider</option>
+                                <option value="state"{% if sort_key == 'state' %} selected{% endif %}>State</option>
+                                <option value="os"{% if sort_key == 'os' %} selected{% endif %}>OS</option>
+                            </select>
+                        </label>
+                        <div class="filter-actions">
+                            <button class="button" type="submit">Apply</button>
+                        </div>
+                    </form>
+                    <section class="table-card embedded-table">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td>{{ host.name }}</td>
-                                    <td>{{ host.provider or 'unset' }}</td>
-                                    <td>{{ host.route or 'unset' }}</td>
-                                    <td>{{ host.state or 'unset' }}</td>
-                                    <td>{{ host.os_name or 'unset' }}</td>
-                                    <td>{{ host.services | join(', ') if host.services else 'unset' }}</td>
-                                    <td>{{ shared_hosts.get(host.name, [selected_group]) | join(', ') }}</td>
-                                    <td class="launch-links">
-                                        <a href="{{ url_for('groups.hosts', group=selected_group) }}">Inspect</a>
-                                        <a href="{{ url_for('deploy_host.deploy_host', group=selected_group, host=host.name) }}">Deploy</a>
-                                    </td>
+                                    <th>Node</th>
+                                    <th>Provider</th>
+                                    <th>Route</th>
+                                    <th>State</th>
+                                    <th>OS</th>
+                                    <th>Services</th>
+                                    <th>Owner groups</th>
+                                    <th>Actions</th>
                                 </tr>
-                            {% else %}
-                                <tr>
-                                    <td colspan="8">No nodes matched this filter.</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {% for host in filtered_hosts %}
+                                    <tr>
+                                        <td>{{ host.name }}</td>
+                                        <td>{{ host.provider or 'unset' }}</td>
+                                        <td>{{ host.route or 'unset' }}</td>
+                                        <td>{{ host.state or 'unset' }}</td>
+                                        <td>{{ host.os_name or 'unset' }}</td>
+                                        <td>{{ host.services | join(', ') if host.services else 'unset' }}</td>
+                                        <td>{{ shared_hosts.get(host.name, [selected_group]) | join(', ') }}</td>
+                                        <td class="launch-links">
+                                            <a href="{{ url_for('inventory_console.inventory_console', tab='inventory', resource='host:' ~ host.name, group=selected_group) }}">Inspect</a>
+                                            <a href="{{ url_for('deploy_host.deploy_host', group=selected_group, host=host.name) }}">Deploy</a>
+                                        </td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="8">No nodes matched this filter.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </section>
                 </section>
             </section>
         </section>
