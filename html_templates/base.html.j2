@@ -14,28 +14,28 @@
         <aside class="sidebar">
             <div class="brand-block">
                 <p class="eyebrow">BlackKnightController CE</p>
-                <h1>Orbital Ops</h1>
-                <p class="sidebar-copy">A control surface for Proxmox, Ansible, and stage-driven automation with a little Black Knight satellite mythology built in.</p>
-                <div class="status-chip">Telemetry-linked pipeline console</div>
+                <h1>Resource Ops</h1>
+                <p class="sidebar-copy">A control surface for infrastructure resources, relationships, credentials, and stage-driven automation.</p>
+                <div class="status-chip">Graph-linked pipeline console</div>
             </div>
             <nav>
                 <ul class="nav-list">
-                    <li><a href="{{ url_for('index.index') }}">Overview</a></li>
-                    <li><a href="{{ url_for('resource_graph.resource_graph') }}">Resource Graph</a></li>
-                    <li><a href="{{ url_for('inventory_console.inventory_console') }}">Inventory</a></li>
-                    <li><a href="{{ url_for('groups.list_groups') }}">Groups</a></li>
-                    <li><a href="{{ url_for('pipelines.pipelines') }}">Pipelines</a></li>
-                    <li><a href="{{ url_for('builder.builder') }}">Inventory Builder</a></li>
-                    <li><a href="{{ url_for('admin.admin') }}">Admin Mode</a></li>
-                    <li><a href="{{ url_for('integrations.integrations') }}">Integrations</a></li>
-                    <li><a href="{{ url_for('proxmox_ops.proxmox_ops') }}">Proxmox Ops</a></li>
-                    <li><a href="{{ url_for('add_nodes.add_nodes') }}">Bulk Add Nodes</a></li>
-                    <li><a href="{{ url_for('templates.list_templates') }}">Templates</a></li>
+                    <li><a class="{% if request.endpoint == 'index.index' %}active{% endif %}" href="{{ url_for('index.index') }}">Overview</a></li>
+                    <li><a class="{% if request.endpoint == 'resource_graph.resource_graph' %}active{% endif %}" href="{{ url_for('resource_graph.resource_graph') }}">Resource Graph</a></li>
+                    <li><a class="{% if request.endpoint == 'inventory_console.inventory_console' %}active{% endif %}" href="{{ url_for('inventory_console.inventory_console') }}">Inventory</a></li>
+                    <li><a class="{% if request.endpoint and request.endpoint.startswith('groups.') %}active{% endif %}" href="{{ url_for('groups.list_groups') }}">Groups</a></li>
+                    <li><a class="{% if request.endpoint and request.endpoint.startswith('pipelines.') %}active{% endif %}" href="{{ url_for('pipelines.pipelines') }}">Pipelines</a></li>
+                    <li><a class="{% if request.endpoint == 'builder.builder' %}active{% endif %}" href="{{ url_for('builder.builder') }}">Inventory Builder</a></li>
+                    <li><a class="{% if request.endpoint == 'admin.admin' %}active{% endif %}" href="{{ url_for('admin.admin') }}">Admin Mode</a></li>
+                    <li><a class="{% if request.endpoint == 'integrations.integrations' %}active{% endif %}" href="{{ url_for('integrations.integrations') }}">Integrations</a></li>
+                    <li><a class="{% if request.endpoint == 'proxmox_ops.proxmox_ops' %}active{% endif %}" href="{{ url_for('proxmox_ops.proxmox_ops') }}">Proxmox Ops</a></li>
+                    <li><a class="{% if request.endpoint == 'add_nodes.add_nodes' %}active{% endif %}" href="{{ url_for('add_nodes.add_nodes') }}">Bulk Add Nodes</a></li>
+                    <li><a class="{% if request.endpoint and request.endpoint.startswith('templates.') %}active{% endif %}" href="{{ url_for('templates.list_templates') }}">Templates</a></li>
                     {% if bkc_job_queue %}
-                        <li><a href="{{ url_for('jobs.jobs_home') }}">Jobs</a></li>
+                        <li><a class="{% if request.endpoint and request.endpoint.startswith('jobs.') %}active{% endif %}" href="{{ url_for('jobs.jobs_home') }}">Jobs</a></li>
                     {% endif %}
                     {% if bkc_user and bkc_user.is_superuser %}
-                        <li><a href="{{ url_for('settings.settings_home') }}">Platform settings</a></li>
+                        <li><a class="{% if request.endpoint and request.endpoint.startswith('settings.') %}active{% endif %}" href="{{ url_for('settings.settings_home') }}">Platform settings</a></li>
                     {% endif %}
                 </ul>
             </nav>

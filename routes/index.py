@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template
 from services.automation_runs import load_runs
 from services.pipeline_catalog import demo_pipelines
+from services.resource_graph import RESOURCE_KIND_META, build_resource_graph
 from services.rules_store import load_rules
 from services.tenant_context import get_effective_tenant_slug
 from services.workflow import parse_workflow_stages
@@ -25,6 +26,7 @@ def _stage_summary(run: dict) -> dict:
 def index():
     rules = load_rules()
     tenant_slug = get_effective_tenant_slug()
+    resource_graph = build_resource_graph()
     groups = rules["groups"]
     total_hosts = sum(len(group.get("nodes", {})) for group in groups.values())
     group_cards = [
@@ -88,4 +90,8 @@ def index():
         dashboard_cards=dashboard_cards,
         active_runs=active_runs,
         failed_runs=failed_runs,
+        resource_graph=resource_graph,
+        resource_kind_meta=RESOURCE_KIND_META,
+        resource_preview=resource_graph["resources"][:8],
+        relationship_preview=resource_graph["relationships"][:8],
     )

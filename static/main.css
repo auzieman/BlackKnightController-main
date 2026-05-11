@@ -126,6 +126,12 @@ a {
   background: rgba(243, 155, 81, 0.08);
 }
 
+.nav-list a.active {
+  border-color: rgba(243, 155, 81, 0.46);
+  background: rgba(243, 155, 81, 0.12);
+  color: #ffd4b0;
+}
+
 .main {
   padding: 32px;
 }
@@ -195,6 +201,101 @@ a {
 .hero-panel {
   padding: 20px;
   background: linear-gradient(180deg, rgba(24, 36, 68, 0.95), rgba(14, 21, 40, 0.95));
+}
+
+.ops-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.ops-command-panel,
+.ops-side-panel {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.overview-resource-metrics {
+  margin: 18px 0;
+}
+
+.overview-resource-list,
+.overview-edge-list {
+  display: grid;
+  gap: 10px;
+}
+
+.overview-resource-row {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 0.45fr) 90px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(130, 156, 207, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  text-decoration: none;
+}
+
+.overview-resource-row span:not(.resource-icon),
+.overview-resource-row small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-edge-list {
+  margin: 16px 0;
+}
+
+.overview-edge-list a {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid rgba(130, 156, 207, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  text-decoration: none;
+}
+
+.overview-edge-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-edge-list span {
+  color: #ffd4b0;
+  font-size: 0.78rem;
+}
+
+.ops-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ops-meta-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(130, 156, 207, 0.14);
+  border-radius: 10px;
+  background: rgba(9, 15, 30, 0.55);
+}
+
+.ops-meta-grid span {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .card-grid,
@@ -1274,6 +1375,7 @@ th {
 @media (max-width: 980px) {
   .shell,
   .hero,
+  .ops-overview,
   .console-layout,
   .resource-layout,
   .resource-summary-grid,
@@ -1285,6 +1387,8 @@ th {
   }
 
   .resource-filter,
+  .overview-resource-row,
+  .overview-edge-list a,
   .fact-list div {
     grid-template-columns: 1fr;
   }
