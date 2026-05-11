@@ -703,7 +703,8 @@ def _select_fedora_template() -> dict:
             for vm in client.list_qemu(node_name):
                 record = dict(vm)
                 record["node"] = record.get("node", node_name)
-                if record.get("template"):
+                name = str(record.get("name", "")).strip().lower()
+                if record.get("template") or "fedora" in name or "fc44" in name or name.startswith("fc"):
                     candidates.append(record)
     except Exception:
         snapshot = load_proxmox_snapshot() or {}
@@ -712,10 +713,12 @@ def _select_fedora_template() -> dict:
             record["template"] = 1
             candidates.append(record)
         for vm in snapshot.get("virtual_machines", []):
-            if vm.get("template"):
+            name = str(vm.get("name", "")).strip().lower()
+            if vm.get("template") or "fedora" in name or "fc44" in name or name.startswith("fc"):
                 candidates.append(dict(vm))
 
     ranked = []
+    running_fedora_sources = []
     for template in candidates:
         name = str(template.get("name", "")).strip().lower()
         score = 0
@@ -727,18 +730,35 @@ def _select_fedora_template() -> dict:
             score += 2
         if name.startswith("fc-") or name.startswith("fc"):
             score += 1
-        if score or template.get("template"):
-            ranked.append((score, template))
+        if not score:
+            continue
+        if any(token in name for token in ("swarm", "k3s", "docker", "kube")):
+            continue
+        if str(template.get("status", "")).strip().lower() == "running" and not template.get("template"):
+            running_fedora_sources.append(template)
+            continue
+        ranked.append((score, template))
     if not ranked:
+        if running_fedora_sources:
+            names = ", ".join(
+                f"{item.get('name', 'unnamed')} (vmid {item.get('vmid', 'unknown')})"
+                for item in running_fedora_sources
+            )
+            raise PipelineExecutionError(
+                "Fedora-capable source VM is running and was not used as a clone base. "
+                f"Stop or convert the source before rerunning: {names}."
+            )
         raise PipelineExecutionError(
-            "No Fedora-capable Proxmox VM template was discovered. Refresh Proxmox inventory or mark the Fedora 44 minimal VM as a template first."
+            "No Fedora-capable Proxmox source was discovered. Refusing to fall back to a generic template because that can clone stale guest identity/network settings. Refresh Proxmox inventory and mark fc44-template or another Fedora 44 VM as the source template."
         )
-    preferred = next((template for _, template in ranked if int(template.get("vmid", 0) or 0) == 131), None)
+    preferred = next((template for score, template in ranked if score > 0 and int(template.get("vmid", 0) or 0) == 131), None)
     if preferred is not None:
         return dict(preferred)
     ranked.sort(
         key=lambda item: (
             item[0],
+            1 if item[1].get("template") else 0,
+            1 if str(item[1].get("status", "")).strip().lower() != "running" else 0,
             int(item[1].get("vmid", 0) or 0),
             str(item[1].get("name", "")).lower(),
         ),
@@ -953,7 +973,7 @@ def _run_fedora_template_configure(run_id: str, stage_name: str) -> None:
         f"vmid={vmid}; "
         f"cloudinit_storage={cloudinit_storage!r}; "
         f"ci_user={source.get('ci_user', 'auzieman')!r}; "
-        f"hostname={source.get('hostname', vm_name)!r}; "
+        f"hostname={vm_name!r}; "
         f"key_path={key_path!r}; "
         f"pubkey={public_key!r}; "
         "printf \"%s\\n\" \"$pubkey\" > \"$key_path\"; "
