@@ -12,6 +12,20 @@ class RemoteCommandError(RuntimeError):
     pass
 
 
+def _load_private_key(path: Path):
+    errors = []
+    for key_type in (paramiko.RSAKey, paramiko.Ed25519Key, paramiko.ECDSAKey):
+        try:
+            return key_type.from_private_key_file(str(path))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{key_type.__name__}: {exc}")
+    try:
+        return paramiko.PKey.from_private_key_file(str(path))
+    except Exception as exc:  # noqa: BLE001
+        errors.append(f"PKey: {exc}")
+    raise RemoteCommandError(f"Unable to load SSH private key {path}: {'; '.join(errors)}")
+
+
 def run_remote_command(
     *,
     host: str,
@@ -39,7 +53,9 @@ def run_remote_command(
         if password:
             connect_kwargs["password"] = password
         elif private_key.exists():
-            connect_kwargs["key_filename"] = str(private_key)
+            connect_kwargs["pkey"] = _load_private_key(private_key)
+            connect_kwargs["look_for_keys"] = False
+            connect_kwargs["allow_agent"] = False
         else:
             raise RemoteCommandError(
                 "No usable SSH auth. Install the BKC SSH key or provide a password."

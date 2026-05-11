@@ -835,6 +835,46 @@ def _proxmox_ssh_target(config: dict) -> tuple[str, str, str]:
     )
 
 
+def _apply_cloudinit_config(
+    client: ProxmoxClient,
+    *,
+    node: str,
+    vmid: int,
+    vm_name: str,
+    cloudinit_storage: str,
+    ci_user: str,
+    public_key: str,
+    ipconfig0: str = "ip=dhcp",
+    nameserver: str = "192.168.1.10",
+    searchdomain: str = "lab.auzietek.com",
+) -> dict:
+    client.update_vm_config(
+        node,
+        vmid,
+        boot="order=scsi0",
+        ide2=f"{cloudinit_storage}:cloudinit",
+        ciuser=ci_user,
+        ipconfig0=ipconfig0,
+        sshkeys=public_key,
+        agent="enabled=1",
+        name=vm_name,
+        nameserver=nameserver,
+        searchdomain=searchdomain,
+    )
+    config = client.vm_config(node, vmid)
+    ide2 = str(config.get("ide2") or "")
+    if ":cloudinit" not in ide2:
+        raise PipelineExecutionError(f"VM {vmid} cloud-init drive was not attached; ide2 is {ide2!r}.")
+    actual_ipconfig = str(config.get("ipconfig0") or "")
+    if ipconfig0 and actual_ipconfig != ipconfig0:
+        raise PipelineExecutionError(
+            f"VM {vmid} cloud-init network config mismatch: expected {ipconfig0!r}, got {actual_ipconfig!r}."
+        )
+    if str(config.get("ciuser") or "") != ci_user:
+        raise PipelineExecutionError(f"VM {vmid} cloud-init user was not applied.")
+    return config
+
+
 def _select_storage(client: ProxmoxClient, node: str, preferred: str) -> str:
     storages = client.list_storage(node)
     for entry in storages:
@@ -1138,34 +1178,25 @@ def _run_fedora_template_configure(run_id: str, stage_name: str) -> None:
     if not public_key:
         raise PipelineExecutionError("BKC SSH public key is missing. Generate or install it before cloning Fedora guests.")
 
-    proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(config)
-    key_path = f"/tmp/bkc-fedora-template-{vmid}.pub"
     vm_name = str(extra.get("fedora_template_vm_name", f"fedora-template-{vmid}")).strip()
-    command = (
-        "bash -lc 'set -euo pipefail; "
-        f"vmid={vmid}; "
-        f"cloudinit_storage={cloudinit_storage!r}; "
-        f"ci_user={source.get('ci_user', 'auzieman')!r}; "
-        f"hostname={vm_name!r}; "
-        f"key_path={key_path!r}; "
-        f"pubkey={public_key!r}; "
-        "printf \"%s\\n\" \"$pubkey\" > \"$key_path\"; "
-        "qm set \"$vmid\" --boot order=scsi0; "
-        "qm set \"$vmid\" --ide2 \"$cloudinit_storage:cloudinit\"; "
-        "qm set \"$vmid\" --ciuser \"$ci_user\" --ipconfig0 ip=dhcp --sshkey \"$key_path\"; "
-        "qm set \"$vmid\" --agent enabled=1; "
-        "qm set \"$vmid\" --name \"$hostname\" --nameserver 192.168.1.10 --searchdomain lab.auzietek.com; "
-        "echo fedora-template-configured'"
-    )
-    output = run_remote_command(
-        host=proxmox_host,
-        user=proxmox_user,
-        password=proxmox_password,
-        command=command,
-        timeout=240,
+    client = ProxmoxClient(config)
+    applied = _apply_cloudinit_config(
+        client,
+        node=node,
+        vmid=vmid,
+        vm_name=vm_name,
+        cloudinit_storage=cloudinit_storage,
+        ci_user=str(source.get("ci_user", "root")),
+        public_key=public_key,
+        ipconfig0="ip=dhcp",
     )
     _set_stage(run_id, stage_name, "complete", "Fedora template clone configured for first boot.")
-    append_event(run_id, "info", stage_name, output or f"Configured Fedora template clone {vm_name} (vmid {vmid}).")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        f"Configured Fedora template clone {vm_name} (vmid {vmid}) with {applied.get('ide2')} and {applied.get('ipconfig0')}.",
+    )
 
 
 def _run_fedora_template_start(run_id: str, stage_name: str) -> None:
@@ -1629,6 +1660,7 @@ def _run_k3s_clone_plan(run_id: str, stage_name: str) -> None:
 def _k3s_configure_vm(
     *,
     proxmox_config: dict,
+    node: str,
     vmid: int,
     vm_name: str,
     cloudinit_storage: str,
@@ -1638,34 +1670,20 @@ def _k3s_configure_vm(
     nameserver: str,
     searchdomain: str,
 ) -> str:
-    proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(proxmox_config)
-    key_path = f"/tmp/bkc-k3s-{vmid}.pub"
-    command = (
-        "bash -lc 'set -euo pipefail; "
-        f"vmid={vmid}; "
-        f"cloudinit_storage={shlex.quote(cloudinit_storage)}; "
-        f"ci_user={shlex.quote(ci_user)}; "
-        f"hostname={shlex.quote(vm_name)}; "
-        f"key_path={shlex.quote(key_path)}; "
-        f"pubkey={shlex.quote(public_key)}; "
-        f"ipconfig0={shlex.quote(ipconfig0)}; "
-        f"nameserver={shlex.quote(nameserver)}; "
-        f"searchdomain={shlex.quote(searchdomain)}; "
-        "printf \"%s\\n\" \"$pubkey\" > \"$key_path\"; "
-        "qm set \"$vmid\" --boot order=scsi0; "
-        "qm set \"$vmid\" --ide2 \"$cloudinit_storage:cloudinit\"; "
-        "qm set \"$vmid\" --ciuser \"$ci_user\" --ipconfig0 \"$ipconfig0\" --sshkey \"$key_path\"; "
-        "qm set \"$vmid\" --agent enabled=1; "
-        "qm set \"$vmid\" --name \"$hostname\" --nameserver \"$nameserver\" --searchdomain \"$searchdomain\"; "
-        "echo k3s-vm-configured'"
+    client = ProxmoxClient(proxmox_config)
+    applied = _apply_cloudinit_config(
+        client,
+        node=node,
+        vmid=vmid,
+        vm_name=vm_name,
+        cloudinit_storage=cloudinit_storage,
+        ci_user=ci_user,
+        public_key=public_key,
+        ipconfig0=ipconfig0,
+        nameserver=nameserver,
+        searchdomain=searchdomain,
     )
-    return run_remote_command(
-        host=proxmox_host,
-        user=proxmox_user,
-        password=proxmox_password,
-        command=command,
-        timeout=240,
-    )
+    return f"k3s-vm-configured {vm_name} ide2={applied.get('ide2')} ipconfig0={applied.get('ipconfig0')}"
 
 
 def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
@@ -1708,6 +1726,7 @@ def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
             raise PipelineExecutionError(f"Proxmox clone failed for {vm_name}: {exit_status}")
         _k3s_configure_vm(
             proxmox_config=proxmox_config,
+            node=source_node,
             vmid=new_vmid,
             vm_name=vm_name,
             cloudinit_storage=str(target["cloudinit_storage"]),

@@ -190,6 +190,22 @@ class ProxmoxClient:
         except Exception as exc:
             raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
 
+    def vm_config(self, node: str, vmid: int) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}/config"
+        self._trace("GET", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).config.get()
+        except Exception as exc:
+            raise ProxmoxAPIError(f"GET {path} failed: {exc}") from exc
+
+    def update_vm_config(self, node: str, vmid: int, **settings) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}/config"
+        self._trace("POST", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).config.post(**settings)
+        except Exception as exc:
+            raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
+
     def task_status(self, node: str, upid: str) -> dict:
         path = f"/nodes/{node}/tasks/{upid}/status"
         self._trace("GET", path)
