@@ -17,24 +17,17 @@
 
 body {
   margin: 0;
-  font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(101, 123, 255, 0.14), transparent 28%),
-    radial-gradient(circle at 80% 12%, rgba(243, 155, 81, 0.1), transparent 24%),
-    linear-gradient(180deg, #050814 0%, #0b1020 58%, #0d1224 100%);
+    linear-gradient(90deg, rgba(130, 156, 207, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(130, 156, 207, 0.07) 1px, transparent 1px),
+    linear-gradient(180deg, #05070d 0%, #080d16 46%, #0b111d 100%);
+  background-size: 28px 28px, 28px 28px, auto;
   color: var(--text);
 }
 
 .starfield {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle at 14% 18%, rgba(255, 255, 255, 0.85) 0 1px, transparent 1.2px),
-    radial-gradient(circle at 74% 26%, rgba(255, 255, 255, 0.65) 0 1px, transparent 1.3px),
-    radial-gradient(circle at 52% 68%, rgba(255, 255, 255, 0.75) 0 1px, transparent 1.2px),
-    radial-gradient(circle at 31% 77%, rgba(255, 255, 255, 0.55) 0 1px, transparent 1.4px);
-  opacity: 0.5;
+  display: none;
 }
 
 a {
@@ -43,19 +36,19 @@ a {
 
 .shell {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 320px 1fr;
   min-height: 100vh;
   position: relative;
   z-index: 1;
 }
 
 .sidebar {
-  padding: 32px 24px;
+  padding: 22px 18px;
   background:
-    linear-gradient(180deg, rgba(7, 12, 26, 0.98), rgba(11, 19, 38, 0.98)),
+    linear-gradient(180deg, rgba(8, 12, 20, 0.98), rgba(9, 18, 28, 0.98)),
     var(--panel-strong);
   color: #f3f7ff;
-  border-right: 1px solid rgba(130, 156, 207, 0.14);
+  border-right: 1px solid rgba(79, 209, 197, 0.22);
 }
 
 .sidebar h1 {
@@ -65,10 +58,10 @@ a {
 }
 
 .brand-block {
-  padding: 18px;
-  border: 1px solid rgba(130, 156, 207, 0.14);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border: 1px solid rgba(79, 209, 197, 0.28);
+  border-radius: 8px;
+  background: rgba(79, 209, 197, 0.06);
 }
 
 .sidebar-copy {
@@ -102,20 +95,20 @@ a {
 }
 
 .nav-list {
-  margin: 36px 0 0;
+  margin: 24px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .nav-list li + li {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .nav-list a {
   display: block;
-  padding: 12px 14px;
+  padding: 11px 12px;
   border: 1px solid rgba(130, 156, 207, 0.14);
-  border-radius: 14px;
+  border-radius: 8px;
   text-decoration: none;
   color: #edf3ff;
   background: rgba(255, 255, 255, 0.035);
@@ -127,13 +120,60 @@ a {
 }
 
 .nav-list a.active {
-  border-color: rgba(243, 155, 81, 0.46);
-  background: rgba(243, 155, 81, 0.12);
-  color: #ffd4b0;
+  border-color: rgba(79, 209, 197, 0.58);
+  background: rgba(79, 209, 197, 0.14);
+  color: #c8fffa;
 }
 
 .main {
-  padding: 32px;
+  padding: 20px 24px 32px;
+}
+
+.workbench-ribbon,
+.login-workbench-panel {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(79, 209, 197, 0.36);
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(79, 209, 197, 0.16), rgba(130, 156, 207, 0.08));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+.workbench-ribbon {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.workbench-ribbon .eyebrow,
+.login-workbench-panel .eyebrow {
+  color: #80fff2;
+}
+
+.workbench-ribbon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workbench-ribbon-actions a {
+  padding: 7px 10px;
+  border: 1px solid rgba(79, 209, 197, 0.26);
+  border-radius: 8px;
+  color: #dffdfa;
+  text-decoration: none;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.login-workbench-panel h2 {
+  margin: 0 0 8px;
+}
+
+.login-workbench-panel p:last-child {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .topbar {

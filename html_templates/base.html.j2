@@ -43,9 +43,20 @@
         {% endif %}
         <main class="main {% if request.endpoint == 'auth.login' %}main-login{% endif %}">
             {% if request.endpoint != 'auth.login' %}
+            <section class="workbench-ribbon">
+                <div>
+                    <p class="eyebrow">Resource graph workbench</p>
+                    <strong>Preview shell active</strong>
+                </div>
+                <div class="workbench-ribbon-actions">
+                    <a href="{{ url_for('resource_graph.resource_graph') }}">Graph</a>
+                    <a href="{{ url_for('inventory_console.inventory_console') }}">Resource inventory</a>
+                    <a href="{{ url_for('pipelines.pipelines') }}">Pipelines</a>
+                </div>
+            </section>
             <header class="topbar">
                 <div>
-                    <p class="eyebrow">Operator View</p>
+                    <p class="eyebrow">Workbench View</p>
                     <h2>{% block page_heading %}Flight Deck{% endblock %}</h2>
                 </div>
                 <div class="topbar-actions">
