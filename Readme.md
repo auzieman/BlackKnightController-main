@@ -65,6 +65,8 @@ The practical split is:
 - **Ansible** remains useful for existing playbooks and inventories.
 - **Pipelines** tie those pieces into tracked runs with stage history.
 
+For the next UI pass, BKC should treat the left navigation as a **resource graph**, not a machine-only tree. Nodes can be VMs, hosts, Git repositories, API interfaces, storage pools, actions, templates, pipelines, or services. See `docs/ui-resource-graph.md` for the working information architecture.
+
 ## Feature list
 
 ## View and edit configuration files for fabric deployments
