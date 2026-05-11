@@ -1,0 +1,185 @@
+{% extends 'base.html.j2' %}
+
+{% block title %}Resource Graph{% endblock %}
+{% block page_heading %}Resource Graph{% endblock %}
+
+{% block content %}
+    <section class="section-header">
+        <div>
+            <p class="eyebrow">Inventory model</p>
+            <h2>Resources, relationships, and action paths</h2>
+        </div>
+        <div class="topbar-badges">
+            <a class="button secondary" href="{{ url_for('inventory_console.inventory_console') }}">Inventory</a>
+            <a class="button secondary" href="{{ url_for('pipelines.pipelines') }}">Pipelines</a>
+        </div>
+    </section>
+
+    <section class="resource-metrics">
+        {% for kind, meta in kind_meta.items() %}
+            {% if graph.counts.get(kind) %}
+                <a class="resource-metric{% if selected_kind == kind %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=kind, q=search) }}">
+                    <span class="resource-icon">{{ meta.short }}</span>
+                    <strong>{{ graph.counts.get(kind) }}</strong>
+                    <span>{{ meta.label }}</span>
+                </a>
+            {% endif %}
+        {% endfor %}
+    </section>
+
+    <section class="resource-layout">
+        <aside class="form-shell resource-sidebar">
+            <div class="section-header compact-header">
+                <div>
+                    <p class="eyebrow">Resource tree</p>
+                    <h3>{{ visible_resources|length }} visible</h3>
+                </div>
+                {% if selected_kind or search %}
+                    <a class="button secondary" href="{{ url_for('resource_graph.resource_graph') }}">Clear</a>
+                {% endif %}
+            </div>
+            <form method="get" class="resource-filter">
+                {% if selected_kind %}
+                    <input type="hidden" name="kind" value="{{ selected_kind }}">
+                {% endif %}
+                <label>
+                    Search
+                    <input type="text" name="q" value="{{ search }}" placeholder="name, kind, route, provider">
+                </label>
+                <button class="button" type="submit">Apply</button>
+            </form>
+
+            <div class="resource-tree">
+                {% for group in visible_tree %}
+                    <details class="tree-group" open>
+                        <summary>
+                            <span><span class="resource-icon">{{ group.meta.short }}</span> {{ group.meta.label }}</span>
+                            <span>{{ group.resources|length }}</span>
+                        </summary>
+                        <div class="tree-children">
+                            {% for resource in group.resources %}
+                                <a class="tree-node resource-node{% if selected and selected.id == resource.id %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=selected_kind, q=search, resource=resource.id, tab=tab) }}">
+                                    <strong>{{ resource.name }}</strong>
+                                    <span>{{ resource.state }} · {{ resource.summary }}</span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </details>
+                {% else %}
+                    <div class="workflow-empty">No resources matched this filter.</div>
+                {% endfor %}
+            </div>
+        </aside>
+
+        <section class="form-shell resource-main">
+            {% if selected %}
+                <div class="resource-heading">
+                    <div>
+                        <p class="eyebrow">{{ kind_meta.get(selected.kind, {}).get('label', selected.kind|title) }}</p>
+                        <h3><span class="resource-icon">{{ kind_meta.get(selected.kind, {}).get('short', selected.kind[:3]|upper) }}</span> {{ selected.name }}</h3>
+                        <p>{{ selected.summary }}</p>
+                    </div>
+                    <span class="status-pill">{{ selected.state }}</span>
+                </div>
+
+                <div class="tab-strip resource-tabs">
+                    <a class="tab-link{% if tab == 'summary' %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=selected_kind, q=search, resource=selected.id, tab='summary') }}">Summary</a>
+                    <a class="tab-link{% if tab == 'relationships' %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=selected_kind, q=search, resource=selected.id, tab='relationships') }}">Relationships</a>
+                    <a class="tab-link{% if tab == 'actions' %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=selected_kind, q=search, resource=selected.id, tab='actions') }}">Actions</a>
+                    <a class="tab-link{% if tab == 'inventory' %} active{% endif %}" href="{{ url_for('resource_graph.resource_graph', kind=selected_kind, q=search, resource=selected.id, tab='inventory') }}">Inventory</a>
+                </div>
+
+                {% if tab == 'summary' %}
+                    <section class="resource-summary-grid">
+                        <div class="resource-panel">
+                            <p class="eyebrow">Primary facts</p>
+                            <dl class="fact-list">
+                                {% for label, value in selected.facts.items() %}
+                                    <div>
+                                        <dt>{{ label }}</dt>
+                                        <dd>{{ value }}</dd>
+                                    </div>
+                                {% else %}
+                                    <div>
+                                        <dt>Status</dt>
+                                        <dd>No facts recorded yet.</dd>
+                                    </div>
+                                {% endfor %}
+                            </dl>
+                        </div>
+                        <div class="resource-panel">
+                            <p class="eyebrow">Sources</p>
+                            <div class="source-list">
+                                {% for source in selected.sources %}
+                                    <span class="status-pill muted">{{ source }}</span>
+                                {% else %}
+                                    <span class="status-pill muted">unsourced</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="resource-panel wide">
+                            <p class="eyebrow">Relationship rules</p>
+                            <div class="constraint-list">
+                                {% for constraint in graph.constraints %}
+                                    {% if constraint.source == selected.kind or constraint.target == selected.kind %}
+                                        <span>{{ constraint.source }} {{ constraint.type }} {{ constraint.target }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span>No relationship rules registered for this kind yet.</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </section>
+                {% elif tab == 'relationships' %}
+                    <section class="table-card embedded-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Relationship</th>
+                                    <th>Target</th>
+                                    <th>Summary</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for relationship in relationships %}
+                                    <tr>
+                                        <td>{{ relationship.source_label }} <span class="muted-inline">{{ relationship.source_kind }}</span></td>
+                                        <td>{{ relationship.type }}</td>
+                                        <td>{{ relationship.target_label }} <span class="muted-inline">{{ relationship.target_kind }}</span></td>
+                                        <td>{{ relationship.summary }}</td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4">No relationships have been inferred for this resource yet.</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </section>
+                {% elif tab == 'actions' %}
+                    <section class="resource-action-list">
+                        {% for action in selected.actions %}
+                            <a class="pipeline-card compact-card" href="{{ action.href }}">
+                                <div>
+                                    <p class="eyebrow">Action</p>
+                                    <h4>{{ action.label }}</h4>
+                                </div>
+                                <span class="status-pill muted">{{ selected.kind }}</span>
+                            </a>
+                        {% else %}
+                            <div class="workflow-empty">No direct actions are wired for this resource yet.</div>
+                        {% endfor %}
+                    </section>
+                {% else %}
+                    <section class="resource-panel">
+                        <p class="eyebrow">Raw inventory context</p>
+                        <pre class="json-preview">{{ selected.raw | tojson(indent=2) }}</pre>
+                    </section>
+                {% endif %}
+            {% else %}
+                <div class="workflow-empty">No resource selected.</div>
+            {% endif %}
+        </section>
+    </section>
+{% endblock %}

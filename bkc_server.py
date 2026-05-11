@@ -17,6 +17,7 @@ from routes.jobs import jobs_blueprint
 from routes.inventory_console import inventory_console_blueprint
 from routes.pipelines import pipelines_blueprint
 from routes.proxmox_ops import proxmox_ops_blueprint
+from routes.resource_graph import resource_graph_blueprint
 from routes.settings import settings_blueprint
 from routes.templates import templates
 from routes.workflow_view import workflow_blueprint
@@ -30,6 +31,7 @@ app.register_blueprint(api_blueprint)
 app.register_blueprint(settings_blueprint)
 app.register_blueprint(index_blueprint)
 app.register_blueprint(inventory_console_blueprint)
+app.register_blueprint(resource_graph_blueprint)
 app.register_blueprint(pipelines_blueprint)
 app.register_blueprint(groups)
 app.register_blueprint(templates)
