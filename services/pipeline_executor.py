@@ -875,6 +875,73 @@ def _apply_cloudinit_config(
     return config
 
 
+def _vm_primary_mac(config: dict) -> str:
+    net0 = str(config.get("net0") or "")
+    if "=" not in net0:
+        return ""
+    return net0.split("=", 1)[1].split(",", 1)[0].strip().lower()
+
+
+def _extract_neighbor_ip(output: str, mac: str) -> str:
+    wanted = str(mac or "").strip().lower()
+    if not wanted:
+        return ""
+    for line in str(output or "").splitlines():
+        low = line.lower()
+        if wanted not in low:
+            continue
+        parts = line.split()
+        if not parts:
+            continue
+        if parts[0].count(".") == 3:
+            return parts[0].strip("()")
+        if parts[0].startswith("192.") and parts[0].count(".") == 3:
+            return parts[0]
+    return ""
+
+
+def _proxmox_neighbor_ip(mac: str, *, active_prefix: str = "") -> str:
+    mac = str(mac or "").strip().lower()
+    if not mac:
+        return ""
+    config = load_proxmox_config()
+    proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(config)
+    read_cmd = "bash -lc 'cat /proc/net/arp; ip neigh show nud all || true'"
+    try:
+        output = run_remote_command(
+            host=proxmox_host,
+            user=proxmox_user,
+            password=proxmox_password,
+            command=read_cmd,
+            timeout=20,
+        )
+    except Exception:
+        output = ""
+    found = _extract_neighbor_ip(output, mac)
+    if found or not active_prefix:
+        return found
+
+    sweep_cmd = (
+        "bash -lc '"
+        f"prefix={shlex.quote(active_prefix)}; "
+        "for i in $(seq 1 254); do ping -c1 -W1 \"$prefix.$i\" >/dev/null 2>&1 & "
+        "if [ $((i % 48)) -eq 0 ]; then wait; fi; "
+        "done; wait; "
+        "cat /proc/net/arp; ip neigh show nud all || true'"
+    )
+    try:
+        output = run_remote_command(
+            host=proxmox_host,
+            user=proxmox_user,
+            password=proxmox_password,
+            command=sweep_cmd,
+            timeout=90,
+        )
+    except Exception:
+        return ""
+    return _extract_neighbor_ip(output, mac)
+
+
 def _select_storage(client: ProxmoxClient, node: str, preferred: str) -> str:
     storages = client.list_storage(node)
     for entry in storages:
@@ -1736,7 +1803,16 @@ def _run_k3s_proxmox_clone(run_id: str, stage_name: str) -> None:
             nameserver=str(plan.get("nameserver") or "192.168.1.10"),
             searchdomain=str(plan.get("searchdomain") or "lab.auzietek.com"),
         )
-        cloned.append({**dict(node), "vmid": new_vmid, "proxmox_node": source_node, "clone_upid": str(upid)})
+        vm_config = client.vm_config(source_node, new_vmid)
+        cloned.append(
+            {
+                **dict(node),
+                "vmid": new_vmid,
+                "proxmox_node": source_node,
+                "clone_upid": str(upid),
+                "mac": _vm_primary_mac(vm_config),
+            }
+        )
 
     _store_run_extra(run_id, {"k3s_nodes": cloned})
     _set_stage(run_id, stage_name, "complete", "K3s Fedora guests cloned and configured.")
@@ -1784,19 +1860,38 @@ def _run_k3s_discover_ssh(run_id: str, stage_name: str) -> None:
     resolved = []
     for node in _k3s_nodes(run_id):
         name = str(node.get("name", "")).strip()
+        expected_ip = str(node.get("expected_ip") or "").strip()
+        mac = str(node.get("mac") or "").strip()
         ip = ""
         ready = False
         last_error = ""
         while time.monotonic() < deadline:
+            candidates = []
             try:
-                ip = socket.gethostbyname(name)
-                probe_node = {**node, "ip": ip}
-                _k3s_ssh_command(probe_node, "true", timeout=20)
-                ready = True
-                break
+                candidates.append(socket.gethostbyname(name))
             except Exception as exc:  # noqa: BLE001
                 last_error = str(exc)
-                time.sleep(10)
+            if expected_ip:
+                candidates.append(expected_ip)
+            if mac:
+                arp_ip = _proxmox_neighbor_ip(mac)
+                if not arp_ip and time.monotonic() + 90 < deadline:
+                    prefix = ".".join((expected_ip or "192.168.1.0").split(".")[:3])
+                    arp_ip = _proxmox_neighbor_ip(mac, active_prefix=prefix)
+                if arp_ip:
+                    candidates.insert(0, arp_ip)
+            for candidate in dict.fromkeys(item for item in candidates if item):
+                try:
+                    probe_node = {**node, "ip": candidate}
+                    _k3s_ssh_command(probe_node, "true", timeout=20)
+                    ip = candidate
+                    ready = True
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_error = str(exc)
+            if ready:
+                break
+            time.sleep(10)
         if not ready:
             raise PipelineExecutionError(f"SSH did not become ready for {name} before timeout: {last_error}")
         resolved.append({**node, "ip": ip})
