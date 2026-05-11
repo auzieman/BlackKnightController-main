@@ -11,12 +11,20 @@
     <div class="starfield"></div>
     <div class="shell {% if request.endpoint == 'auth.login' %}shell-login{% endif %}">
         {% if request.endpoint != 'auth.login' %}
+        <aside class="app-rail">
+            <a class="rail-mark" href="{{ url_for('index.index') }}" title="Overview">BKC</a>
+            <nav class="rail-nav" aria-label="Primary">
+                <a class="{% if request.endpoint == 'resource_graph.resource_graph' %}active{% endif %}" href="{{ url_for('resource_graph.resource_graph') }}" title="Resource Graph">RG</a>
+                <a class="{% if request.endpoint == 'inventory_console.inventory_console' %}active{% endif %}" href="{{ url_for('inventory_console.inventory_console') }}" title="Inventory">IN</a>
+                <a class="{% if request.endpoint and request.endpoint.startswith('pipelines.') %}active{% endif %}" href="{{ url_for('pipelines.pipelines') }}" title="Pipelines">PL</a>
+                <a class="{% if request.endpoint == 'integrations.integrations' %}active{% endif %}" href="{{ url_for('integrations.integrations') }}" title="Integrations">API</a>
+            </nav>
+        </aside>
         <aside class="sidebar">
             <div class="brand-block">
                 <p class="eyebrow">BlackKnightController CE</p>
                 <h1>Resource Ops</h1>
-                <p class="sidebar-copy">A control surface for infrastructure resources, relationships, credentials, and stage-driven automation.</p>
-                <div class="status-chip">Graph-linked pipeline console</div>
+                <div class="status-chip">Graph-linked console</div>
             </div>
             <nav>
                 <ul class="nav-list">
@@ -39,21 +47,34 @@
                     {% endif %}
                 </ul>
             </nav>
+            <section class="sidebar-resource-tree">
+                <div class="tree-caption">
+                    <span>Resources</span>
+                    <a href="{{ url_for('resource_graph.resource_graph') }}">Open</a>
+                </div>
+                {% for group in bkc_resource_nav_tree %}
+                    {% if group.resources %}
+                        <details class="sidebar-tree-group" {% if loop.index <= 4 %}open{% endif %}>
+                            <summary>
+                                <span>{{ group.meta.short }} {{ group.meta.label }}</span>
+                                <span>{{ group.resources|length }}</span>
+                            </summary>
+                            <div class="sidebar-tree-children">
+                                {% for resource in group.resources[:8] %}
+                                    <a href="{{ url_for('resource_graph.resource_graph', resource=resource.id) }}">
+                                        <strong>{{ resource.name }}</strong>
+                                        <span>{{ resource.state }}</span>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </details>
+                    {% endif %}
+                {% endfor %}
+            </section>
         </aside>
         {% endif %}
         <main class="main {% if request.endpoint == 'auth.login' %}main-login{% endif %}">
             {% if request.endpoint != 'auth.login' %}
-            <section class="workbench-ribbon">
-                <div>
-                    <p class="eyebrow">Resource graph workbench</p>
-                    <strong>Preview shell active</strong>
-                </div>
-                <div class="workbench-ribbon-actions">
-                    <a href="{{ url_for('resource_graph.resource_graph') }}">Graph</a>
-                    <a href="{{ url_for('inventory_console.inventory_console') }}">Resource inventory</a>
-                    <a href="{{ url_for('pipelines.pipelines') }}">Pipelines</a>
-                </div>
-            </section>
             <header class="topbar">
                 <div>
                     <p class="eyebrow">Workbench View</p>

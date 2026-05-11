@@ -160,6 +160,7 @@ def init_ce_app(app: Flask) -> None:
         user_row = None
         all_tenants: list[dict] = []
         username = ""
+        resource_nav_tree: list[dict] = []
         if current_user.is_authenticated:
             uid = int(current_user.id)
             memberships = bkc_db.list_memberships(uid)
@@ -168,6 +169,12 @@ def init_ce_app(app: Flask) -> None:
                 username = user_row.get("username") or ""
             if user_row and user_row.get("is_superuser"):
                 all_tenants = bkc_db.list_tenants()
+            try:
+                from services.resource_graph import build_resource_graph
+
+                resource_nav_tree = build_resource_graph().get("tree", [])
+            except Exception:
+                resource_nav_tree = []
         return {
             "bkc_tenant_id": tid,
             "bkc_tenant_slug": session.get("tenant_slug", "default"),
@@ -177,6 +184,7 @@ def init_ce_app(app: Flask) -> None:
             "bkc_all_tenants": all_tenants,
             "bkc_username": username,
             "bkc_job_queue": job_queue_enabled(),
+            "bkc_resource_nav_tree": resource_nav_tree,
         }
 
     _ce_initialized = True
