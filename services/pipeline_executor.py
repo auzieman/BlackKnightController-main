@@ -1257,6 +1257,7 @@ def _run_fedora_template_configure(run_id: str, stage_name: str) -> None:
         public_key=public_key,
         ipconfig0="ip=dhcp",
     )
+    _store_run_extra(run_id, {"fedora_template_mac": _vm_primary_mac(applied)})
     _set_stage(run_id, stage_name, "complete", "Fedora template clone configured for first boot.")
     append_event(
         run_id,
@@ -1329,6 +1330,18 @@ def _cosmic_candidate_from_route(name: str, route: str, *, vmid: int = 0, proxmo
     }
 
 
+def _cosmic_route_from_vmid(client: ProxmoxClient, node: str, vmid: int, fallback: str = "") -> tuple[str, str]:
+    if not node or not vmid:
+        return fallback, ""
+    try:
+        config = client.vm_config(node, vmid)
+    except Exception:
+        return fallback, ""
+    mac = _vm_primary_mac(config)
+    ip = _proxmox_neighbor_ip(mac, active_prefix="192.168.1") if mac else ""
+    return ip or fallback, mac
+
+
 def _cosmic_target_from_run_extra(extra: dict) -> dict | None:
     target_host = str(extra.get("target_host") or extra.get("target_ip") or "").strip()
     target_name = str(extra.get("target_name") or extra.get("hostname") or "").strip()
@@ -1345,6 +1358,7 @@ def _cosmic_target_from_run_extra(extra: dict) -> dict | None:
 
 def _cosmic_candidates_from_runs() -> list[dict]:
     candidates = []
+    client = None
     for run in load_runs()[:20]:
         workflow = str(run.get("workflow") or "").strip().lower()
         extra = run.get("extra", {}) or {}
@@ -1352,16 +1366,25 @@ def _cosmic_candidates_from_runs() -> list[dict]:
             continue
         name = str(extra.get("fedora_template_vm_name") or "").strip()
         vmid = int(extra.get("fedora_template_vmid") or 0)
+        node = str(extra.get("fedora_template_node") or "").strip()
         route = str(extra.get("fedora_template_ip") or extra.get("target_host") or name).strip()
         if not name and not route:
             continue
+        mac = str(extra.get("fedora_template_mac") or "").strip()
+        if vmid and node:
+            if client is None:
+                client = ProxmoxClient(load_proxmox_config())
+            route, discovered_mac = _cosmic_route_from_vmid(client, node, vmid, route)
+            mac = mac or discovered_mac
         candidate = _cosmic_candidate_from_route(
             name or route,
             route,
             vmid=vmid,
-            proxmox_node=str(extra.get("fedora_template_node") or ""),
+            proxmox_node=node,
             source="recent fedora pipeline",
         )
+        if mac:
+            candidate["mac"] = mac
         candidates.append(candidate)
     return candidates
 
@@ -1435,15 +1458,19 @@ def _cosmic_candidates_from_proxmox_api() -> list[dict]:
                     continue
                 if not any(token in name_lc for token in ("fedora", "fc44")):
                     continue
+                vmid = int(vm.get("vmid") or 0)
+                route, mac = _cosmic_route_from_vmid(client, node_name, vmid, name)
                 candidates.append(
                     _cosmic_candidate_from_route(
                         name,
-                        str(vm.get("ip") or vm.get("host") or vm.get("fqdn") or name),
-                        vmid=int(vm.get("vmid") or 0),
+                        route,
+                        vmid=vmid,
                         proxmox_node=node_name,
                         source="proxmox api",
                     )
                 )
+                if mac:
+                    candidates[-1]["mac"] = mac
     except Exception as exc:  # noqa: BLE001
         candidates.append({"error": str(exc), "source": "proxmox api"})
     return candidates
