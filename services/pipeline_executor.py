@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import ipaddress
+import re
 import shlex
 import socket
 import time
+from urllib.parse import quote
 
 from services.ansible import scan_ansible_controller
 from services.ansible_inventory import parse_ansible_hosts, sync_ansible_inventory_to_rules
@@ -30,6 +32,7 @@ class PipelineExecutionError(RuntimeError):
 
 
 FEDORA_TEMPLATE_RELEASE = "44"
+FEDORA_SOURCE_VMIDS = {115, 131}
 K3S_CLUSTER_NAME = "k3s-lab"
 K3S_NODE_PLAN = [
     {"name": "kube1.lab.auzietek.com", "short": "kube1", "role": "server"},
@@ -835,6 +838,10 @@ def _proxmox_ssh_target(config: dict) -> tuple[str, str, str]:
     )
 
 
+def _fedora_root_password() -> str:
+    return str(load_proxmox_config().get("password") or "").strip()
+
+
 def _apply_cloudinit_config(
     client: ProxmoxClient,
     *,
@@ -848,22 +855,38 @@ def _apply_cloudinit_config(
     nameserver: str = "192.168.1.10",
     searchdomain: str = "lab.auzietek.com",
 ) -> dict:
-    client.update_vm_config(
-        node,
-        vmid,
-        boot="order=scsi0",
-        ide2=f"{cloudinit_storage}:cloudinit",
-        ciuser=ci_user,
-        ipconfig0=ipconfig0,
-        sshkeys=public_key,
-        agent="enabled=1",
-        name=vm_name,
-        nameserver=nameserver,
-        searchdomain=searchdomain,
+    encoded_public_key = quote(public_key.strip(), safe="")
+
+    def _wait_for_config_task(result: object) -> None:
+        upid = str(result or "").strip()
+        if upid.startswith("UPID:"):
+            task = client.wait_for_task(node, upid, timeout=180)
+            exit_status = str(task.get("exitstatus", ""))
+            if exit_status and exit_status != "OK":
+                raise PipelineExecutionError(f"VM {vmid} config task failed: {exit_status}")
+
+    inherited = client.vm_config(node, vmid)
+    inherited_ide2 = str(inherited.get("ide2") or "")
+    if inherited_ide2 and "cloudinit" not in inherited_ide2.lower():
+        _wait_for_config_task(client.update_vm_config(node, vmid, delete="ide2"))
+    _wait_for_config_task(
+        client.update_vm_config(
+            node,
+            vmid,
+            boot="order=scsi0",
+            ide2=f"{cloudinit_storage}:cloudinit",
+            ciuser=ci_user,
+            ipconfig0=ipconfig0,
+            sshkeys=encoded_public_key,
+            agent="enabled=1",
+            name=vm_name,
+            nameserver=nameserver,
+            searchdomain=searchdomain,
+        )
     )
     config = client.vm_config(node, vmid)
     ide2 = str(config.get("ide2") or "")
-    if ":cloudinit" not in ide2:
+    if "cloudinit" not in ide2.lower():
         raise PipelineExecutionError(f"VM {vmid} cloud-init drive was not attached; ide2 is {ide2!r}.")
     actual_ipconfig = str(config.get("ipconfig0") or "")
     if ipconfig0 and actual_ipconfig != ipconfig0:
@@ -880,6 +903,20 @@ def _vm_primary_mac(config: dict) -> str:
     if "=" not in net0:
         return ""
     return net0.split("=", 1)[1].split(",", 1)[0].strip().lower()
+
+
+def _is_fedora_source_record(record: dict) -> bool:
+    name = str(record.get("name") or "").strip().lower()
+    try:
+        vmid = int(record.get("vmid") or 0)
+    except (TypeError, ValueError):
+        vmid = 0
+    return vmid in FEDORA_SOURCE_VMIDS or name == "fc44-template" or bool(record.get("template"))
+
+
+def _is_generated_fedora_clone(record: dict) -> bool:
+    name = str(record.get("name") or "").strip().lower()
+    return bool(re.fullmatch(r"fedora-template-\d+", name)) and not _is_fedora_source_record(record)
 
 
 def _extract_neighbor_ip(output: str, mac: str) -> str:
@@ -1001,6 +1038,8 @@ def _select_fedora_template() -> dict:
     running_fedora_sources = []
     for template in candidates:
         name = str(template.get("name", "")).strip().lower()
+        if _is_generated_fedora_clone(template):
+            continue
         score = 0
         if "fc44" in name:
             score += 4
@@ -1010,6 +1049,8 @@ def _select_fedora_template() -> dict:
             score += 2
         if name.startswith("fc-") or name.startswith("fc"):
             score += 1
+        if _is_fedora_source_record(template):
+            score += 10
         if not score:
             continue
         if any(token in name for token in ("swarm", "k3s", "docker", "kube")):
@@ -1032,6 +1073,9 @@ def _select_fedora_template() -> dict:
             "No Fedora-capable Proxmox source was discovered. Refusing to fall back to a generic template because that can clone stale guest identity/network settings. Refresh Proxmox inventory and mark fc44-template or another Fedora 44 VM as the source template."
         )
     preferred = next((template for score, template in ranked if score > 0 and int(template.get("vmid", 0) or 0) == 131), None)
+    if preferred is not None:
+        return dict(preferred)
+    preferred = next((template for score, template in ranked if score > 0 and int(template.get("vmid", 0) or 0) == 115), None)
     if preferred is not None:
         return dict(preferred)
     ranked.sort(
@@ -1425,6 +1469,8 @@ def _cosmic_candidates_from_proxmox_snapshot() -> list[dict]:
     for vm in snapshot.get("virtual_machines", []):
         name = str(vm.get("name") or "").strip()
         name_lc = name.lower()
+        if _is_fedora_source_record(vm):
+            continue
         if vm.get("template") or not any(token in name_lc for token in ("fedora", "fc44")):
             continue
         status = str(vm.get("status") or "").strip().lower()
@@ -1454,6 +1500,8 @@ def _cosmic_candidates_from_proxmox_api() -> list[dict]:
             for vm in client.list_qemu(node_name):
                 name = str(vm.get("name") or "").strip()
                 name_lc = name.lower()
+                if _is_fedora_source_record(vm):
+                    continue
                 if vm.get("template") or str(vm.get("status", "")).lower() != "running":
                     continue
                 if not any(token in name_lc for token in ("fedora", "fc44")):
@@ -1537,7 +1585,8 @@ def _cosmic_target(run_id: str) -> dict:
 
 def _cosmic_ssh(run_id: str, command: str, timeout: int = 120) -> str:
     target = _cosmic_target(run_id)
-    return run_remote_command(host=str(target["host"]), user="root", password="", command=command, timeout=timeout)
+    password = str(target.get("password") or target.get("ssh_password") or _fedora_root_password()).strip()
+    return run_remote_command(host=str(target["host"]), user="root", password=password, command=command, timeout=timeout)
 
 
 def _run_cosmic_target_select(run_id: str, stage_name: str) -> None:
@@ -1879,7 +1928,8 @@ def _k3s_ssh_command(node: dict, command: str, timeout: int = 120) -> str:
     host = str(node.get("ip") or node.get("name") or "").strip()
     if not host:
         raise PipelineExecutionError(f"K3s node SSH target is missing: {node!r}")
-    return run_remote_command(host=host, user="root", password="", command=command, timeout=timeout)
+    password = str(node.get("password") or node.get("ssh_password") or _fedora_root_password()).strip()
+    return run_remote_command(host=host, user="root", password=password, command=command, timeout=timeout)
 
 
 def _run_k3s_discover_ssh(run_id: str, stage_name: str) -> None:
