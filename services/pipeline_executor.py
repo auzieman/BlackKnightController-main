@@ -2015,11 +2015,13 @@ def _k3s_node_by_role(run_id: str, role: str) -> dict:
 
 def _run_k3s_install_server(run_id: str, stage_name: str) -> None:
     server = _k3s_node_by_role(run_id, "server")
+    server_host = str(server.get("ip") or server.get("name") or "kube1.lab.auzietek.com").strip()
     command = (
         "bash -lc 'set -euo pipefail; "
         "if systemctl is-active --quiet k3s 2>/dev/null; then echo k3s-server-present; exit 0; fi; "
-        "curl -sfL https://get.k3s.io | "
-        "INSTALL_K3S_CHANNEL=stable sh -s - server "
+        "curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh; "
+        "chmod +x /tmp/install-k3s.sh; "
+        "INSTALL_K3S_CHANNEL=stable /tmp/install-k3s.sh server "
         "--write-kubeconfig-mode 644 "
         "--disable traefik "
         f"--node-name {shlex.quote(str(server.get('short') or 'kube1'))} "
@@ -2028,7 +2030,7 @@ def _run_k3s_install_server(run_id: str, stage_name: str) -> None:
         "echo k3s-server-ready'"
     )
     output = _k3s_ssh_command(server, command, timeout=1200)
-    _store_run_extra(run_id, {"k3s_api_url": "https://kube1.lab.auzietek.com:6443", "k3s_kubeconfig_path": "/etc/rancher/k3s/k3s.yaml"})
+    _store_run_extra(run_id, {"k3s_api_url": f"https://{server_host}:6443", "k3s_kubeconfig_path": "/etc/rancher/k3s/k3s.yaml"})
     _set_stage(run_id, stage_name, "complete", "K3s server installed on kube1.")
     append_event(run_id, "info", stage_name, output[-600:] if output else "k3s-server-ready")
 
@@ -2045,16 +2047,28 @@ def _run_k3s_capture_token(run_id: str, stage_name: str) -> None:
 
 def _run_k3s_install_agent(run_id: str, stage_name: str) -> None:
     run = get_run(run_id) or {}
-    token = str((run.get("extra", {}) or {}).get("k3s_join_token", "")).strip()
+    extra = run.get("extra", {}) or {}
+    token = str(extra.get("k3s_join_token", "")).strip()
     if not token:
         raise PipelineExecutionError("K3s join token is missing. Re-run capture-k3s-token.")
+    server = _k3s_node_by_role(run_id, "server")
     agent = _k3s_node_by_role(run_id, "agent")
+    server_url = str(extra.get("k3s_api_url") or "").strip()
+    if not server_url:
+        server_host = str(server.get("ip") or server.get("name") or "kube1.lab.auzietek.com").strip()
+        server_url = f"https://{server_host}:6443"
     command = (
         "bash -lc 'set -euo pipefail; "
-        "if systemctl is-active --quiet k3s-agent 2>/dev/null; then echo k3s-agent-present; exit 0; fi; "
-        "curl -sfL https://get.k3s.io | "
-        f"INSTALL_K3S_CHANNEL=stable K3S_URL={shlex.quote('https://kube1.lab.auzietek.com:6443')} K3S_TOKEN={shlex.quote(token)} "
-        "sh -s - agent "
+        f"expected_url={shlex.quote(server_url)}; "
+        "current_url=$(grep -E '^K3S_URL=' /etc/systemd/system/k3s-agent.service.env 2>/dev/null | cut -d= -f2- | tr -d '\"' || true); "
+        "if systemctl is-active --quiet k3s-agent 2>/dev/null && [ \"$current_url\" = \"$expected_url\" ]; then echo k3s-agent-present; exit 0; fi; "
+        "if command -v k3s-agent-uninstall.sh >/dev/null 2>&1; then /usr/local/bin/k3s-agent-uninstall.sh || true; fi; "
+        "systemctl stop k3s-agent 2>/dev/null || true; "
+        "rm -rf /etc/rancher/k3s /var/lib/rancher/k3s/agent /var/lib/rancher/k3s/server /var/lib/kubelet /etc/systemd/system/k3s-agent.service /etc/systemd/system/k3s-agent.service.env; "
+        "curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh; "
+        "chmod +x /tmp/install-k3s.sh; "
+        f"INSTALL_K3S_CHANNEL=stable K3S_URL={shlex.quote(server_url)} K3S_TOKEN={shlex.quote(token)} "
+        "/tmp/install-k3s.sh agent "
         f"--node-name {shlex.quote(str(agent.get('short') or 'kube2'))}; "
         "systemctl is-active --quiet k3s-agent; "
         "echo k3s-agent-ready'"
