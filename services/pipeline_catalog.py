@@ -158,6 +158,7 @@ BUILTIN_PIPELINES = [
             {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
             {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
             {"label": "K3s API", "url": "https://kube1.lab.auzietek.com:6443"},
+            {"label": "Portainer", "url": "https://swarm1.lab.auzietek.com:9443"},
             {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
         ],
         "dashboards": [
@@ -170,6 +171,11 @@ BUILTIN_PIPELINES = [
                 "name": "Cluster API",
                 "summary": "Future API integration point for reading Kubernetes nodes, pods, services, and events through kube1.",
                 "url": "https://kube1.lab.auzietek.com:6443",
+            },
+            {
+                "name": "Portainer",
+                "summary": "Existing Portainer CE control plane for Docker Swarm today and the k3s environment once the agent or kubeconfig is registered.",
+                "url": "https://swarm1.lab.auzietek.com:9443",
             },
         ],
         "tags": ["kubernetes", "k3s", "hypervisor", "deploy", "ssh"],
