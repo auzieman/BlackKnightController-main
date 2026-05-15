@@ -1979,11 +1979,24 @@ def _run_k3s_discover_ssh(run_id: str, stage_name: str) -> None:
 
 def _run_k3s_base_bootstrap(run_id: str, stage_name: str) -> None:
     outputs = []
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    public_key = str(key_info.get("public_key") or "").strip()
     for node in _k3s_nodes(run_id):
         fqdn = str(node.get("name", "")).strip()
+        key_install = ""
+        if public_key:
+            quoted_key = shlex.quote(public_key)
+            key_install = (
+                "mkdir -p /root/.ssh; chmod 700 /root/.ssh; "
+                f"grep -qxF {quoted_key} /root/.ssh/authorized_keys 2>/dev/null || "
+                f"printf '%s\\n' {quoted_key} >> /root/.ssh/authorized_keys; "
+                "chmod 600 /root/.ssh/authorized_keys; "
+            )
         command = (
             "bash -lc 'set -euo pipefail; "
             f"hostnamectl set-hostname {shlex.quote(fqdn)}; "
+            f"{key_install}"
             "dnf -y install curl jq tar iptables-nft container-selinux qemu-guest-agent; "
             "systemctl enable --now qemu-guest-agent || true; "
             "swapoff -a || true; "
