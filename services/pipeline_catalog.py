@@ -181,6 +181,41 @@ BUILTIN_PIPELINES = [
         "tags": ["kubernetes", "k3s", "hypervisor", "deploy", "ssh"],
     },
     {
+        "id": "k3s-host-telemetry",
+        "name": "K3s Host Telemetry",
+        "repo": "rx-demo",
+        "workflow": "k3s-host-telemetry",
+        "description": "Deploy Telegraf and cAdvisor to kube1/kube2, open the host scrape ports, update Prometheus, and verify Grafana has k3s host and container metrics.",
+        "stages": [
+            "verify-k3s",
+            "apply-host-telemetry",
+            "open-firewall",
+            "prometheus-targets",
+            "scrape-validate",
+            "dashboard-link",
+        ],
+        "notes": "BKC-native SSH lane for adding kube1/kube2 infrastructure telemetry after the k3s app stack is online.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Prometheus Targets", "url": "http://swarm1.lab.auzietek.com:9090/targets"},
+            {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
+        ],
+        "dashboards": [
+            {
+                "name": "Host Ops",
+                "summary": "Confirm kube1 and kube2 host CPU, memory, disk, and network telemetry from Telegraf.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/host-ops/host-ops",
+            },
+            {
+                "name": "Container Overview - Telegraf",
+                "summary": "Use cAdvisor and Telegraf-backed runtime panels to inspect k3s container pressure.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/auzix-container-telegraf/container-overview-telegraf-auzix-lab",
+            },
+        ],
+        "tags": ["kubernetes", "k3s", "monitoring", "ssh"],
+    },
+    {
         "id": "tabor-build",
         "name": "Auzix Image Build",
         "repo": "tabor-linux-forge",

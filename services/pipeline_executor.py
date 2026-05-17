@@ -6,6 +6,8 @@ import re
 import shlex
 import socket
 import time
+from base64 import b64encode
+from pathlib import Path
 from urllib.parse import quote
 
 from services.ansible import scan_ansible_controller
@@ -37,6 +39,10 @@ K3S_CLUSTER_NAME = "k3s-lab"
 K3S_NODE_PLAN = [
     {"name": "kube1.lab.auzietek.com", "short": "kube1", "role": "server"},
     {"name": "kube2.lab.auzietek.com", "short": "kube2", "role": "agent"},
+]
+K3S_LIVE_NODES = [
+    {"name": "kube1.lab.auzietek.com", "host": "192.168.1.14", "role": "server"},
+    {"name": "kube2.lab.auzietek.com", "host": "192.168.1.59", "role": "agent"},
 ]
 
 
@@ -659,6 +665,62 @@ WORKFLOW_DEFINITIONS = {
                 "monitoring_loki",
             ],
         },
+    },
+    "k3s-host-telemetry": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "verify-k3s",
+                "transport": "bkc-ssh",
+                "kind": "k3s-host-telemetry-verify",
+                "active": "Verifying kube1 can read the k3s cluster and both nodes are Ready.",
+                "complete": "K3s node readiness verified.",
+                "timeout": 120,
+            },
+            {
+                "name": "apply-host-telemetry",
+                "transport": "bkc-ssh",
+                "kind": "k3s-host-telemetry-apply",
+                "active": "Applying Telegraf and cAdvisor DaemonSets through kube1.",
+                "complete": "K3s host telemetry DaemonSets are rolled out.",
+                "timeout": 600,
+            },
+            {
+                "name": "open-firewall",
+                "transport": "bkc-ssh",
+                "kind": "k3s-host-telemetry-firewall",
+                "active": "Opening Telegraf and cAdvisor scrape ports on kube1 and kube2.",
+                "complete": "K3s telemetry scrape ports are open on both nodes.",
+                "timeout": 180,
+            },
+            {
+                "name": "prometheus-targets",
+                "transport": "ssh-manager",
+                "kind": "k3s-host-telemetry-prometheus",
+                "target": "manager",
+                "active": "Adding k3s Telegraf and cAdvisor jobs to shared Prometheus.",
+                "complete": "Prometheus scrape jobs for kube1/kube2 are present.",
+                "timeout": 240,
+            },
+            {
+                "name": "scrape-validate",
+                "transport": "ssh-manager",
+                "kind": "k3s-host-telemetry-validate",
+                "target": "manager",
+                "active": "Checking Prometheus target health for kube1/kube2 host telemetry.",
+                "complete": "Prometheus reports k3s Telegraf and cAdvisor targets up.",
+                "timeout": 180,
+            },
+            {
+                "name": "dashboard-link",
+                "transport": "internal",
+                "kind": "event-note",
+                "active": "Publishing Grafana dashboard pointers for k3s host telemetry.",
+                "complete": "Dashboard pointers published.",
+                "message": "Grafana should now receive kube1/kube2 host metrics through job=k3s-telegraf-hosts and container metrics through job=k3s-cadvisor.",
+            },
+        ],
+        "complete_message": "K3s host telemetry pipeline completed.",
     },
 }
 
@@ -2154,6 +2216,126 @@ def _run_k3s_register_resources(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, json.dumps({"cluster": K3S_CLUSTER_NAME, "reconcile": reconcile}, sort_keys=True))
 
 
+def _k3s_live_node(role: str) -> dict:
+    for node in K3S_LIVE_NODES:
+        if node["role"] == role:
+            return node
+    raise PipelineExecutionError(f"K3s live node role '{role}' is not configured.")
+
+
+def _run_k3s_host_telemetry_verify(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "k3s kubectl get nodes -o wide; "
+        "ready=$(k3s kubectl get nodes --no-headers | awk \"{print \\\\$2}\" | grep -c \"^Ready$\"); "
+        "test \"$ready\" -ge 2'"
+    )
+    output = run_remote_command(host=server["host"], user="root", command=command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "K3s node readiness verified.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-ready")
+
+
+def _run_k3s_host_telemetry_apply(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    manifest_path = Path(__file__).resolve().parent.parent / "file_templates" / "k3s-host-telemetry.yaml"
+    if not manifest_path.exists():
+        raise PipelineExecutionError(f"K3s host telemetry manifest is missing: {manifest_path}")
+    encoded = b64encode(manifest_path.read_bytes()).decode("ascii")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        f"printf %s {shlex.quote(encoded)} | base64 -d >/tmp/k3s-host-telemetry.yaml; "
+        "k3s kubectl apply -f /tmp/k3s-host-telemetry.yaml; "
+        "k3s kubectl -n rx-observability rollout status ds/telegraf-k3s-host --timeout=180s; "
+        "k3s kubectl -n rx-observability rollout status ds/cadvisor-k3s --timeout=180s'"
+    )
+    output = run_remote_command(host=server["host"], user="root", command=command, timeout=600)
+    _set_stage(run_id, stage_name, "complete", "K3s host telemetry DaemonSets are rolled out.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "telemetry-daemonsets-ready")
+
+
+def _run_k3s_host_telemetry_firewall(run_id: str, stage_name: str) -> None:
+    results = {}
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "firewall-cmd --add-port=9273/tcp --add-port=18080/tcp --permanent 2>/dev/null || true; "
+        "firewall-cmd --reload 2>/dev/null || true; "
+        "curl -fsS -m 5 http://127.0.0.1:9273/metrics >/dev/null; "
+        "curl -fsS -m 5 http://127.0.0.1:18080/metrics >/dev/null; "
+        "echo telemetry-ports-ready'"
+    )
+    for node in K3S_LIVE_NODES:
+        results[node["name"]] = run_remote_command(host=node["host"], user="root", command=command, timeout=180)
+    _set_stage(run_id, stage_name, "complete", "K3s telemetry scrape ports are open on both nodes.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _run_k3s_host_telemetry_prometheus(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    kube1 = _k3s_live_node("server")["host"]
+    kube2 = _k3s_live_node("agent")["host"]
+    command = f"""
+    bash -lc 'set -euo pipefail
+    config=/srv/stacks/monitoring/prometheus.yml
+    backup="${{config}}.bak.$(date +%Y%m%d%H%M%S)"
+    cp "${{config}}" "${{backup}}"
+    if ! grep -q "job_name: k3s-telegraf-hosts" "${{config}}"; then
+      cat >>"${{config}}" <<EOF
+
+  - job_name: k3s-telegraf-hosts
+    static_configs:
+      - targets:
+          - "{kube1}:9273"
+          - "{kube2}:9273"
+
+  - job_name: k3s-cadvisor
+    static_configs:
+      - targets:
+          - "{kube1}:18080"
+          - "{kube2}:18080"
+EOF
+    fi
+    docker service update --force monitoring_prometheus >/dev/null
+    for _ in $(seq 1 30); do
+      curl -fsS http://127.0.0.1:9090/-/healthy >/dev/null && break
+      sleep 2
+    done
+    grep -n "k3s-telegraf-hosts\\|k3s-cadvisor" "${{config}}"'
+    """
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=command,
+        timeout=240,
+    )
+    _set_stage(run_id, stage_name, "complete", "Prometheus scrape jobs for kube1/kube2 are present.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "prometheus-targets-ready")
+
+
+def _run_k3s_host_telemetry_validate(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "for _ in $(seq 1 20); do "
+        "targets=$(curl -fsS http://127.0.0.1:9090/api/v1/targets | "
+        "jq -r '\\''[.data.activeTargets[] | select(.labels.job==\"k3s-telegraf-hosts\" or .labels.job==\"k3s-cadvisor\") | select(.health==\"up\")] | length'\\''); "
+        "test \"$targets\" = \"4\" && break; "
+        "sleep 3; "
+        "done; "
+        "curl -fsS http://127.0.0.1:9090/api/v1/targets | "
+        "jq -r '\\''.data.activeTargets[] | select(.labels.job==\"k3s-telegraf-hosts\" or .labels.job==\"k3s-cadvisor\") | [.labels.job,.labels.instance,.health,.lastError] | @tsv'\\'' | sort; "
+        "test \"$(curl -fsS http://127.0.0.1:9090/api/v1/targets | jq -r '\\''[.data.activeTargets[] | select(.labels.job==\"k3s-telegraf-hosts\" or .labels.job==\"k3s-cadvisor\") | select(.health==\"up\")] | length'\\'')\" = \"4\"'"
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=command,
+        timeout=180,
+    )
+    _set_stage(run_id, stage_name, "complete", "Prometheus reports k3s Telegraf and cAdvisor targets up.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-scrapes-up")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -2269,6 +2451,26 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "k3s-register-resources":
             _run_k3s_register_resources(run_id, stage_name)
+            continue
+
+        if kind == "k3s-host-telemetry-verify":
+            _run_k3s_host_telemetry_verify(run_id, stage_name)
+            continue
+
+        if kind == "k3s-host-telemetry-apply":
+            _run_k3s_host_telemetry_apply(run_id, stage_name)
+            continue
+
+        if kind == "k3s-host-telemetry-firewall":
+            _run_k3s_host_telemetry_firewall(run_id, stage_name)
+            continue
+
+        if kind == "k3s-host-telemetry-prometheus":
+            _run_k3s_host_telemetry_prometheus(run_id, stage_name, settings)
+            continue
+
+        if kind == "k3s-host-telemetry-validate":
+            _run_k3s_host_telemetry_validate(run_id, stage_name, settings)
             continue
 
         if kind == "wordpress-source-select":

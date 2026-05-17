@@ -210,6 +210,13 @@ def _executor_source_files(workflow: str) -> list[str]:
         sources.append("/home/auzieman/Projects/lab/ns1/ansible/microblog-stack.yml")
     elif workflow == "host-telemetry":
         sources.append("/home/auzieman/Projects/lab/ns1/ansible/setup_monitoring.yml")
+    elif workflow == "k3s-host-telemetry":
+        sources.extend(
+            [
+                "/home/auzieman/Projects/BlackKnightController/file_templates/k3s-host-telemetry.yaml",
+                "/home/auzieman/Projects/rx-demo/tools/pipelines/bkc-k3s-host-telemetry.md",
+            ]
+        )
     elif workflow == "fedora-workstation-spin":
         sources.extend(
             [
