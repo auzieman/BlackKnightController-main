@@ -214,6 +214,8 @@ def _executor_source_files(workflow: str) -> list[str]:
         sources.extend(
             [
                 "/home/auzieman/Projects/BlackKnightController/file_templates/k3s-host-telemetry.yaml",
+                "/home/auzieman/Projects/BlackKnightController/file_templates/k3s-loki-logs.yaml",
+                "/home/auzieman/Projects/BlackKnightController/file_templates/rx-loadgen-deployment.yaml",
                 "/home/auzieman/Projects/rx-demo/tools/pipelines/bkc-k3s-host-telemetry.md",
             ]
         )

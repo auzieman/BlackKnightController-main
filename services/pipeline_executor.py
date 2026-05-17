@@ -44,6 +44,11 @@ K3S_LIVE_NODES = [
     {"name": "kube1.lab.auzietek.com", "host": "192.168.1.14", "role": "server"},
     {"name": "kube2.lab.auzietek.com", "host": "192.168.1.59", "role": "agent"},
 ]
+K3S_NFS_MOUNTS = [
+    ("192.168.1.10:/srv/nfs/swarm/shared", "/mnt/swarm/shared"),
+    ("192.168.1.10:/srv/nfs/swarm/tabor-linux-forge", "/mnt/swarm/tabor-linux-forge"),
+    ("192.168.1.10:/srv/nfs/swarm/blackknightcontroller", "/mnt/swarm/blackknightcontroller"),
+]
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -678,12 +683,36 @@ WORKFLOW_DEFINITIONS = {
                 "timeout": 120,
             },
             {
+                "name": "nfs-projects",
+                "transport": "bkc-ssh",
+                "kind": "k3s-housekeeping-nfs",
+                "active": "Mounting shared project NFS paths on kube1 and kube2.",
+                "complete": "Shared project NFS mounts are present on both k3s nodes.",
+                "timeout": 240,
+            },
+            {
                 "name": "apply-host-telemetry",
                 "transport": "bkc-ssh",
                 "kind": "k3s-host-telemetry-apply",
                 "active": "Applying Telegraf and cAdvisor DaemonSets through kube1.",
                 "complete": "K3s host telemetry DaemonSets are rolled out.",
                 "timeout": 600,
+            },
+            {
+                "name": "apply-loki-logs",
+                "transport": "bkc-ssh",
+                "kind": "k3s-housekeeping-loki-logs",
+                "active": "Deploying k3s Promtail DaemonSet for host and pod logs.",
+                "complete": "K3s host and pod logs are shipping toward Loki.",
+                "timeout": 300,
+            },
+            {
+                "name": "loadgen-steady",
+                "transport": "bkc-ssh",
+                "kind": "k3s-housekeeping-loadgen",
+                "active": "Deploying the steady rx-demo loadgen Deployment.",
+                "complete": "Steady rx-demo loadgen Deployment is available.",
+                "timeout": 300,
             },
             {
                 "name": "open-firewall",
@@ -2228,30 +2257,103 @@ def _run_k3s_host_telemetry_verify(run_id: str, stage_name: str) -> None:
     command = (
         "bash -lc 'set -euo pipefail; "
         "k3s kubectl get nodes -o wide; "
-        "ready=$(k3s kubectl get nodes --no-headers | awk \"{print \\\\$2}\" | grep -c \"^Ready$\"); "
-        "test \"$ready\" -ge 2'"
+        "k3s kubectl wait --for=condition=Ready nodes --all --timeout=90s'"
     )
     output = run_remote_command(host=server["host"], user="root", command=command, timeout=120)
     _set_stage(run_id, stage_name, "complete", "K3s node readiness verified.")
     append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-ready")
 
 
-def _run_k3s_host_telemetry_apply(run_id: str, stage_name: str) -> None:
+def _encoded_file_template(name: str) -> str:
+    template_path = Path(__file__).resolve().parent.parent / "file_templates" / name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Required file template is missing: {template_path}")
+    return b64encode(template_path.read_bytes()).decode("ascii")
+
+
+def _run_k3s_housekeeping_nfs(run_id: str, stage_name: str) -> None:
+    mount_table = json.dumps(K3S_NFS_MOUNTS)
+    mount_targets = " ".join(shlex.quote(target) for _, target in K3S_NFS_MOUNTS)
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            "dnf -y install nfs-utils >/dev/null 2>&1 || true",
+            "mkdir -p /mnt/swarm/shared /mnt/swarm/tabor-linux-forge /mnt/swarm/blackknightcontroller",
+            f"export BKC_K3S_NFS_MOUNTS={shlex.quote(mount_table)}",
+            "python3 - <<'PY'",
+            "import json, os",
+            "from pathlib import Path",
+            "mounts = json.loads(os.environ['BKC_K3S_NFS_MOUNTS'])",
+            "path = Path('/etc/fstab')",
+            "existing = path.read_text(encoding='utf-8').splitlines() if path.exists() else []",
+            "targets = {target for _, target in mounts}",
+            "kept = [line for line in existing if not any(f' {target} ' in f' {line} ' for target in targets)]",
+            "kept.extend(f'{source} {target} nfs4 rw,sync,hard,_netdev 0 0' for source, target in mounts)",
+            "path.write_text('\\n'.join(kept).rstrip() + '\\n', encoding='utf-8')",
+            "PY",
+            f"for target in {mount_targets}; do mount \"$target\" || true; done",
+            "mount -a",
+            f"for target in {mount_targets}; do findmnt -M \"$target\" -n -o TARGET,SOURCE,FSTYPE | grep -E '[[:space:]]nfs4?$'; done",
+        ]
+    )
+    command = f"bash -lc {shlex.quote(script)}"
+    results = {}
+    for node in K3S_LIVE_NODES:
+        results[node["name"]] = run_remote_command(host=node["host"], user="root", command=command, timeout=240)
+    _set_stage(run_id, stage_name, "complete", "Shared project NFS mounts are present on both k3s nodes.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-1600:])
+
+
+def _run_k3s_apply_template(run_id: str, stage_name: str, template_name: str, remote_path: str, rollout_commands: str, timeout: int) -> str:
     server = _k3s_live_node("server")
-    manifest_path = Path(__file__).resolve().parent.parent / "file_templates" / "k3s-host-telemetry.yaml"
-    if not manifest_path.exists():
-        raise PipelineExecutionError(f"K3s host telemetry manifest is missing: {manifest_path}")
-    encoded = b64encode(manifest_path.read_bytes()).decode("ascii")
+    encoded = _encoded_file_template(template_name)
     command = (
         "bash -lc 'set -euo pipefail; "
-        f"printf %s {shlex.quote(encoded)} | base64 -d >/tmp/k3s-host-telemetry.yaml; "
-        "k3s kubectl apply -f /tmp/k3s-host-telemetry.yaml; "
-        "k3s kubectl -n rx-observability rollout status ds/telegraf-k3s-host --timeout=180s; "
-        "k3s kubectl -n rx-observability rollout status ds/cadvisor-k3s --timeout=180s'"
+        f"printf %s {shlex.quote(encoded)} | base64 -d >{shlex.quote(remote_path)}; "
+        f"k3s kubectl apply -f {shlex.quote(remote_path)}; "
+        f"{rollout_commands}'"
     )
-    output = run_remote_command(host=server["host"], user="root", command=command, timeout=600)
+    return run_remote_command(host=server["host"], user="root", command=command, timeout=timeout)
+
+
+def _run_k3s_host_telemetry_apply(run_id: str, stage_name: str) -> None:
+    output = _run_k3s_apply_template(
+        run_id,
+        stage_name,
+        "k3s-host-telemetry.yaml",
+        "/tmp/k3s-host-telemetry.yaml",
+        "k3s kubectl -n rx-observability rollout status ds/telegraf-k3s-host --timeout=180s; "
+        "k3s kubectl -n rx-observability rollout status ds/cadvisor-k3s --timeout=180s",
+        600,
+    )
     _set_stage(run_id, stage_name, "complete", "K3s host telemetry DaemonSets are rolled out.")
     append_event(run_id, "info", stage_name, output[-1200:] if output else "telemetry-daemonsets-ready")
+
+
+def _run_k3s_housekeeping_loki_logs(run_id: str, stage_name: str) -> None:
+    output = _run_k3s_apply_template(
+        run_id,
+        stage_name,
+        "k3s-loki-logs.yaml",
+        "/tmp/k3s-loki-logs.yaml",
+        "k3s kubectl -n rx-observability rollout status ds/promtail-k3s --timeout=180s",
+        300,
+    )
+    _set_stage(run_id, stage_name, "complete", "K3s host and pod logs are shipping toward Loki.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-logs-ready")
+
+
+def _run_k3s_housekeeping_loadgen(run_id: str, stage_name: str) -> None:
+    output = _run_k3s_apply_template(
+        run_id,
+        stage_name,
+        "rx-loadgen-deployment.yaml",
+        "/tmp/rx-loadgen-deployment.yaml",
+        "k3s kubectl -n rx-demo rollout status deploy/loadgen --timeout=180s",
+        300,
+    )
+    _set_stage(run_id, stage_name, "complete", "Steady rx-demo loadgen Deployment is available.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "loadgen-ready")
 
 
 def _run_k3s_host_telemetry_firewall(run_id: str, stage_name: str) -> None:
@@ -2459,6 +2561,18 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "k3s-host-telemetry-apply":
             _run_k3s_host_telemetry_apply(run_id, stage_name)
+            continue
+
+        if kind == "k3s-housekeeping-nfs":
+            _run_k3s_housekeeping_nfs(run_id, stage_name)
+            continue
+
+        if kind == "k3s-housekeeping-loki-logs":
+            _run_k3s_housekeeping_loki_logs(run_id, stage_name)
+            continue
+
+        if kind == "k3s-housekeeping-loadgen":
+            _run_k3s_housekeeping_loadgen(run_id, stage_name)
             continue
 
         if kind == "k3s-host-telemetry-firewall":

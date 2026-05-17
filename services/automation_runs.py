@@ -93,6 +93,18 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "verify-cluster",
             "register-resources",
         ]
+    if normalized == "k3s-host-telemetry":
+        return [
+            "verify-k3s",
+            "nfs-projects",
+            "apply-host-telemetry",
+            "apply-loki-logs",
+            "loadgen-steady",
+            "open-firewall",
+            "prometheus-targets",
+            "scrape-validate",
+            "dashboard-link",
+        ]
     if normalized == "wordpress-appliance-import":
         return ["source-select", "proxmox-clone", "boot", "ssh-validate"]
     if normalized == "blackknight-sync":
