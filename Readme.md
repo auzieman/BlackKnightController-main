@@ -67,6 +67,12 @@ The practical split is:
 
 For the next UI pass, BKC should treat the left navigation as a **resource graph**, not a machine-only tree. Nodes can be VMs, hosts, Git repositories, API interfaces, storage pools, actions, templates, pipelines, or services. See `docs/ui-resource-graph.md` for the working information architecture.
 
+The execution model should follow the same resource-first direction: pipelines are recipes of reusable actions, templates, target selectors, validations, and produced facts. See:
+
+- `docs/pipeline-action-model.md` for the target pipeline/action model
+- `docs/near-term-priorities.md` for the current implementation sequence
+- `docs/build-guardrails.md` for day-to-day engineering constraints
+
 ## Feature list
 
 ## View and edit configuration files for fabric deployments
