@@ -197,6 +197,14 @@ BUILTIN_PIPELINES = [
             "scrape-validate",
             "dashboard-link",
         ],
+        "actions": [
+            "k3s.nodes.ready",
+            "ssh.nfs.ensure_mounts",
+            "k3s.manifest.apply",
+            "ssh.firewall.open_ports",
+            "prometheus.scrape_job.ensure",
+            "prometheus.targets.verify",
+        ],
         "notes": "BKC-native SSH lane for kube1/kube2 housekeeping after the k3s app stack is online.",
         "editable": True,
         "links": [
@@ -456,7 +464,7 @@ def _save_overrides(overrides: dict[str, dict]) -> None:
 def _merge_pipeline(base: dict, override: dict) -> dict:
     merged = deepcopy(base)
     for key, value in override.items():
-        if key in {"links", "dashboards", "stages"} and isinstance(value, list):
+        if key in {"actions", "links", "dashboards", "stages"} and isinstance(value, list):
             merged[key] = deepcopy(value)
         else:
             merged[key] = value

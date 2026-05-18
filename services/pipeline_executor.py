@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import ipaddress
+import json
 import re
 import shlex
 import socket
@@ -16,12 +16,16 @@ from services.automation_pipeline import (
     append_event,
     mark_run_active,
     mark_run_complete,
-    mark_run_failed,
 )
 from services.automation_runs import get_run, load_runs, update_run, update_stage
 from services.docker_swarm import scan_docker_controller, sync_docker_inventory_to_rules
 from services.fresh_build_library import fresh_build_plan
-from services.integration_store import load_integrations, load_proxmox_snapshot, save_ansible_snapshot, save_docker_snapshot
+from services.integration_store import (
+    load_integrations,
+    load_proxmox_snapshot,
+    save_ansible_snapshot,
+    save_docker_snapshot,
+)
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.proxmox import ProxmoxClient, load_proxmox_config
 from services.remote_ops import run_remote_command
@@ -678,6 +682,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "verify-k3s",
                 "transport": "bkc-ssh",
                 "kind": "k3s-host-telemetry-verify",
+                "action": "k3s.nodes.ready",
                 "active": "Verifying kube1 can read the k3s cluster and both nodes are Ready.",
                 "complete": "K3s node readiness verified.",
                 "timeout": 120,
@@ -686,6 +691,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "nfs-projects",
                 "transport": "bkc-ssh",
                 "kind": "k3s-housekeeping-nfs",
+                "action": "ssh.nfs.ensure_mounts",
                 "active": "Mounting shared project NFS paths on kube1 and kube2.",
                 "complete": "Shared project NFS mounts are present on both k3s nodes.",
                 "timeout": 240,
@@ -694,6 +700,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "apply-host-telemetry",
                 "transport": "bkc-ssh",
                 "kind": "k3s-host-telemetry-apply",
+                "action": "k3s.manifest.apply",
                 "active": "Applying Telegraf and cAdvisor DaemonSets through kube1.",
                 "complete": "K3s host telemetry DaemonSets are rolled out.",
                 "timeout": 600,
@@ -702,6 +709,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "apply-loki-logs",
                 "transport": "bkc-ssh",
                 "kind": "k3s-housekeeping-loki-logs",
+                "action": "k3s.manifest.apply",
                 "active": "Deploying k3s Promtail DaemonSet for host and pod logs.",
                 "complete": "K3s host and pod logs are shipping toward Loki.",
                 "timeout": 300,
@@ -710,6 +718,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "loadgen-steady",
                 "transport": "bkc-ssh",
                 "kind": "k3s-housekeeping-loadgen",
+                "action": "k3s.manifest.apply",
                 "active": "Deploying the steady rx-demo loadgen Deployment.",
                 "complete": "Steady rx-demo loadgen Deployment is available.",
                 "timeout": 300,
@@ -718,6 +727,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "open-firewall",
                 "transport": "bkc-ssh",
                 "kind": "k3s-host-telemetry-firewall",
+                "action": "ssh.firewall.open_ports",
                 "active": "Opening Telegraf and cAdvisor scrape ports on kube1 and kube2.",
                 "complete": "K3s telemetry scrape ports are open on both nodes.",
                 "timeout": 180,
@@ -726,6 +736,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "prometheus-targets",
                 "transport": "ssh-manager",
                 "kind": "k3s-host-telemetry-prometheus",
+                "action": "prometheus.scrape_job.ensure",
                 "target": "manager",
                 "active": "Adding k3s Telegraf and cAdvisor jobs to shared Prometheus.",
                 "complete": "Prometheus scrape jobs for kube1/kube2 are present.",
@@ -735,6 +746,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "scrape-validate",
                 "transport": "ssh-manager",
                 "kind": "k3s-host-telemetry-validate",
+                "action": "prometheus.targets.verify",
                 "target": "manager",
                 "active": "Checking Prometheus target health for kube1/kube2 host telemetry.",
                 "complete": "Prometheus reports k3s Telegraf and cAdvisor targets up.",

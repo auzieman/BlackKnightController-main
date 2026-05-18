@@ -4,13 +4,18 @@ from collections import defaultdict
 from copy import deepcopy
 from urllib.parse import urlparse
 
+from services.action_catalog import actions_for_kind, list_actions
 from services.automation_runs import load_runs
-from services.integration_store import load_ansible_snapshot, load_docker_snapshot, load_integrations, load_proxmox_snapshot
+from services.integration_store import (
+    load_ansible_snapshot,
+    load_docker_snapshot,
+    load_integrations,
+    load_proxmox_snapshot,
+)
 from services.inventory_model import resolve_group_hosts
 from services.pipeline_catalog import demo_pipelines
 from services.rules_store import load_rules
 from services.tenant_context import get_effective_tenant_slug
-
 
 RESOURCE_KIND_META = {
     "api": {"label": "APIs", "short": "API", "order": 10},
@@ -37,7 +42,10 @@ RELATIONSHIP_CONSTRAINTS = [
     {"source": "pipeline", "type": "uses", "target": "repo"},
     {"source": "pipeline", "type": "targets", "target": "group"},
     {"source": "action", "type": "runs_on", "target": "host"},
+    {"source": "action", "type": "runs_on", "target": "vm"},
+    {"source": "action", "type": "runs_on", "target": "kubernetes-node"},
     {"source": "action", "type": "pulls", "target": "repo"},
+    {"source": "pipeline", "type": "composes", "target": "action"},
     {"source": "credential", "type": "authenticates", "target": "api"},
     {"source": "credential", "type": "authenticates", "target": "host"},
 ]
@@ -141,6 +149,18 @@ def _pipeline_actions(pipeline: dict) -> list[dict]:
         {"label": "Edit pipeline", "href": f"/pipelines/{pipeline['id']}/edit"},
         {"label": "Open pipelines", "href": "/pipelines"},
     ]
+
+
+def _resource_action_links(kind: str, existing: list[dict] | None = None) -> list[dict]:
+    actions = list(existing or [])
+    for action in actions_for_kind(kind):
+        actions.append(
+            {
+                "label": action["label"],
+                "href": f"/resources?kind=action&resource=action:{action['id']}",
+            }
+        )
+    return actions
 
 
 def _fmt_bytes(value) -> str:
@@ -299,6 +319,35 @@ def build_resource_graph() -> dict:
     snapshot_indexes = _snapshot_indexes()
 
     integrations = load_integrations()
+    for action in list_actions():
+        action_id = f"action:{action['id']}"
+        target_kinds = ", ".join(action.get("target_kinds", [])) or "unset"
+        _add_resource(
+            graph,
+            {
+                "id": action_id,
+                "kind": "action",
+                "name": action["label"],
+                "state": action.get("status", "planned"),
+                "summary": action.get("summary", ""),
+                "sources": ["action catalog"],
+                "facts": {
+                    "action id": action["id"],
+                    "kind": action.get("kind", "unset"),
+                    "risk": action.get("risk", "unset"),
+                    "credential": action.get("credential_scope", "unset"),
+                    "targets": target_kinds,
+                },
+                "sections": {
+                    "inputs": action.get("inputs", {}),
+                    "validations": {str(index + 1): value for index, value in enumerate(action.get("validations", []))},
+                    "produces": {str(index + 1): value for index, value in enumerate(action.get("produces", []))},
+                },
+                "actions": [],
+                "raw": action,
+            },
+        )
+
     for name, config in sorted(integrations.items()):
         configured = _integration_configured(name, config)
         api_id = f"api:{name}"
@@ -319,7 +368,7 @@ def build_resource_graph() -> dict:
                 "summary": "Integration endpoint available for inventory and actions." if configured else "Integration exists but is not fully configured.",
                 "sources": ["integrations"],
                 "facts": facts,
-                "actions": [{"label": "Open integrations", "href": "/integrations"}],
+                "actions": _resource_action_links("api", [{"label": "Open integrations", "href": "/integrations"}]),
             },
         )
         if name == "ssh":
@@ -362,10 +411,13 @@ def build_resource_graph() -> dict:
                     "engine": locals_meta.get("cluster_engine", "unset"),
                     "api": locals_meta.get("api_url", "unset"),
                 },
-                "actions": [
-                    {"label": "Open group", "href": f"/group/{group_name}/hosts"},
-                    {"label": "Edit group", "href": f"/group/{group_name}/edit"},
-                ],
+                "actions": _resource_action_links(
+                    group_kind,
+                    [
+                        {"label": "Open group", "href": f"/group/{group_name}/hosts"},
+                        {"label": "Edit group", "href": f"/group/{group_name}/edit"},
+                    ],
+                ),
                 "raw": {"locals": locals_meta},
             },
         )
@@ -393,10 +445,13 @@ def build_resource_graph() -> dict:
                     "sources": ["rules"],
                     "facts": facts,
                     "sections": sections,
-                    "actions": [
-                        {"label": "Deploy", "href": f"/deploy/{group_name}/{host_name}"},
-                        {"label": "Admin", "href": f"/admin?group={group_name}&host={host_name}"},
-                    ],
+                    "actions": _resource_action_links(
+                        kind,
+                        [
+                            {"label": "Deploy", "href": f"/deploy/{group_name}/{host_name}"},
+                            {"label": "Admin", "href": f"/admin?group={group_name}&host={host_name}"},
+                        ],
+                    ),
                     "raw": {"resolved": resolved},
                 },
             )
@@ -427,6 +482,10 @@ def build_resource_graph() -> dict:
                 "raw": {"stages": pipeline.get("stages", []), "notes": pipeline.get("notes", "")},
             },
         )
+        for action_name in pipeline.get("actions", []):
+            action_id = f"action:{action_name}"
+            if action_id in graph["resources_by_id"]:
+                _add_relationship(graph, pipeline_id, "composes", action_id, "Pipeline stage uses this action definition.")
         repo = str(pipeline.get("repo", "")).strip()
         if repo:
             repo_id = f"repo:{repo}"
