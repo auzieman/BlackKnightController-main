@@ -36,7 +36,7 @@ a {
 
 .shell {
   display: grid;
-  grid-template-columns: 58px 300px minmax(0, 1fr);
+  grid-template-columns: 58px clamp(220px, 16vw, 280px) minmax(0, 1fr);
   min-height: 100vh;
   position: relative;
   z-index: 1;
@@ -256,6 +256,7 @@ a {
 
 .main {
   padding: 20px 24px 32px;
+  min-width: 0;
 }
 
 .workbench-ribbon,
@@ -548,8 +549,8 @@ a {
 
 .pipeline-console-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(220px, 260px) minmax(680px, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -563,7 +564,7 @@ a {
   top: 16px;
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(12, 18, 33, 0.72);
@@ -670,7 +671,7 @@ a {
 }
 
 .pipeline-selected-card {
-  padding: 18px;
+  padding: 20px;
 }
 
 .pipeline-tabs {
@@ -685,8 +686,8 @@ a {
 
 .pipeline-summary-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.75fr);
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 14px;
 }
 
 .pipeline-stage-table {
@@ -1833,5 +1834,19 @@ th {
 
   .pipeline-console-tree {
     position: static;
+  }
+}
+
+@media (max-width: 1320px) {
+  .pipeline-console-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pipeline-console-tree {
+    position: static;
+  }
+
+  .pipeline-tree-list {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 }
