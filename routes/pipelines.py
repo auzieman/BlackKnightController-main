@@ -423,6 +423,7 @@ def pipelines():
     tenant_slug = get_effective_tenant_slug()
     search_query = request.args.get("q", "").strip().lower()
     selected_tag = request.args.get("tag", "").strip().lower()
+    selected_pipeline_id = request.args.get("pipeline", "").strip()
     if request.method == "POST":
         if request.form.get("action") == "create-candidate-pipeline":
             candidate_id = request.form.get("candidate_id", "").strip()
@@ -524,10 +525,14 @@ def pipelines():
     latest_runs_by_workflow: dict[str, dict] = {}
     for run in visible_runs:
         latest_runs_by_workflow.setdefault(str(run.get("workflow", "")), run)
+    selected_pipeline = next((item for item in visible_pipelines if item.get("id") == selected_pipeline_id), None)
+    if not selected_pipeline and visible_pipelines:
+        selected_pipeline = visible_pipelines[0]
 
     return render_template(
         "pipelines.html.j2",
         pipelines=visible_pipelines,
+        selected_pipeline=selected_pipeline,
         runs=visible_runs[:12],
         latest_runs_by_workflow=latest_runs_by_workflow,
         supported_workflows=supported_workflows,

@@ -537,9 +537,177 @@ a {
 .pipeline-run-card {
   padding: 22px;
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.pipeline-console-filter {
+  padding: 16px;
+}
+
+.pipeline-console-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.pipeline-console-tree,
+.pipeline-console-main {
+  min-width: 0;
+}
+
+.pipeline-console-tree {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(12, 18, 33, 0.72);
+}
+
+.pipeline-console-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.pipeline-console-heading .eyebrow {
+  margin-bottom: 0;
+}
+
+.pipeline-console-heading strong {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.pipeline-tree-list {
+  display: grid;
+  gap: 4px;
+}
+
+.pipeline-tree-node,
+.pipeline-candidate-row button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(130, 156, 207, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.pipeline-candidate-row {
+  margin: 0;
+}
+
+.pipeline-candidate-row button {
+  display: block;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pipeline-tree-node:hover,
+.pipeline-tree-node.active,
+.pipeline-candidate-row button:hover {
+  border-color: rgba(79, 209, 197, 0.38);
+  background: rgba(79, 209, 197, 0.08);
+}
+
+.pipeline-tree-node strong,
+.pipeline-tree-node small,
+.pipeline-candidate-row strong,
+.pipeline-candidate-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-tree-node strong,
+.pipeline-candidate-row strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.pipeline-tree-node small,
+.pipeline-candidate-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.pipeline-tree-status {
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(130, 156, 207, 0.55);
+}
+
+.pipeline-tree-status.status-complete {
+  background: #52c587;
+}
+
+.pipeline-tree-status.status-failed,
+.pipeline-tree-status.status-blocked {
+  background: #e85b5b;
+}
+
+.pipeline-tree-status.status-running,
+.pipeline-tree-status.status-active,
+.pipeline-tree-status.status-queued,
+.pipeline-tree-status.status-waiting-executor {
+  background: var(--accent);
+}
+
+.pipeline-selected-card {
+  padding: 18px;
+}
+
+.pipeline-tabs {
+  margin-top: 18px;
+}
+
+.pipeline-console-section {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(130, 156, 207, 0.14);
+}
+
+.pipeline-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.75fr);
+  gap: 18px;
+}
+
+.pipeline-stage-table {
+  display: grid;
+  gap: 6px;
+}
+
+.pipeline-stage-table div {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(130, 156, 207, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.pipeline-stage-table span {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .pipeline-card-top,
@@ -1634,6 +1802,8 @@ th {
   .inventory-resource-layout,
   .resource-summary-grid,
   .inventory-summary-grid,
+  .pipeline-console-layout,
+  .pipeline-summary-grid,
   .builder-layout,
   .card-grid,
   .form-grid,
@@ -1660,5 +1830,8 @@ th {
   .main {
     padding: 24px;
   }
+
+  .pipeline-console-tree {
+    position: static;
+  }
 }
-  
