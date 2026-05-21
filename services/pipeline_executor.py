@@ -53,6 +53,9 @@ K3S_NFS_MOUNTS = [
     ("192.168.1.10:/srv/nfs/swarm/tabor-linux-forge", "/mnt/swarm/tabor-linux-forge"),
     ("192.168.1.10:/srv/nfs/swarm/blackknightcontroller", "/mnt/swarm/blackknightcontroller"),
 ]
+RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
+RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
+RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -762,6 +765,74 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "K3s host telemetry pipeline completed.",
+    },
+    "rx-demo-k3s-app-refresh": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "verify-k3s",
+                "transport": "bkc-ssh",
+                "kind": "k3s-host-telemetry-verify",
+                "action": "k3s.nodes.ready",
+                "active": "Verifying kube1 can read the k3s cluster and both nodes are Ready.",
+                "complete": "K3s node readiness verified.",
+                "timeout": 120,
+            },
+            {
+                "name": "source-check",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-source-check",
+                "action": "ssh.source.verify",
+                "active": "Checking staged rx-demo source on shared storage.",
+                "complete": "Staged rx-demo source is present.",
+                "timeout": 60,
+            },
+            {
+                "name": "build-rx-ui-image",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-build-rx-ui",
+                "action": "docker.image.build",
+                "active": "Building the rx-ui test image on the swarm manager.",
+                "complete": "rx-ui image built and exported to shared storage.",
+                "timeout": 1200,
+            },
+            {
+                "name": "import-rx-ui-image",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-import-rx-ui",
+                "action": "k3s.image.import",
+                "active": "Importing the rx-ui image into kube1 and kube2 containerd stores.",
+                "complete": "rx-ui image imported on both k3s nodes.",
+                "timeout": 300,
+            },
+            {
+                "name": "apply-lab-overlay",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-apply-lab",
+                "action": "k3s.manifest.apply",
+                "active": "Applying the rx-demo lab overlay and restarting rx-ui.",
+                "complete": "rx-ui rollout completed.",
+                "timeout": 420,
+            },
+            {
+                "name": "smoke-ui-routes",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-smoke-ui",
+                "action": "http.route.smoke",
+                "active": "Smoking /lookup, /approve, and /refill through the deployed UI.",
+                "complete": "Routed UI smoke checks passed.",
+                "timeout": 180,
+            },
+            {
+                "name": "dashboard-link",
+                "transport": "internal",
+                "kind": "event-note",
+                "active": "Publishing rx-demo dashboard pointers.",
+                "complete": "Dashboard pointers published.",
+                "message": "Rx UI route smoke checks should now produce distinct /lookup, /approve, and /refill telemetry for Grafana, Tempo, and Dynatrace-style service flow validation.",
+            },
+        ],
+        "complete_message": "Rx demo k3s app refresh pipeline completed.",
     },
 }
 
@@ -2450,6 +2521,133 @@ def _run_k3s_host_telemetry_validate(run_id: str, stage_name: str, settings: dic
     append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-scrapes-up")
 
 
+def _run_rx_demo_k3s_source_check(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "test -f rx-demo.sln",
+            "test -f src/rx-ui/Rx.Ui/Dockerfile",
+            "test -d k8s/overlays/lab",
+            "git rev-parse --short HEAD 2>/dev/null || true",
+            "printf 'rx-demo-source-ready %s\\n' \"$PWD\"",
+        ]
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "Staged rx-demo source is present.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-demo-source-ready")
+
+
+def _run_rx_demo_k3s_build_rx_ui(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "test -f src/rx-ui/Rx.Ui/Dockerfile",
+            (
+                "docker build "
+                "-f src/rx-ui/Rx.Ui/Dockerfile "
+                f"-t {shlex.quote(RX_DEMO_RX_UI_IMAGE)} "
+                "--build-arg DOTNET_VERSION=10.0 ."
+            ),
+            f"docker image inspect {shlex.quote(RX_DEMO_RX_UI_IMAGE)} --format '{{{{.Id}}}} {{{{.Created}}}}'",
+            "tmp_tar=/tmp/rx-demo-rx-ui-latest.tar",
+            "rm -f \"$tmp_tar\"",
+            f"docker save {shlex.quote(RX_DEMO_RX_UI_IMAGE)} -o \"$tmp_tar\"",
+            f"install -m 0644 \"$tmp_tar\" {shlex.quote(RX_DEMO_RX_UI_TAR)}",
+            "rm -f \"$tmp_tar\"",
+            f"chmod 0644 {shlex.quote(RX_DEMO_RX_UI_TAR)}",
+            f"ls -lh {shlex.quote(RX_DEMO_RX_UI_TAR)}",
+        ]
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=1200,
+    )
+    _set_stage(run_id, stage_name, "complete", "rx-ui image built and exported to shared storage.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-ui-image-ready")
+
+
+def _run_rx_demo_k3s_import_rx_ui(run_id: str, stage_name: str) -> None:
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"test -s {shlex.quote(RX_DEMO_RX_UI_TAR)}",
+            f"k3s ctr images import {shlex.quote(RX_DEMO_RX_UI_TAR)}",
+            "k3s ctr images ls | grep -F 'rx-demo/rx-ui'",
+        ]
+    )
+    results = {}
+    for node in K3S_LIVE_NODES:
+        results[node["name"]] = run_remote_command(
+            host=node["host"],
+            user="root",
+            command=f"bash -lc {shlex.quote(script)}",
+            timeout=300,
+        )[-500:]
+    _set_stage(run_id, stage_name, "complete", "rx-ui image imported on both k3s nodes.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-1600:])
+
+
+def _run_rx_demo_k3s_apply_lab(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"for _ in $(seq 1 20); do test -d {shlex.quote(RX_DEMO_SHARED_SOURCE)} && break; sleep 2; done",
+            f"test -d {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "k3s kubectl apply -k k8s/overlays/lab",
+            "k3s kubectl -n rx-demo rollout restart deploy/rx-ui",
+            "k3s kubectl -n rx-demo rollout status deploy/rx-ui --timeout=240s",
+            "k3s kubectl -n rx-demo get pods -l app.kubernetes.io/name=rx-ui -o wide",
+        ]
+    )
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=420,
+    )
+    _set_stage(run_id, stage_name, "complete", "rx-ui rollout completed.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-ui-rollout-ready")
+
+
+def _run_rx_demo_k3s_smoke_ui(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = r"""
+set -euo pipefail
+node_port="$(k3s kubectl -n rx-demo get svc rx-ui -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}')"
+base="http://127.0.0.1:${node_port:-30080}"
+rx_id="RX-BKC-SMOKE"
+curl -fsS "$base/" | grep -F "Prescription Demo UI" >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d "{\"rxId\":\"${rx_id}\"}" "$base/lookup" | grep -F '"operation":"lookup"' >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d "{\"rxId\":\"${rx_id}\",\"approvedBy\":\"bkc.pipeline\",\"notes\":\"BKC smoke approve\"}" "$base/approve" | grep -F '"operation":"approve"' >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d "{\"rxId\":\"${rx_id}\",\"refillCount\":1}" "$base/refill" | grep -F '"operation":"refill"' >/dev/null
+printf 'rx-ui-routes-ok %s\n' "$base"
+"""
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=180,
+    )
+    _set_stage(run_id, stage_name, "complete", "Routed UI smoke checks passed.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-ui-routes-ok")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -2597,6 +2795,26 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "k3s-host-telemetry-validate":
             _run_k3s_host_telemetry_validate(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-source-check":
+            _run_rx_demo_k3s_source_check(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-build-rx-ui":
+            _run_rx_demo_k3s_build_rx_ui(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-import-rx-ui":
+            _run_rx_demo_k3s_import_rx_ui(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-apply-lab":
+            _run_rx_demo_k3s_apply_lab(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-smoke-ui":
+            _run_rx_demo_k3s_smoke_ui(run_id, stage_name)
             continue
 
         if kind == "wordpress-source-select":
