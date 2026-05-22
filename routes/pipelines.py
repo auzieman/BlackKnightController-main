@@ -183,6 +183,80 @@ def _run_tags(run: dict) -> list[str]:
     return sorted(tags)
 
 
+def _stage_targets(workflow: str, stage_name: str) -> list[str]:
+    workflow = (workflow or "").strip().lower()
+    stage = (stage_name or "").strip().lower()
+    if workflow == "rx-demo-k3s-app-refresh":
+        if "source" in stage:
+            return ["/mnt/swarm/shared/rx-demo"]
+        if "build" in stage:
+            return ["swarm1", "rx-demo/rx-ui:latest"]
+        if "import" in stage:
+            return ["kube1 containerd", "kube2 containerd"]
+        if "apply" in stage:
+            return ["rx-demo namespace", "rx-ui deployment"]
+        if "smoke" in stage:
+            return ["/lookup", "/approve", "/refill"]
+        if "verify" in stage:
+            return ["kube1", "kube2"]
+    if workflow in {"k3s-fedora-cluster", "k3s-host-telemetry"}:
+        if "k3s" in stage or "cluster" in stage or "verify" in stage:
+            return ["kube1", "kube2"]
+        if "loki" in stage or "logs" in stage:
+            return ["promtail", "Loki"]
+        if "telemetry" in stage or "cadvisor" in stage:
+            return ["Telegraf", "cAdvisor"]
+        if "loadgen" in stage:
+            return ["rx-demo loadgen"]
+    if workflow in {"fedora-template-deploy", "fedora-cloud-import", "wordpress-appliance-import"}:
+        if "proxmox" in stage or "clone" in stage or "import" in stage:
+            return ["Proxmox", "VM target"]
+        if "ssh" in stage or "boot" in stage:
+            return ["guest VM", "BKC SSH"]
+    if "build" in stage or "image" in stage:
+        return ["builder", "artifact"]
+    if "deploy" in stage or "apply" in stage:
+        return ["runtime", "service"]
+    if "health" in stage or "smoke" in stage or "verify" in stage:
+        return ["health check"]
+    if "repo" in stage or "source" in stage:
+        return ["source"]
+    return []
+
+
+def _pipeline_run_map(pipeline: dict | None, latest_run: dict | None) -> dict:
+    if not pipeline:
+        return {"run": None, "stages": []}
+    workflow = str(pipeline.get("workflow", ""))
+    pipeline_stage_names = [str(stage_name) for stage_name in pipeline.get("stages", [])]
+    run_stages = list((latest_run or {}).get("stages") or [])
+    if run_stages and pipeline_stage_names:
+        run_stage_names = {str(stage.get("name") or "") for stage in run_stages}
+        if not run_stage_names.intersection(pipeline_stage_names):
+            run_stages = []
+    if not run_stages:
+        run_stages = [
+            {"name": stage_name, "status": "planned", "detail": ""}
+            for stage_name in pipeline_stage_names
+        ]
+    action_names = list(pipeline.get("actions") or [])
+    stages = []
+    for idx, stage in enumerate(run_stages):
+        name = str(stage.get("name") or "")
+        status = str(stage.get("status") or "planned").strip().lower() or "planned"
+        stages.append(
+            {
+                "name": name,
+                "status": status,
+                "detail": str(stage.get("detail") or ""),
+                "updated_at": str(stage.get("updated_at") or ""),
+                "action": action_names[idx] if idx < len(action_names) else "",
+                "targets": _stage_targets(workflow, name),
+            }
+        )
+    return {"run": latest_run, "stages": stages}
+
+
 def _executor_source_files(workflow: str) -> list[str]:
     sources = [
         "/home/auzieman/Projects/BlackKnightController/services/action_catalog.py",
@@ -528,11 +602,13 @@ def pipelines():
     selected_pipeline = next((item for item in visible_pipelines if item.get("id") == selected_pipeline_id), None)
     if not selected_pipeline and visible_pipelines:
         selected_pipeline = visible_pipelines[0]
+    selected_latest = latest_runs_by_workflow.get(str(selected_pipeline.get("workflow", ""))) if selected_pipeline else None
 
     return render_template(
         "pipelines.html.j2",
         pipelines=visible_pipelines,
         selected_pipeline=selected_pipeline,
+        selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),
         runs=visible_runs[:12],
         latest_runs_by_workflow=latest_runs_by_workflow,
         supported_workflows=supported_workflows,

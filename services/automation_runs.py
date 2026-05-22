@@ -105,6 +105,16 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "scrape-validate",
             "dashboard-link",
         ]
+    if normalized == "rx-demo-k3s-app-refresh":
+        return [
+            "verify-k3s",
+            "source-check",
+            "build-rx-ui-image",
+            "import-rx-ui-image",
+            "apply-lab-overlay",
+            "smoke-ui-routes",
+            "dashboard-link",
+        ]
     if normalized == "wordpress-appliance-import":
         return ["source-select", "proxmox-clone", "boot", "ssh-validate"]
     if normalized == "blackknight-sync":

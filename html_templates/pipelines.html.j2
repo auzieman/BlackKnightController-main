@@ -106,6 +106,7 @@
 
                     <div class="tab-strip pipeline-tabs">
                         <a class="tab-link active" href="#pipeline-summary">Summary</a>
+                        <a class="tab-link" href="#pipeline-run-map">Run Map</a>
                         <a class="tab-link" href="#pipeline-stages">Stages</a>
                         <a class="tab-link" href="#pipeline-actions">Actions</a>
                         <a class="tab-link" href="#pipeline-runs">Runs</a>
@@ -136,6 +137,45 @@
                                     <p class="metric-copy">No run has been recorded for this lane yet.</p>
                                 {% endif %}
                             </div>
+                        </div>
+                    </section>
+
+                    <section id="pipeline-run-map" class="pipeline-console-section">
+                        <div class="pipeline-card-top">
+                            <div>
+                                <p class="eyebrow">Execution map</p>
+                                <h4>{{ selected_run_map.run.id[:8] if selected_run_map.run else 'Next run preview' }}</h4>
+                            </div>
+                            <span class="status-pill muted">{{ selected_run_map.stages|length }} stages</span>
+                        </div>
+                        <div class="pipeline-run-map">
+                            {% for stage in selected_run_map.stages %}
+                                <article class="run-map-stage status-{{ stage.status|lower|replace(' ', '-') }}">
+                                    <div class="run-map-stage-top">
+                                        <span>{{ loop.index }}</span>
+                                        <strong>{{ stage.name }}</strong>
+                                    </div>
+                                    <div class="run-map-state">
+                                        <span class="run-map-light"></span>
+                                        <span>{{ stage.status }}</span>
+                                    </div>
+                                    {% if stage.targets %}
+                                        <div class="run-map-targets">
+                                            {% for target in stage.targets %}
+                                                <span>{{ target }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    {% if stage.action %}
+                                        <a class="run-map-action" href="{{ url_for('resource_graph.resource_graph', resource='action:' ~ stage.action) }}">{{ stage.action }}</a>
+                                    {% endif %}
+                                    {% if stage.detail %}
+                                        <p>{{ stage.detail }}</p>
+                                    {% endif %}
+                                </article>
+                            {% else %}
+                                <div class="workflow-empty">No stages are available for this lane yet.</div>
+                            {% endfor %}
                         </div>
                     </section>
 
