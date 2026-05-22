@@ -9,7 +9,8 @@
 </head>
 <body>
     <div class="starfield"></div>
-    <div class="shell {% if request.endpoint == 'auth.login' %}shell-login{% endif %}">
+    {% set workspace_wide = request.endpoint and (request.endpoint.startswith('pipelines.') or request.endpoint == 'inventory_console.inventory_console' or request.endpoint == 'resource_graph.resource_graph') %}
+    <div class="shell {% if request.endpoint == 'auth.login' %}shell-login{% endif %} {% if workspace_wide %}shell-workspace{% endif %}">
         {% if request.endpoint != 'auth.login' %}
         <aside class="app-rail">
             <a class="rail-mark" href="{{ url_for('index.index') }}" title="Overview">BKC</a>

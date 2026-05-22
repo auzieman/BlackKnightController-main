@@ -258,7 +258,20 @@ a {
   padding: 20px 24px 32px;
   min-width: 0;
   width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto;
+}
+
+.shell-workspace {
+  grid-template-columns: 58px minmax(0, 1fr);
+}
+
+.shell-workspace .sidebar {
+  display: none;
+}
+
+.shell-workspace .main {
+  padding-left: 28px;
+  padding-right: 28px;
 }
 
 .workbench-ribbon,
@@ -551,7 +564,7 @@ a {
 
 .pipeline-console-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   width: 100%;
