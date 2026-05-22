@@ -257,6 +257,8 @@ a {
 .main {
   padding: 20px 24px 32px;
   min-width: 0;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .workbench-ribbon,
@@ -549,14 +551,16 @@ a {
 
 .pipeline-console-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 260px) minmax(680px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
+  width: 100%;
 }
 
 .pipeline-console-tree,
 .pipeline-console-main {
   min-width: 0;
+  width: 100%;
 }
 
 .pipeline-console-tree {
@@ -672,6 +676,7 @@ a {
 
 .pipeline-selected-card {
   padding: 20px;
+  width: 100%;
 }
 
 .pipeline-tabs {
@@ -686,7 +691,7 @@ a {
 
 .pipeline-summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 

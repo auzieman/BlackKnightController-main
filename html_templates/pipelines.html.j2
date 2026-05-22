@@ -155,7 +155,7 @@
                         <p class="eyebrow">Action bricks</p>
                         <div class="pipeline-stage-row">
                             {% for action in selected_pipeline.actions %}
-                                <a class="pipeline-stage-chip compact-chip" href="{{ url_for('resource_graph.resource_graph', kind='action', resource='action:' ~ action) }}">{{ action }}</a>
+                                <a class="pipeline-stage-chip compact-chip" href="{{ url_for('resource_graph.resource_graph', resource='action:' ~ action) }}">{{ action }}</a>
                             {% else %}
                                 <span class="pipeline-stage-chip compact-chip">action catalog pending</span>
                             {% endfor %}
