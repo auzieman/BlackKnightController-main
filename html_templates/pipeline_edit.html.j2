@@ -142,6 +142,9 @@
                 <p class="metric-copy">{{ stage.active }}</p>
                 <div class="pipeline-run-meta">
                     <span class="status-pill muted">{{ stage.transport }}</span>
+                    {% if stage.action %}
+                        <span class="status-pill muted">{{ stage.action }}</span>
+                    {% endif %}
                     <span class="status-pill muted">{{ stage.target or stage.kind or 'internal' }}</span>
                     {% if stage.timeout %}
                         <span class="status-pill muted">{{ stage.timeout }}s timeout</span>
@@ -150,10 +153,18 @@
                         <span class="status-pill muted">notes saved</span>
                     {% endif %}
                 </div>
+                {% if stage.complete %}
+                    <p class="metric-copy">Success: {{ stage.complete }}</p>
+                {% endif %}
                 {% if stage.command %}
                     <pre class="terminal-log compact-terminal">{{ stage.command }}</pre>
                 {% elif stage.message %}
                     <pre class="terminal-log compact-terminal">{{ stage.message }}</pre>
+                {% elif stage.kind %}
+                    <pre class="terminal-log compact-terminal">handler: {{ stage.kind }}
+action: {{ stage.action or 'internal' }}
+transport: {{ stage.transport }}
+timeout: {{ stage.timeout or 'default' }}</pre>
                 {% endif %}
             </article>
         {% else %}

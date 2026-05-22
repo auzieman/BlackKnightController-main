@@ -293,6 +293,15 @@ def _executor_source_files(workflow: str) -> list[str]:
                 "/home/auzieman/Projects/rx-demo/tools/pipelines/bkc-k3s-host-telemetry.md",
             ]
         )
+    elif workflow == "rx-demo-k3s-app-refresh":
+        sources.extend(
+            [
+                "/home/auzieman/Projects/BlackKnightController/docs/k3s-deployment-linkage.md",
+                "/home/auzieman/Projects/rx-demo/k8s/overlays/lab/kustomization.yaml",
+                "/home/auzieman/Projects/rx-demo/k8s/base/apps.yaml",
+                "/home/auzieman/Projects/rx-demo/src/rx-ui/Rx.Ui/Pages/Index.cshtml.cs",
+            ]
+        )
     elif workflow == "fedora-workstation-spin":
         sources.extend(
             [
@@ -489,6 +498,56 @@ def _stage_logic_map(workflow: str) -> dict[str, dict]:
         for stage in workflow_stage_definitions(workflow)
         if str(stage.get("name", "")).strip()
     }
+
+
+def _default_stage_definition(pipeline: dict, stage_name: str, logic: dict | None) -> str:
+    workflow = str(pipeline.get("workflow", ""))
+    lines = [
+        f"stage: {stage_name}",
+        f"workflow: {workflow}",
+    ]
+    if not logic:
+        lines.extend(
+            [
+                "state: catalog-only",
+                "intent: define action, transport, target, inputs, validation, and rollback before wiring executor logic",
+            ]
+        )
+        return "\n".join(lines)
+
+    fields = [
+        ("transport", logic.get("transport")),
+        ("action", logic.get("action")),
+        ("handler", logic.get("kind")),
+        ("target", logic.get("target")),
+        ("timeout_seconds", logic.get("timeout")),
+    ]
+    for key, value in fields:
+        if value not in (None, ""):
+            lines.append(f"{key}: {value}")
+
+    if logic.get("active"):
+        lines.append(f"run: {logic['active']}")
+    if logic.get("complete"):
+        lines.append(f"success: {logic['complete']}")
+    if logic.get("message"):
+        lines.append(f"operator_message: {logic['message']}")
+    if logic.get("command"):
+        lines.extend(["command: |", *[f"  {line}" for line in str(logic["command"]).splitlines()]])
+    lines.append("validation: use stage completion, run events, and the run map target chips")
+    if str(logic.get("transport") or "").startswith("bkc-ssh"):
+        lines.append("rollback: rerun or repair through BKC SSH against the same target")
+    elif str(logic.get("transport") or "") == "ssh-manager":
+        lines.append("rollback: inspect manager-side artifacts, then rerun this stage or queue a redeploy")
+    return "\n".join(lines)
+
+
+def _default_stage_notes(stage_name: str, logic: dict | None) -> str:
+    if not logic:
+        return "Catalog-only stage. Add the desired action contract here before executor wiring."
+    action = str(logic.get("action") or logic.get("kind") or "stage action")
+    transport = str(logic.get("transport") or "internal")
+    return f"{stage_name} uses {action} over {transport}. Inputs, expected output, and rollback notes can be refined here."
 
 
 @pipelines_blueprint.route("/pipelines", methods=["GET", "POST"])
@@ -795,5 +854,7 @@ def pipeline_stage_edit(pipeline_id: str, stage_name: str):
         supported=workflow_is_supported(str(pipeline.get("workflow", ""))),
         logic=logic,
         saved=saved,
+        default_operator_notes=_default_stage_notes(stage_name, logic),
+        default_draft_definition=_default_stage_definition(pipeline, stage_name, logic),
         executor_source_files=_executor_source_files(str(pipeline.get("workflow", ""))),
     )

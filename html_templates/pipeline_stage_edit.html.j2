@@ -22,8 +22,22 @@
             <p><strong>Repo:</strong> {{ pipeline.repo }}</p>
             <p><strong>Stage:</strong> {{ stage_name }}</p>
             <p><strong>Transport:</strong> {{ logic.transport if logic else 'not wired' }}</p>
-            <p><strong>Target:</strong> {{ logic.target if logic else 'n/a' }}</p>
+            <p><strong>Action:</strong> {{ logic.action or logic.kind if logic else 'n/a' }}</p>
+            <p><strong>Target:</strong> {{ logic.target or logic.kind if logic else 'n/a' }}</p>
         </div>
+    </section>
+
+    <section class="pipeline-card top-gap">
+        <div class="pipeline-card-top">
+            <div>
+                <p class="eyebrow">Actionable contract</p>
+                <h3>Current brick definition</h3>
+            </div>
+            {% if logic %}
+                <span class="status-pill muted">{{ logic.action or logic.kind or 'wired handler' }}</span>
+            {% endif %}
+        </div>
+        <pre class="terminal-log compact-terminal">{{ saved.draft_definition or default_draft_definition }}</pre>
     </section>
 
     <section class="pipeline-card top-gap">
@@ -49,11 +63,11 @@
             </label>
             <label class="wide">
                 Operator Notes
-                <textarea name="operator_notes" rows="6" placeholder="Intent, caveats, inputs, expected outputs, rollback notes.">{{ saved.operator_notes or '' }}</textarea>
+                <textarea name="operator_notes" rows="6" placeholder="Intent, caveats, inputs, expected outputs, rollback notes.">{{ saved.operator_notes or default_operator_notes }}</textarea>
             </label>
             <label class="wide">
                 Draft Definition
-                <textarea name="draft_definition" rows="12" placeholder="Simple text block for a future UI-driven stage definition.">{{ saved.draft_definition or '' }}</textarea>
+                <textarea name="draft_definition" rows="12" placeholder="Simple text block for a future UI-driven stage definition.">{{ saved.draft_definition or default_draft_definition }}</textarea>
             </label>
             <div class="pipeline-card-actions">
                 <button class="button" type="submit">Save Stage Notes</button>
