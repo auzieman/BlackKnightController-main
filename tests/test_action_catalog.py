@@ -119,6 +119,29 @@ def test_installer_package_bot_runs_on_slow_queue_with_guarded_runner():
     assert "git push" not in commands
 
 
+def test_trixie_package_intake_is_bounded_and_failure_tolerant():
+    pipeline = pipeline_by_id("auzix-trixie-package-intake")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "builder-prepare",
+        "package-intake",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
+    ]
+
+    stages = workflow_stage_definitions("auzix-trixie-package-intake")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "docker/trixie-builder/Dockerfile" in commands
+    assert "run-auzix-trixie-intake.sh" in commands
+    assert "profiles/packages/auzix-trixie-user-apps.packages" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+    assert "git commit" not in commands
+    assert "git push" not in commands
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(

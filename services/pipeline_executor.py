@@ -842,6 +842,105 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "AuziX installer package bot built and published the repository.",
     },
+    "auzix-trixie-package-intake": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the Trixie package profile and intake scripts.",
+                "complete": "Trixie package intake source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s profiles/packages/auzix-trixie-user-apps.packages && "
+                    "test -s docker/trixie-builder/Dockerfile && "
+                    "test -x scripts/run-auzix-trixie-intake.sh && "
+                    "test -x scripts/test-auzix-trixie-intake.sh && "
+                    "grep -Fx 823a3d6 .auzix-commit >/dev/null && "
+                    "./scripts/test-auzix-trixie-intake.sh'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "builder-prepare",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Preparing the dedicated Debian Trixie package intake image.",
+                "complete": "Debian Trixie package intake image is ready.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "docker build --pull=false "
+                    "-f /mnt/swarm/AuziX/src/docker/trixie-builder/Dockerfile "
+                    "-t auzix/trixie-builder:local /mnt/swarm/AuziX/src'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "package-intake",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Attempting the Trixie user application profile sequentially.",
+                "complete": "Trixie package intake attempts completed.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/trixie-builder:local bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "./scripts/run-auzix-trixie-intake.sh'\"'\"''"
+                ),
+                "timeout": 21600,
+            },
+            {
+                "name": "repository-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Rebuilding the AuziX repository with successful Trixie intake receipts.",
+                "complete": "AuziX repository includes successful Trixie intake packages.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "repository-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing successful Trixie intake packages.",
+                "complete": "Successful Trixie intake packages were published.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "./scripts/publish-auzix-package-repo.sh "
+                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
+                    "/srv/http/auzix/repo'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "repository-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the Trixie intake report and served compatibility packages.",
+                "complete": "Trixie intake report and published packages are available.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "report=out/package-bot/trixie-user-apps.report.json && "
+                    "jq -e '\"'\"'.format == \"auzix-trixie-intake-report-v1\" "
+                    "and .complete > 0'\"'\"' \"$report\" >/dev/null && "
+                    "curl -fsS http://192.168.1.10/auzix/repo/index.json | "
+                    "jq -e '\"'\"'any(.packages[]; (.name | startswith(\"Debian.\")))'\"'\"' >/dev/null && "
+                    "jq '\"'\"'{status, complete, failed}'\"'\"' \"$report\"'"
+                ),
+                "timeout": 180,
+            },
+        ],
+        "complete_message": "AuziX Trixie package intake completed and successful packages were published.",
+    },
     "monitoring-stack": {
         "supports_undeploy": True,
         "deploy_stage": "stack-deploy",
