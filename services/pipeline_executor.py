@@ -727,7 +727,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s packages/package-build-queue.schema.json && "
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
-                    "grep -Fx b45af3a .auzix-commit >/dev/null && "
+                    "grep -Fx 424ed51 .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
