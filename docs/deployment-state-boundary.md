@@ -43,8 +43,9 @@ The source revision is recorded in:
 
 `/srv/nfs/swarm/AuziX/src/.auzix-commit`
 
-The workflow deploys the startup ownership repair and Midori wrapper to VM130
-at `192.168.1.164`, then validates user-state writability, DNS, and HTTPS.
+The workflow deploys the startup ownership repair, Midori wrapper, and NSS
+trust module to VM130 at `192.168.1.163`, then validates entropy-device access,
+user-state writability, DNS, and HTTPS.
 Each successful deployment writes a commit marker below
 `/System/State/deployments` on the target.
 

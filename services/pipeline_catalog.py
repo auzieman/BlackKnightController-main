@@ -318,7 +318,7 @@ BUILTIN_PIPELINES = [
             "runtime-deploy",
             "network-validate",
         ],
-        "notes": "Repeatable SSH deployment for root@192.168.1.164. The lane consumes the generated AuzixRoot on the shared AuziX build workspace and records the deployed Git commit in /System/State/deployments.",
+        "notes": "Repeatable SSH deployment for root@192.168.1.163. The lane consumes the generated AuzixRoot on the shared AuziX build workspace and records the deployed Git commit in /System/State/deployments.",
         "editable": True,
         "links": [
             {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},

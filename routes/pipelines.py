@@ -193,7 +193,7 @@ def _stage_targets(workflow: str, stage_name: str) -> list[str]:
     if workflow == "auzix-vm130-deploy":
         if "source" in stage:
             return ["/srv/nfs/swarm/AuziX", "generated AuzixRoot"]
-        return ["VMID 130", "192.168.1.164"]
+        return ["VMID 130", "192.168.1.163"]
     if workflow == "rx-demo-k3s-app-refresh":
         if "source" in stage:
             return ["/mnt/swarm/shared/rx-demo"]

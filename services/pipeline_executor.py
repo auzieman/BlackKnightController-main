@@ -6,7 +6,7 @@ import re
 import shlex
 import socket
 import time
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from pathlib import Path
 from urllib.parse import quote
 
@@ -28,7 +28,7 @@ from services.integration_store import (
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.proxmox import ProxmoxClient, load_proxmox_config
-from services.remote_ops import run_remote_command
+from services.remote_ops import run_remote_command, upload_remote_bytes
 from services.rules_store import load_rules, save_rules
 from services.ssh_keys import read_key_pair
 
@@ -56,7 +56,7 @@ K3S_NFS_MOUNTS = [
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
-AUZIX_VM130_HOST = "192.168.1.164"
+AUZIX_VM130_HOST = "192.168.1.163"
 AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
 
 
@@ -528,7 +528,9 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc '"
                     f"test -x {AUZIX_VM130_SOURCE_ROOT}/System/Boot/StartSequence && "
+                    f"test -s {AUZIX_VM130_SOURCE_ROOT}/System/Settings/mdev.conf && "
                     f"test -x {AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Commands/midori && "
+                    f"test -s {AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Resources/midori/libnssckbi.so && "
                     "test -s /srv/nfs/swarm/AuziX/src/.auzix-commit && "
                     "cat /srv/nfs/swarm/AuziX/src/.auzix-commit && "
                     "echo auzix-vm130-source-ready'"
@@ -2701,13 +2703,29 @@ def _controller_file_b64(settings: dict[str, str], path: str) -> str:
 
 
 def _run_auzix_vm130_deploy(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
-    start_sequence = _controller_file_b64(
-        settings,
-        f"{AUZIX_VM130_SOURCE_ROOT}/System/Boot/StartSequence",
+    start_sequence = b64decode(
+        _controller_file_b64(
+            settings,
+            f"{AUZIX_VM130_SOURCE_ROOT}/System/Boot/StartSequence",
+        )
     )
-    midori_wrapper = _controller_file_b64(
-        settings,
-        f"{AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Commands/midori",
+    mdev_config = b64decode(
+        _controller_file_b64(
+            settings,
+            f"{AUZIX_VM130_SOURCE_ROOT}/System/Settings/mdev.conf",
+        )
+    )
+    midori_wrapper = b64decode(
+        _controller_file_b64(
+            settings,
+            f"{AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Commands/midori",
+        )
+    )
+    midori_nss_trust = b64decode(
+        _controller_file_b64(
+            settings,
+            f"{AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Resources/midori/libnssckbi.so",
+        )
     )
     commit = run_remote_command(
         host=settings["controller_host"],
@@ -2716,24 +2734,48 @@ def _run_auzix_vm130_deploy(run_id: str, stage_name: str, settings: dict[str, st
         command="cat /srv/nfs/swarm/AuziX/src/.auzix-commit",
         timeout=30,
     ).strip()
+    remote_payloads = {
+        f"/Work/Temp/StartSequence.{commit}": start_sequence,
+        f"/Work/Temp/mdev.conf.{commit}": mdev_config,
+        f"/Work/Temp/midori.{commit}": midori_wrapper,
+        f"/Work/Temp/libnssckbi.so.{commit}": midori_nss_trust,
+    }
+    run_remote_command(
+        host=AUZIX_VM130_HOST,
+        user="root",
+        command="/Programs/BusyBox/1.36.1/Commands/busybox mkdir -p /Work/Temp /System/State/deployments",
+        timeout=30,
+    )
+    for remote_path, content in remote_payloads.items():
+        upload_remote_bytes(
+            host=AUZIX_VM130_HOST,
+            user="root",
+            remote_path=remote_path,
+            content=content,
+            mode=0o755,
+            timeout=60,
+        )
     script = "\n".join(
         [
             "set -eu",
             "BB=/Programs/BusyBox/1.36.1/Commands/busybox",
-            '"${BB}" mkdir -p /Work/Temp /System/State/deployments',
-            f"printf %s {shlex.quote(start_sequence)} | \"${{BB}}\" base64 -d >/Work/Temp/StartSequence.{commit}",
-            f"printf %s {shlex.quote(midori_wrapper)} | \"${{BB}}\" base64 -d >/Work/Temp/midori.{commit}",
             f'[ -f /System/Boot/StartSequence.pre-{commit} ] || "${{BB}}" cp -p /System/Boot/StartSequence /System/Boot/StartSequence.pre-{commit}',
+            f'[ -f /System/Settings/mdev.conf.pre-{commit} ] || "${{BB}}" cp -p /System/Settings/mdev.conf /System/Settings/mdev.conf.pre-{commit}',
             f'[ -f /Programs/Midori/11.8/Commands/midori.pre-{commit} ] || "${{BB}}" cp -p /Programs/Midori/11.8/Commands/midori /Programs/Midori/11.8/Commands/midori.pre-{commit}',
             f'"${{BB}}" cp -f /Work/Temp/StartSequence.{commit} /System/Boot/StartSequence',
             '"${BB}" chmod 0755 /System/Boot/StartSequence',
+            f'"${{BB}}" cp -f /Work/Temp/mdev.conf.{commit} /System/Settings/mdev.conf',
+            '"${BB}" chmod 0644 /System/Settings/mdev.conf',
             f'"${{BB}}" cp -f /Work/Temp/midori.{commit} /Programs/Midori/11.8/Commands/midori',
             '"${BB}" chmod 0755 /Programs/Midori/11.8/Commands/midori',
+            f'"${{BB}}" cp -f /Work/Temp/libnssckbi.so.{commit} /Programs/Midori/11.8/Resources/midori/libnssckbi.so',
+            '"${BB}" chmod 0755 /Programs/Midori/11.8/Resources/midori/libnssckbi.so',
+            '"${BB}" chmod 0666 /dev/random /dev/urandom',
             "/System/Tools/repair-e-state /Users/auzix auzix",
             '"${BB}" chown -R 1000:1000 /Users/auzix/.cache /Users/auzix/.config /Users/auzix/.local',
             '"${BB}" chmod -R u+rwX /Users/auzix/.cache /Users/auzix/.config /Users/auzix/.local',
             f"printf 'source=github.com/auzieman/AuziX\\ncommit={commit}\\ntarget=vmid130\\n' >/System/State/deployments/auzix-{commit}.txt",
-            f'"${{BB}}" rm -f /Work/Temp/StartSequence.{commit} /Work/Temp/midori.{commit}',
+            f'"${{BB}}" rm -f /Work/Temp/StartSequence.{commit} /Work/Temp/mdev.conf.{commit} /Work/Temp/midori.{commit} /Work/Temp/libnssckbi.so.{commit}',
             f"echo auzix-vm130-deployed commit={commit}",
         ]
     )
@@ -2754,8 +2796,12 @@ def _run_auzix_vm130_validate(run_id: str, stage_name: str) -> None:
             "set -eu",
             "BB=/Programs/BusyBox/1.36.1/Commands/busybox",
             'grep -F "chown -R 1000:1000" /System/Boot/StartSequence >/dev/null',
+            'grep -E "^random[[:space:]]+0:0[[:space:]]+0666$" /System/Settings/mdev.conf >/dev/null',
+            'grep -E "^urandom[[:space:]]+0:0[[:space:]]+0666$" /System/Settings/mdev.conf >/dev/null',
             'grep -F "Midori profile directories are not writable" /Programs/Midori/current/Commands/midori >/dev/null',
+            'test -s /Programs/Midori/current/Resources/midori/libnssckbi.so',
             '"${BB}" su auzix -c "test -w /Users/auzix/.cache && test -w /Users/auzix/.config && test -w /Users/auzix/.local"',
+            '"${BB}" su auzix -c "\\"${BB}\\" dd if=/dev/urandom of=/dev/null bs=1 count=1" >/dev/null 2>&1',
             '"${BB}" nslookup example.com >/dev/null',
             "/Programs/Curl/current/Commands/curl -fsS --max-time 15 https://example.com >/dev/null",
             "echo auzix-vm130-network-contract=pass",

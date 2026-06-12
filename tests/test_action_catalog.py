@@ -49,6 +49,10 @@ def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     assert kinds["runtime-deploy"] == "auzix-vm130-deploy"
     assert kinds["network-validate"] == "auzix-vm130-validate"
 
+    source_verify = next(stage for stage in stages if stage["name"] == "source-verify")
+    assert "libnssckbi.so" in source_verify["command"]
+    assert "mdev.conf" in source_verify["command"]
+
 
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
