@@ -581,30 +581,34 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "installer-build",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "ssh-manager",
+                "target": "manager",
                 "active": "Packaging Lua, dialog, and the AuziX installer into the staged strict root.",
                 "complete": "AuziX installer runtime and frontend contract packaged.",
                 "command": (
                     "bash -lc '"
-                    "cd /srv/nfs/swarm/AuziX/src && "
-                    "./scripts/build-auzix-package-tools-package.sh && "
-                    "./scripts/build-auzix-installer-package.sh'"
+                    "mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs 192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "docker image inspect auzix/installer-builder:local >/dev/null && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/installer-builder:local bash -lc "
+                    "\"./scripts/build-auzix-package-tools-package.sh && ./scripts/build-auzix-installer-package.sh\"'"
                 ),
                 "timeout": 900,
             },
             {
                 "name": "contract-test",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "ssh-manager",
+                "target": "manager",
                 "active": "Testing plan validation and guarded execution with a non-destructive fake disk executor.",
                 "complete": "Installer validation and guarded execution contract passed.",
                 "command": (
                     "bash -lc '"
-                    "cd /srv/nfs/swarm/AuziX/src && "
-                    "./scripts/test-auzix-installer.sh && "
-                    "jq -e '.format == \"auzix-install-plan-v1\"' installer/plans/default.json >/dev/null && "
-                    "jq -e '.format == \"auzix-installer-questions-v1\"' installer/questions.json >/dev/null && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/installer-builder:local bash -lc "
+                    "\"./scripts/test-auzix-installer.sh && "
+                    "grep -F auzix-install-plan-v1 installer/plans/default.json >/dev/null && "
+                    "grep -F auzix-installer-questions-v1 installer/questions.json >/dev/null\" && "
                     "echo auzix-installer-contract-pass'"
                 ),
                 "timeout": 180,
