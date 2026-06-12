@@ -762,8 +762,10 @@ WORKFLOW_DEFINITIONS = {
                     "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
                     "docker run --rm "
                     "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
-                    "auzix/builder:local ./scripts/run-auzix-package-bot.sh "
-                    "packages/installer-ui.queue.json installer-ui-core'"
+                    "auzix/builder:local bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "./scripts/run-auzix-package-bot.sh "
+                    "packages/installer-ui.queue.json installer-ui-core'\"'\"''"
                 ),
                 "timeout": 7200,
             },

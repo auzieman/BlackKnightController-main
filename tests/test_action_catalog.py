@@ -106,6 +106,7 @@ def test_installer_package_bot_runs_on_slow_queue_with_guarded_runner():
     assert "auzix/builder:local" in commands
     assert "docker image inspect auzix/builder:local" in commands
     assert "docker build --pull=false" in commands
+    assert "apt-get update" in commands
     assert "git commit" not in commands
     assert "git push" not in commands
 
