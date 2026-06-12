@@ -712,6 +712,82 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "Lab cluster storage expansion pipeline completed.",
     },
+    "auzix-installer-package-bot": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the staged installer package queue and bot entry points.",
+                "complete": "Installer package queue source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s packages/installer-ui.queue.json && "
+                    "test -s packages/package-build-queue.schema.json && "
+                    "test -x scripts/run-auzix-package-bot.sh && "
+                    "test -x scripts/test-auzix-package-bot.sh && "
+                    "grep -Fx eb00794 .auzix-commit >/dev/null && "
+                    "echo auzix-package-bot-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "queue-contract",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Validating package states, script allowlisting, and required installer UI entries.",
+                "complete": "Installer package queue contract passed.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "{ docker image inspect auzix/installer-builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/installer-builder/Dockerfile "
+                    "-t auzix/installer-builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/installer-builder:local ./scripts/test-auzix-package-bot.sh'"
+                ),
+                "timeout": 900,
+            },
+            {
+                "name": "package-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building the installer UI package batch on the slow worker.",
+                "complete": "Installer UI package batch completed.",
+                "command": (
+                    "bash -lc '{ docker image inspect auzix/builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/builder/Dockerfile "
+                    "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/run-auzix-package-bot.sh "
+                    "packages/installer-ui.queue.json installer-ui-core'"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "artifact-report",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying package receipts and the machine-readable batch report.",
+                "complete": "Installer UI package receipts and report are available.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "report=out/package-bot/installer-ui-core.report.json && "
+                    "jq -e '\"'\"'.format == \"auzix-package-build-report-v1\" "
+                    "and .status == \"complete\" and (.results | length == 6)'\"'\"' \"$report\" >/dev/null && "
+                    "for package in AuzixPackageTools AuzixInstaller Xorg Enlightenment Terminology LightDM; do "
+                    "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
+                    "-name \"$package-*.auzix.json\" -print -quit | grep -q .; "
+                    "done && jq . \"$report\"'"
+                ),
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "AuziX installer package bot pipeline completed.",
+    },
     "monitoring-stack": {
         "supports_undeploy": True,
         "deploy_stage": "stack-deploy",

@@ -378,6 +378,22 @@ BUILTIN_PIPELINES = [
         "tags": ["lab", "storage", "swarm", "k3s", "lvm"],
     },
     {
+        "id": "auzix-installer-package-bot",
+        "name": "AuziX Installer Package Bot",
+        "repo": "AuziX",
+        "workflow": "auzix-installer-package-bot",
+        "description": "Build the installer UI package batch sequentially on the bounded BKC slow worker.",
+        "resource_class": "slow",
+        "stages": ["source-verify", "queue-contract", "package-build", "artifact-report"],
+        "notes": "Consumes packages/installer-ui.queue.json, runs only allowlisted package scripts, stops on failure, and publishes a JSON build report without committing generated artifacts.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Package Bot Runs", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-installer-package-bot"},
+        ],
+        "tags": ["auzix", "installer", "packages", "build", "slow-worker"],
+    },
+    {
         "id": "monitoring-stack",
         "name": "Monitoring Bring-Up",
         "repo": "lab/ns1/ansible",

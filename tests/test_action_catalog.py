@@ -88,6 +88,28 @@ def test_cluster_storage_pipeline_is_idempotent_and_retains_reserve():
     assert "192.168.1.59" in commands
 
 
+def test_installer_package_bot_runs_on_slow_queue_with_guarded_runner():
+    pipeline = pipeline_by_id("auzix-installer-package-bot")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "queue-contract",
+        "package-build",
+        "artifact-report",
+    ]
+
+    stages = workflow_stage_definitions("auzix-installer-package-bot")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "run-auzix-package-bot.sh" in commands
+    assert "installer-ui.queue.json" in commands
+    assert "auzix/builder:local" in commands
+    assert "docker image inspect auzix/builder:local" in commands
+    assert "docker build --pull=false" in commands
+    assert "git commit" not in commands
+    assert "git push" not in commands
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(
