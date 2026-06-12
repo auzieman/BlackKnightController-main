@@ -59,6 +59,38 @@ services:
       - ./keys:/app/keys
     restart: unless-stopped
 
+  bkc-slow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blackknightcontroller-slow-worker
+    command: ["python", "bkc_worker.py"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      bkc:
+        condition: service_started
+    environment:
+      BKC_JOB_QUEUE_URL: redis://redis:6379/2
+      BKC_WORKER_QUEUES: bkc-slow
+      BKC_RATELIMIT_STORAGE_URI: redis://redis:6379/0
+      FLASK_ENV: development
+      DOCKER_HOST: ssh://root@swarm1.lab.auzietek.com
+      KUBECONFIG: /app/runtime/kube/config
+    volumes:
+      - ./dictionaries:/app/dictionaries
+      - ./file_templates:/app/file_templates
+      - ./keys:/app/keys
+      - ./keys/bkc_id_rsa:/root/.ssh/id_rsa:ro
+      - ./docker/bkc/known_hosts:/root/.ssh/known_hosts:ro
+      - ${HOME}/.kube/config:/app/runtime/kube/config:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
   # Optional edge: HTTP reverse proxy with security headers (map 8080:80 or 80:80 on the host).
   # Start with: docker compose --profile tls up --build
   caddy:

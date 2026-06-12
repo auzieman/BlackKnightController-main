@@ -8,7 +8,7 @@ from services import bkc_db
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
 from services.automation_runs import get_run, load_runs
 from services.integration_store import load_proxmox_snapshot
-from services.job_queue import enqueue_job, job_queue_enabled
+from services.job_queue import SLOW_QUEUE_NAME, enqueue_job, job_queue_enabled
 from services.pipeline_catalog import (
     create_custom_pipeline,
     demo_pipelines,
@@ -58,6 +58,11 @@ def _stage_summary(run: dict) -> dict:
 def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | None, user_id: int) -> dict:
     action_mode = str(run.get("extra", {}).get("action_mode", "deploy"))
     timeout = workflow_job_timeout(str(run.get("workflow", "")), action_mode=action_mode)
+    queue_name = (
+        SLOW_QUEUE_NAME
+        if str(run.get("extra", {}).get("resource_class", "")).strip().lower() == "slow"
+        else "bkc"
+    )
     if job_queue_enabled():
         try:
             job = enqueue_job(
@@ -70,6 +75,7 @@ def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | 
                     remote_ip,
                 ),
                 job_timeout=timeout,
+                queue_name=queue_name,
                 meta={
                     "kind": "automation",
                     "run_id": run["id"],
@@ -77,6 +83,7 @@ def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | 
                     "repo": run["repo"],
                     "workflow": run["workflow"],
                     "job_timeout": timeout,
+                    "queue_name": queue_name,
                 },
             )
             return mark_run_queued(run["id"], job.id) or run
@@ -589,6 +596,9 @@ def pipelines():
             return redirect(url_for("pipelines.pipelines"))
 
         extra = {"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]}
+        resource_class = str(pipeline.get("resource_class", "")).strip().lower()
+        if resource_class:
+            extra["resource_class"] = resource_class
         if str(pipeline.get("workflow", "")).strip().lower() == "fedora-cosmic-postinstall":
             target_host = request.form.get("target_host", "").strip()
             target_name = request.form.get("target_name", "").strip()

@@ -8,11 +8,19 @@ Example (Compose): command is set on the bkc-worker service.
 
 from __future__ import annotations
 
+import os
+
 import services.job_tasks  # noqa: F401 — ensure task modules load
 from redis import Redis
 from rq import Connection, Worker
 from services import bkc_db
 from services.job_queue import QUEUE_NAME, job_queue_url
+
+
+def worker_queue_names() -> list[str]:
+    configured = os.environ.get("BKC_WORKER_QUEUES", QUEUE_NAME)
+    names = [name.strip() for name in configured.split(",") if name.strip()]
+    return names or [QUEUE_NAME]
 
 
 def main() -> None:
@@ -22,7 +30,7 @@ def main() -> None:
     bkc_db.init_db()
     redis = Redis.from_url(url)
     with Connection(redis):
-        Worker([QUEUE_NAME]).work(with_scheduler=False)
+        Worker(worker_queue_names()).work(with_scheduler=False)
 
 
 if __name__ == "__main__":

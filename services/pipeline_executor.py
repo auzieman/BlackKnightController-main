@@ -637,6 +637,81 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "AuziX installer foundation pipeline completed.",
     },
+    "lab-cluster-storage": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "storage-preflight",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Checking root LVM layout and free extents on both clusters.",
+                "complete": "All cluster guests have LVM-backed roots and sufficient capacity.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "for host in swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com "
+                    "192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host "
+                    "\"findmnt -n -o SOURCE /; lvs --noheadings -o lv_size; "
+                    "vgs --noheadings --units g -o vg_free\"; "
+                    "done'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "swarm-grow",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Growing Swarm root filesystems to 50 GiB where needed.",
+                "complete": "Swarm root filesystems meet the 50 GiB target.",
+                "command": (
+                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
+                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "lv=$(lvs --noheadings -o lv_path | xargs); "
+                    "bytes=$(findmnt -bn -o SIZE /); "
+                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    "df -hT /'\"'\"'; done'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "k3s-grow",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Growing k3s root filesystems to 50 GiB where needed.",
+                "complete": "k3s root filesystems meet the 50 GiB target.",
+                "command": (
+                    "bash -lc 'set -e; for host in 192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "lv=$(lvs --noheadings -o lv_path | xargs); "
+                    "bytes=$(findmnt -bn -o SIZE /); "
+                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    "df -hT /'\"'\"'; done'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "storage-verify",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Verifying root capacity and retained VG reserve.",
+                "complete": "Cluster storage expansion contract passed.",
+                "command": (
+                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
+                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com 192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "bytes=$(findmnt -bn -o SIZE /); [ \"$bytes\" -ge 53687091200 ]; "
+                    "df -hT /; vgs --noheadings -o vg_name,vg_free'\"'\"'; done'"
+                ),
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "Lab cluster storage expansion pipeline completed.",
+    },
     "monitoring-stack": {
         "supports_undeploy": True,
         "deploy_stage": "stack-deploy",

@@ -339,6 +339,7 @@ BUILTIN_PIPELINES = [
         "repo": "AuziX",
         "workflow": "auzix-installer-foundation",
         "description": "Build and validate the Lua installer engine, dialog TUI, JSON plan contract, and graphical frontend protocol from the staged AuziX source.",
+        "resource_class": "slow",
         "stages": [
             "source-verify",
             "installer-build",
@@ -359,6 +360,22 @@ BUILTIN_PIPELINES = [
             },
         ],
         "tags": ["auzix", "installer", "lua", "dialog", "build"],
+    },
+    {
+        "id": "lab-cluster-storage",
+        "name": "Lab Cluster Storage",
+        "repo": "BlackKnightController",
+        "workflow": "lab-cluster-storage",
+        "description": "Preflight, grow, and verify the LVM-backed root filesystems on the Swarm and k3s guests.",
+        "stages": ["storage-preflight", "swarm-grow", "k3s-grow", "storage-verify"],
+        "actions": ["ssh.lvm.grow_root"],
+        "notes": "Idempotent guest-side growth to 50 GiB. The current 60 GiB virtual disks retain about 8 GiB free in each volume group.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+        ],
+        "tags": ["lab", "storage", "swarm", "k3s", "lvm"],
     },
     {
         "id": "monitoring-stack",
