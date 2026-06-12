@@ -588,7 +588,8 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc '"
                     "cd /srv/nfs/swarm/AuziX/src && "
-                    "make auzix-strict-package-tools auzix-strict-installer'"
+                    "./scripts/build-auzix-package-tools-package.sh && "
+                    "./scripts/build-auzix-installer-package.sh'"
                 ),
                 "timeout": 900,
             },
@@ -601,7 +602,7 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc '"
                     "cd /srv/nfs/swarm/AuziX/src && "
-                    "make auzix-strict-installer-test && "
+                    "./scripts/test-auzix-installer.sh && "
                     "jq -e '.format == \"auzix-install-plan-v1\"' installer/plans/default.json >/dev/null && "
                     "jq -e '.format == \"auzix-installer-questions-v1\"' installer/questions.json >/dev/null && "
                     "echo auzix-installer-contract-pass'"
