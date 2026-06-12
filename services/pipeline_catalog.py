@@ -334,6 +334,33 @@ BUILTIN_PIPELINES = [
         "tags": ["auzix", "vm130", "deploy", "ssh"],
     },
     {
+        "id": "auzix-installer-foundation",
+        "name": "AuziX Installer Foundation",
+        "repo": "AuziX",
+        "workflow": "auzix-installer-foundation",
+        "description": "Build and validate the Lua installer engine, dialog TUI, JSON plan contract, and graphical frontend protocol from the staged AuziX source.",
+        "stages": [
+            "source-verify",
+            "installer-build",
+            "contract-test",
+            "artifact-report",
+        ],
+        "notes": "Non-destructive installer lane. It packages Lua and dialog, validates guarded plan execution with a fake executor, and reports the staged installer artifacts without running auzix-install-disk or changing VM130.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "AuziX Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-installer-foundation"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Track installer package construction and the guarded execution contract on the shared build workspace.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["auzix", "installer", "lua", "dialog", "build"],
+    },
+    {
         "id": "monitoring-stack",
         "name": "Monitoring Bring-Up",
         "repo": "lab/ns1/ansible",

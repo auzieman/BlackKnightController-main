@@ -558,6 +558,78 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "AuziX VM130 deployment pipeline completed.",
     },
+    "auzix-installer-foundation": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the staged AuziX installer source and build entry points.",
+                "complete": "Staged AuziX installer source is ready.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s installer/install-plan.schema.json && "
+                    "test -s installer/questions.json && "
+                    "test -s installer/auzix-installer.lua && "
+                    "test -x scripts/build-auzix-installer-package.sh && "
+                    "test -x scripts/test-auzix-installer.sh && "
+                    "echo auzix-installer-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "installer-build",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Packaging Lua, dialog, and the AuziX installer into the staged strict root.",
+                "complete": "AuziX installer runtime and frontend contract packaged.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/nfs/swarm/AuziX/src && "
+                    "make auzix-strict-package-tools auzix-strict-installer'"
+                ),
+                "timeout": 900,
+            },
+            {
+                "name": "contract-test",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Testing plan validation and guarded execution with a non-destructive fake disk executor.",
+                "complete": "Installer validation and guarded execution contract passed.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/nfs/swarm/AuziX/src && "
+                    "make auzix-strict-installer-test && "
+                    "jq -e '.format == \"auzix-install-plan-v1\"' installer/plans/default.json >/dev/null && "
+                    "jq -e '.format == \"auzix-installer-questions-v1\"' installer/questions.json >/dev/null && "
+                    "echo auzix-installer-contract-pass'"
+                ),
+                "timeout": 180,
+            },
+            {
+                "name": "artifact-report",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Reporting the staged installer runtime and frontend artifacts.",
+                "complete": "Installer artifacts are present on the shared AuziX workspace.",
+                "command": (
+                    "bash -lc '"
+                    "root=/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot && "
+                    "test -L \"$root/Programs/Lua/current\" && "
+                    "test -L \"$root/Programs/Dialog/current\" && "
+                    "test -L \"$root/Programs/AuzixInstaller/current\" && "
+                    "test -L \"$root/System/Tools/auzix-installer\" && "
+                    "test -L \"$root/System/Tools/auzix-installer-gui\" && "
+                    "find \"$root/System/Settings/installer\" -maxdepth 2 -type f -print | sort && "
+                    "echo auzix-installer-artifacts-ready'"
+                ),
+                "timeout": 60,
+            },
+        ],
+        "complete_message": "AuziX installer foundation pipeline completed.",
+    },
     "monitoring-stack": {
         "supports_undeploy": True,
         "deploy_stage": "stack-deploy",
