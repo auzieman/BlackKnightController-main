@@ -727,7 +727,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s packages/package-build-queue.schema.json && "
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
-                    "grep -Fx eb00794 .auzix-commit >/dev/null && "
+                    "grep -Fx 3458ec4 .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
@@ -764,6 +764,7 @@ WORKFLOW_DEFINITIONS = {
                     "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
                     "auzix/builder:local bash -lc "
                     "'\"'\"'apt-get update >/dev/null && "
+                    "apt-get install -y --no-install-recommends xinit >/dev/null && "
                     "./scripts/run-auzix-package-bot.sh "
                     "packages/installer-ui.queue.json installer-ui-core'\"'\"''"
                 ),
