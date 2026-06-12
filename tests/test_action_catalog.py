@@ -97,17 +97,24 @@ def test_installer_package_bot_runs_on_slow_queue_with_guarded_runner():
         "queue-contract",
         "package-build",
         "artifact-report",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
     ]
 
     stages = workflow_stage_definitions("auzix-installer-package-bot")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
     assert "run-auzix-package-bot.sh" in commands
     assert "installer-ui.queue.json" in commands
+    assert "installer-ui.sources.json" in commands
     assert "auzix/builder:local" in commands
     assert "docker image inspect auzix/builder:local" in commands
     assert "docker build --pull=false" in commands
     assert "apt-get update" in commands
     assert "xinit xserver-xorg-legacy" in commands
+    assert "build-auzix-package-repo.sh" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+    assert "http://192.168.1.10/auzix/repo/index.json" in commands
     assert "git commit" not in commands
     assert "git push" not in commands
 

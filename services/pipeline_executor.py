@@ -724,10 +724,12 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
                     "test -s packages/installer-ui.queue.json && "
+                    "test -s packages/installer-ui.sources.json && "
                     "test -s packages/package-build-queue.schema.json && "
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
-                    "grep -Fx 424ed51 .auzix-commit >/dev/null && "
+                    "test -x scripts/publish-auzix-package-repo.sh && "
+                    "grep -Fx 126492e .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
@@ -789,8 +791,56 @@ WORKFLOW_DEFINITIONS = {
                 ),
                 "timeout": 120,
             },
+            {
+                "name": "repository-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building checksummed AuziX repository archives from package receipts.",
+                "complete": "AuziX repository archives and index were built.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "repository-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing verified archives and replacing the HTTP repository index.",
+                "complete": "AuziX package repository was published.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "./scripts/publish-auzix-package-repo.sh "
+                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
+                    "/srv/http/auzix/repo'"
+                ),
+                "timeout": 1800,
+            },
+            {
+                "name": "repository-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying installer packages through the served repository index.",
+                "complete": "Served AuziX repository contains the installer package batch.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "index=$(mktemp); trap '\"'\"'rm -f \"$index\"'\"'\"' EXIT; "
+                    "curl -fsS http://192.168.1.10/auzix/repo/index.json -o \"$index\"; "
+                    "jq -e '\"'\"'.format == \"auzix-repo-v1\"'\"'\"' \"$index\" >/dev/null; "
+                    "for package in AuzixPackageTools AuzixInstaller Xorg Enlightenment Terminology LightDM; do "
+                    "archive=$(jq -r --arg package \"$package\" "
+                    "'\"'\"'.packages[] | select(.name == $package) | .package'\"'\"' \"$index\" | head -1); "
+                    "test -n \"$archive\"; "
+                    "curl -fsSI \"http://192.168.1.10/auzix/repo/packages/$archive\" >/dev/null; "
+                    "done; jq '\"'\"'{created, package_count: (.packages | length)}'\"'\"' \"$index\"'"
+                ),
+                "timeout": 180,
+            },
         ],
-        "complete_message": "AuziX installer package bot pipeline completed.",
+        "complete_message": "AuziX installer package bot built and published the repository.",
     },
     "monitoring-stack": {
         "supports_undeploy": True,
