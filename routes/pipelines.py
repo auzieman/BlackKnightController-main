@@ -100,6 +100,8 @@ def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
     tags = {"runnable" if supported else "planned"}
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
+    if workflow == "auzix-vm130-deploy":
+        tags.update({"deploy", "ssh", "auzix"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
@@ -162,6 +164,8 @@ def _run_tags(run: dict) -> list[str]:
     status = str(run.get("status", "")).strip().lower()
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
+    if workflow == "auzix-vm130-deploy":
+        tags.update({"deploy", "ssh", "auzix"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
@@ -186,6 +190,10 @@ def _run_tags(run: dict) -> list[str]:
 def _stage_targets(workflow: str, stage_name: str) -> list[str]:
     workflow = (workflow or "").strip().lower()
     stage = (stage_name or "").strip().lower()
+    if workflow == "auzix-vm130-deploy":
+        if "source" in stage:
+            return ["/srv/nfs/swarm/AuziX", "generated AuzixRoot"]
+        return ["VMID 130", "192.168.1.164"]
     if workflow == "rx-demo-k3s-app-refresh":
         if "source" in stage:
             return ["/mnt/swarm/shared/rx-demo"]

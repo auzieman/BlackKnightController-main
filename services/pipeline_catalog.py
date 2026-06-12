@@ -308,6 +308,32 @@ BUILTIN_PIPELINES = [
         ],
     },
     {
+        "id": "auzix-vm130-deploy",
+        "name": "AuziX VM130 Deploy",
+        "repo": "AuziX",
+        "workflow": "auzix-vm130-deploy",
+        "description": "Deploy the generated AuziX runtime startup and Midori wrapper to the installed VMID 130 guest, then verify browser networking and user-state permissions.",
+        "stages": [
+            "source-verify",
+            "runtime-deploy",
+            "network-validate",
+        ],
+        "notes": "Repeatable SSH deployment for root@192.168.1.164. The lane consumes the generated AuzixRoot on the shared AuziX build workspace and records the deployed Git commit in /System/State/deployments.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Track the VM130 payload copy and browser-network validation as separate rerunnable stages.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["auzix", "vm130", "deploy", "ssh"],
+    },
+    {
         "id": "monitoring-stack",
         "name": "Monitoring Bring-Up",
         "repo": "lab/ns1/ansible",

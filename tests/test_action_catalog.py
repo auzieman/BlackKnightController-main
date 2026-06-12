@@ -38,6 +38,18 @@ def test_k3s_housekeeping_stage_plan_is_action_annotated():
     assert actions_by_stage["scrape-validate"] == "prometheus.targets.verify"
 
 
+def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
+    pipeline = pipeline_by_id("auzix-vm130-deploy")
+    assert pipeline is not None
+    assert pipeline["repo"] == "AuziX"
+    assert pipeline["stages"] == ["source-verify", "runtime-deploy", "network-validate"]
+
+    stages = workflow_stage_definitions("auzix-vm130-deploy")
+    kinds = {stage["name"]: stage.get("kind", "remote-command") for stage in stages}
+    assert kinds["runtime-deploy"] == "auzix-vm130-deploy"
+    assert kinds["network-validate"] == "auzix-vm130-validate"
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(

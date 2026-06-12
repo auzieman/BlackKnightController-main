@@ -56,6 +56,8 @@ K3S_NFS_MOUNTS = [
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
+AUZIX_VM130_HOST = "192.168.1.164"
+AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -513,6 +515,46 @@ WORKFLOW_DEFINITIONS = {
             "container_name_prefix": "tabor-linux-forge-kernel-builder-run",
             "display_name": "kernel-builder-run",
         },
+    },
+    "auzix-vm130-deploy": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the generated AuziX runtime payload on the shared controller workspace.",
+                "complete": "Generated AuziX runtime payload is ready for VM130.",
+                "command": (
+                    "bash -lc '"
+                    f"test -x {AUZIX_VM130_SOURCE_ROOT}/System/Boot/StartSequence && "
+                    f"test -x {AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Commands/midori && "
+                    "test -s /srv/nfs/swarm/AuziX/src/.auzix-commit && "
+                    "cat /srv/nfs/swarm/AuziX/src/.auzix-commit && "
+                    "echo auzix-vm130-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "runtime-deploy",
+                "transport": "bkc-ssh",
+                "target": "vmid130",
+                "kind": "auzix-vm130-deploy",
+                "active": "Deploying startup permission repair and the Midori runtime wrapper to VM130.",
+                "complete": "AuziX runtime payload deployed to VM130 with backups and a commit marker.",
+                "timeout": 180,
+            },
+            {
+                "name": "network-validate",
+                "transport": "bkc-ssh",
+                "target": "vmid130",
+                "kind": "auzix-vm130-validate",
+                "active": "Validating VM130 user-state ownership, DNS, HTTPS, and Midori runtime settings.",
+                "complete": "VM130 browser networking and permissions contract passed.",
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "AuziX VM130 deployment pipeline completed.",
     },
     "monitoring-stack": {
         "supports_undeploy": True,
@@ -2648,6 +2690,87 @@ printf 'rx-ui-routes-ok %s\n' "$base"
     append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-ui-routes-ok")
 
 
+def _controller_file_b64(settings: dict[str, str], path: str) -> str:
+    return run_remote_command(
+        host=settings["controller_host"],
+        user=settings["controller_user"],
+        password=settings["controller_password"],
+        command=f"base64 -w0 {shlex.quote(path)}",
+        timeout=60,
+    )
+
+
+def _run_auzix_vm130_deploy(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    start_sequence = _controller_file_b64(
+        settings,
+        f"{AUZIX_VM130_SOURCE_ROOT}/System/Boot/StartSequence",
+    )
+    midori_wrapper = _controller_file_b64(
+        settings,
+        f"{AUZIX_VM130_SOURCE_ROOT}/Programs/Midori/11.8/Commands/midori",
+    )
+    commit = run_remote_command(
+        host=settings["controller_host"],
+        user=settings["controller_user"],
+        password=settings["controller_password"],
+        command="cat /srv/nfs/swarm/AuziX/src/.auzix-commit",
+        timeout=30,
+    ).strip()
+    script = "\n".join(
+        [
+            "set -eu",
+            "BB=/Programs/BusyBox/1.36.1/Commands/busybox",
+            '"${BB}" mkdir -p /Work/Temp /System/State/deployments',
+            f"printf %s {shlex.quote(start_sequence)} | \"${{BB}}\" base64 -d >/Work/Temp/StartSequence.{commit}",
+            f"printf %s {shlex.quote(midori_wrapper)} | \"${{BB}}\" base64 -d >/Work/Temp/midori.{commit}",
+            f'[ -f /System/Boot/StartSequence.pre-{commit} ] || "${{BB}}" cp -p /System/Boot/StartSequence /System/Boot/StartSequence.pre-{commit}',
+            f'[ -f /Programs/Midori/11.8/Commands/midori.pre-{commit} ] || "${{BB}}" cp -p /Programs/Midori/11.8/Commands/midori /Programs/Midori/11.8/Commands/midori.pre-{commit}',
+            f'"${{BB}}" cp -f /Work/Temp/StartSequence.{commit} /System/Boot/StartSequence',
+            '"${BB}" chmod 0755 /System/Boot/StartSequence',
+            f'"${{BB}}" cp -f /Work/Temp/midori.{commit} /Programs/Midori/11.8/Commands/midori',
+            '"${BB}" chmod 0755 /Programs/Midori/11.8/Commands/midori',
+            "/System/Tools/repair-e-state /Users/auzix auzix",
+            '"${BB}" chown -R 1000:1000 /Users/auzix/.cache /Users/auzix/.config /Users/auzix/.local',
+            '"${BB}" chmod -R u+rwX /Users/auzix/.cache /Users/auzix/.config /Users/auzix/.local',
+            f"printf 'source=github.com/auzieman/AuziX\\ncommit={commit}\\ntarget=vmid130\\n' >/System/State/deployments/auzix-{commit}.txt",
+            f'"${{BB}}" rm -f /Work/Temp/StartSequence.{commit} /Work/Temp/midori.{commit}',
+            f"echo auzix-vm130-deployed commit={commit}",
+        ]
+    )
+    output = run_remote_command(
+        host=AUZIX_VM130_HOST,
+        user="root",
+        command=f"/System/Compatibility/bin/sh -c {shlex.quote(script)}",
+        timeout=180,
+    )
+    _store_run_extra(run_id, {"target_host": AUZIX_VM130_HOST, "deployed_commit": commit})
+    _set_stage(run_id, stage_name, "complete", "AuziX runtime payload deployed to VM130.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"deployed {commit}")
+
+
+def _run_auzix_vm130_validate(run_id: str, stage_name: str) -> None:
+    script = "\n".join(
+        [
+            "set -eu",
+            "BB=/Programs/BusyBox/1.36.1/Commands/busybox",
+            'grep -F "chown -R 1000:1000" /System/Boot/StartSequence >/dev/null',
+            'grep -F "Midori profile directories are not writable" /Programs/Midori/current/Commands/midori >/dev/null',
+            '"${BB}" su auzix -c "test -w /Users/auzix/.cache && test -w /Users/auzix/.config && test -w /Users/auzix/.local"',
+            '"${BB}" nslookup example.com >/dev/null',
+            "/Programs/Curl/current/Commands/curl -fsS --max-time 15 https://example.com >/dev/null",
+            "echo auzix-vm130-network-contract=pass",
+        ]
+    )
+    output = run_remote_command(
+        host=AUZIX_VM130_HOST,
+        user="root",
+        command=f"/System/Compatibility/bin/sh -c {shlex.quote(script)}",
+        timeout=120,
+    )
+    _set_stage(run_id, stage_name, "complete", "VM130 browser networking and permissions contract passed.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm130 validation passed")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -2815,6 +2938,14 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "rx-demo-k3s-smoke-ui":
             _run_rx_demo_k3s_smoke_ui(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm130-deploy":
+            _run_auzix_vm130_deploy(run_id, stage_name, settings)
+            continue
+
+        if kind == "auzix-vm130-validate":
+            _run_auzix_vm130_validate(run_id, stage_name)
             continue
 
         if kind == "wordpress-source-select":
