@@ -142,6 +142,30 @@ def test_trixie_package_intake_is_bounded_and_failure_tolerant():
     assert "git push" not in commands
 
 
+def test_office_package_smoke_builds_tests_and_publishes_two_packages():
+    pipeline = pipeline_by_id("auzix-office-package-smoke")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "builder-prepare",
+        "package-build",
+        "package-test",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
+    ]
+
+    stages = workflow_stage_definitions("auzix-office-package-smoke")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "auzix-office-smoke.packages" in commands
+    assert "office-smoke.report.json" in commands
+    assert "test-auzix-office-smoke.sh" in commands
+    assert "Debian.abiword" in commands
+    assert "Debian.gnumeric" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(
