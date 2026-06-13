@@ -729,7 +729,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
                     "test -x scripts/publish-auzix-package-repo.sh && "
-                    "grep -Fx 6014404 .auzix-commit >/dev/null && "
+                    "grep -Fx 00026fe .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
@@ -857,7 +857,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s docker/trixie-builder/Dockerfile && "
                     "test -x scripts/run-auzix-trixie-intake.sh && "
                     "test -x scripts/test-auzix-trixie-intake.sh && "
-                    "grep -Fx 6014404 .auzix-commit >/dev/null && "
+                    "grep -Fx 00026fe .auzix-commit >/dev/null && "
                     "./scripts/test-auzix-trixie-intake.sh'"
                 ),
                 "timeout": 120,
