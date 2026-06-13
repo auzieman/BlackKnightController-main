@@ -160,9 +160,11 @@ def test_office_package_smoke_builds_tests_and_publishes_two_packages():
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
     assert "auzix-office-smoke.packages" in commands
     assert "office-smoke.report.json" in commands
+    assert "run-auzix-office-smoke.sh" in commands
+    assert "build-auzix-office-package.sh" not in commands
     assert "test-auzix-office-smoke.sh" in commands
-    assert "Debian.abiword" in commands
-    assert "Debian.gnumeric" in commands
+    assert "AbiWord" in commands
+    assert "Gnumeric" in commands
     assert "publish-auzix-package-repo.sh" in commands
 
 

@@ -729,7 +729,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
                     "test -x scripts/publish-auzix-package-repo.sh && "
-                    "grep -Fx a2cac6b .auzix-commit >/dev/null && "
+                    "grep -Fx 7ebe9a3 .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
@@ -857,7 +857,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s docker/trixie-builder/Dockerfile && "
                     "test -x scripts/run-auzix-trixie-intake.sh && "
                     "test -x scripts/test-auzix-trixie-intake.sh && "
-                    "grep -Fx a2cac6b .auzix-commit >/dev/null && "
+                    "grep -Fx 7ebe9a3 .auzix-commit >/dev/null && "
                     "./scripts/test-auzix-trixie-intake.sh'"
                 ),
                 "timeout": 120,
@@ -954,7 +954,7 @@ WORKFLOW_DEFINITIONS = {
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
                     "test -s profiles/packages/auzix-office-smoke.packages && "
                     "test -x scripts/test-auzix-office-smoke.sh && "
-                    "grep -Fx a2cac6b .auzix-commit >/dev/null && "
+                    "grep -Fx 7ebe9a3 .auzix-commit >/dev/null && "
                     "./scripts/test-auzix-office-smoke.sh'"
                 ),
                 "timeout": 120,
@@ -985,10 +985,7 @@ WORKFLOW_DEFINITIONS = {
                     "bash -lc 'docker run --rm "
                     "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
                     "auzix/trixie-builder:local bash -lc "
-                    "'\"'\"'apt-get update >/dev/null && "
-                    "AUZIX_TRIXIE_REPORT=office-smoke.report.json "
-                    "./scripts/run-auzix-trixie-intake.sh "
-                    "profiles/packages/auzix-office-smoke.packages'\"'\"''"
+                    "'\"'\"'./scripts/run-auzix-office-smoke.sh'\"'\"''"
                 ),
                 "timeout": 7200,
             },
@@ -1048,7 +1045,7 @@ WORKFLOW_DEFINITIONS = {
                     "\"$report\" >/dev/null && "
                     "index=$(mktemp); trap '\"'\"'rm -f \"$index\"'\"'\"' EXIT; "
                     "curl -fsS http://192.168.1.10/auzix/repo/index.json >\"$index\"; "
-                    "for package in Debian.abiword Debian.gnumeric; do "
+                    "for package in AbiWord Gnumeric; do "
                     "archive=$(jq -r --arg package \"$package\" "
                     "'\"'\"'.packages[] | select(.name == $package) | .package'\"'\"' "
                     "\"$index\" | head -1); test -n \"$archive\"; "
