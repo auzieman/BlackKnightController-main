@@ -163,6 +163,7 @@ def test_office_package_smoke_builds_tests_and_publishes_two_packages():
     assert "run-auzix-office-smoke.sh" in commands
     assert "build-auzix-office-package.sh" not in commands
     assert "test-auzix-office-smoke.sh" in commands
+    assert "audit-auzix-package-runtime.sh" in commands
     assert "AbiWord" in commands
     assert "Gnumeric" in commands
     assert "publish-auzix-package-repo.sh" in commands
