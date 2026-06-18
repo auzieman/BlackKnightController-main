@@ -2,6 +2,22 @@
 
 [![BlackKnightController Dashboard](https://github.com/auzieman/BlackKnightController-main/blob/main/docs/Screenshot1.png)](https://github.com/auzieman/BlackKnightController-main/blob/main/docs/Screenshot1.png)
 
+## Real-World Validation: The 10-Minute Cluster Auto-Scale
+
+Imagine running a complex homelab or hybrid-cloud environment where your **k3s cluster** and your **Docker Swarm** simultaneously run out of storage space. Worse, your AI applications (like `open-webui`) begin throwing critical execution errors because your underlying hypervisor VMs are using generic virtualized CPU modes missing advanced instruction sets like AVX/AVX2.
+
+Fixing this manually requires hours of context-switching, writing temporary scripts, and dangerous hot-fixes. 
+
+With **BlackKnightController** and an AI assistant (like Codex or GPT), the remediation takes exactly **10 minutes**:
+
+1. **Intelligent Topology Mapping:** The AI interrogates BKC's living **Resource Graph** to instantly correlate the failing application containers with the specific Proxmox virtual machines and backing storage pools.
+2. **Dynamic Generation:** Codex crafts target-specific, idempotent SSH overrides and Ansible playbooks to patch host kernel variables and fix cluster storage bottlenecks on the fly.
+3. **API-Driven Infrastructure Tuning:** BKC talks directly to the **Proxmox API** to dynamically adjust the VM hardware profiles to `host` CPU mode and hot-plug additional storage allocations.
+4. **Asynchronous Pipeline Execution:** The workload is handed off to BKC's background **Redis/RQ workers**, rolling out the fixes sequentially across both environments as a tracked, repeatable pipeline.
+5. **Observability Loop:** The pipeline automatically tracks state, verifies cluster recovery via **Grafana/Loki/Prometheus**, and confirms full service restoration without human intervention.
+
+*This isn't an abstract concept—it is how BKC bridges 30 years of data center automation logic with the speed of modern generative AI.*
+
 > **Infrastructure orchestration that learns.** BlackKnightController intelligently maps APIs, relationships, and dependencies across your infrastructure, then dynamically creates pipeline stages to automate new integrations.
 
 Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people[...]
