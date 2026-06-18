@@ -20,6 +20,53 @@ With **BlackKnightController** and an AI assistant (like Codex or GPT), the reme
 
 > **Infrastructure orchestration that learns.** BlackKnightController intelligently maps APIs, relationships, and dependencies across your infrastructure, then dynamically creates pipeline stages to automate new integrations.
 
+## System Architecture Mesh
+
+```mermaid
+graph TD
+    %% Styling
+    classDef ai fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef bkc fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef node fill:#bfb,stroke:#333,stroke-width:1px;
+    
+    %% AI & Operator Layer
+    Operator[Operator Browser / CLI] --> BKC[BKC Web App / Control Plane]
+    Codex[AI Assistant / Codex / GPT] <-->|Context & Intent Loop| BKC
+    class Codex ai;
+    class BKC bkc;
+
+    %% BKC Internal Orchestration Engine
+    subgraph BKC Orchestration Engine
+        BKC --> DB[(SQLite Auth & RBAC)]
+        BKC --> Graph[Living Resource Graph]
+        BKC --> Queue[(Redis / RQ Job Queue)]
+        Queue --> Worker[BKC Background Workers]
+    end
+
+    %% Execution & Compute Fabric
+    Worker -->|1. Proxmox API Actions| PVE[Proxmox Hypervisor]
+    Worker -->|2. Native SSH / Ansible| Hosts[Target Clusters / Swarm / k3s]
+    Worker -->|3. Declarative Payloads| AuziX[AuziX Operating System Nodes]
+    
+    class PVE node;
+    class Hosts node;
+    class AuziX node;
+
+    %% Telemetry Feedback
+    PVE -->|Metrics| Obs[Grafana / Loki / Prometheus]
+    Hosts -->|Logs & State| Obs
+    AuziX -->|State Manifests| Obs
+    Obs -->|Telemetry Validation Loop| BKC
+```
+
+### Context Note for the Project Readme
+Right under this diagram, you can drop a transparent engineering note to highlight the speed of the build. It explains the velocity to anyone tracking the commit history:
+
+```markdown
+> 💡 **Engineering Note:** The entire ecosystem—from the deterministic architecture of AuziX to the background execution pipelines of BlackKnightController—was designed and compiled in just a few man-work-hour days. By pairing 30 years of infrastructure QA and systems logic with hyper-focused AI code generation workflows (Codex/GPT), we eliminated the standard development friction to ship a functional, self-learning control plane at unprecedented velocity.
+```
+
+
 Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people[...]
 
 *However, please note that this project is purely fictional and not based on any factual evidence. And definitely not an indication that 42 is the ultimate answer. Also though this concept may seem[...]
