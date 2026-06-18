@@ -1,7 +1,7 @@
 # Black Knight Controller
 
-![BlackKnightController Dashboard](https://github.com/auzieman/BlackKnightController-main/assets/1874337/dashboard-overview.png)
-
+![BlackKnightController Dashboard]([https://github.com/auzieman/BlackKnightController-main/assets/1874337/dashboard-overview.png)
+](https://github.com/auzieman/BlackKnightController-main/blob/main/docs/Screenshot1.png)
 > **Infrastructure orchestration that learns.** BlackKnightController intelligently maps APIs, relationships, and dependencies across your infrastructure, then dynamically creates pipeline stages to automate new integrations.
 
 Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people[...]
