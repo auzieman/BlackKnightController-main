@@ -598,13 +598,10 @@ We welcome community contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md
 
 ## License
 
-BlackKnightController is licensed under the **Commons Clause + MIT License**. See [LICENSE](LICENSE) for details.
-
-- ✅ Free for non-commercial use, education, research
-- ✅ Source-available with proper encryption standards
-- ❌ No reselling or commercial derivatives without a commercial license
-
-For commercial licensing inquiries, contact the maintainer.
+Black Knight Controller code is licensed under **GPL-3.0-or-later**.
+Documentation, screenshots, diagrams, and other narrative or visual material are
+licensed under **CC BY-SA 4.0** unless a file says otherwise. See [LICENSE](LICENSE)
+and `LICENSES/` for details.
 
 ## Support & Community
 
