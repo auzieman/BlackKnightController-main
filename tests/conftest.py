@@ -29,6 +29,17 @@ def pytest_configure(config: pytest.Config) -> None:
 
     bkc_db.DB_PATH = root / "bkc.db"
 
+    import services.secrets as secrets
+
+    secrets.SECRETS_META_PATH = root / "secrets_meta.json"
+    secrets.SECRETS_KEY_PATH = root / "bkc_master_key"
+
+    import services.rules_store as rules_store
+
+    rules_store.RULES_PATH = root / "rules.json"
+    rules_store.LOCAL_RULES_PATH = root / "rules.local.json"
+    rules_store.TEMPLATES_PATH = root / "file_templates"
+
     import app as app_module
 
     app_module.app.config["TESTING"] = True

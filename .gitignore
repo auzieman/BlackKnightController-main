@@ -33,3 +33,5 @@ dictionaries/workflow_items.local.json
 *.ovf
 
 node_modules/
+
+docker/bkc/known_hosts

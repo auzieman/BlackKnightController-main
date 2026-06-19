@@ -4,19 +4,11 @@ import json
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
-
 from services import bkc_db
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
 from services.automation_runs import get_run, load_runs
 from services.integration_store import load_proxmox_snapshot
 from services.job_queue import enqueue_job, job_queue_enabled
-from services.pipeline_executor import (
-    workflow_job_timeout,
-    workflow_is_supported,
-    workflow_runtime_snapshot,
-    workflow_stage_definitions,
-    workflow_supports_undeploy,
-)
 from services.pipeline_catalog import (
     create_custom_pipeline,
     demo_pipelines,
@@ -24,6 +16,13 @@ from services.pipeline_catalog import (
     save_pipeline_override,
     save_stage_override,
     stage_override,
+)
+from services.pipeline_executor import (
+    workflow_is_supported,
+    workflow_job_timeout,
+    workflow_runtime_snapshot,
+    workflow_stage_definitions,
+    workflow_supports_undeploy,
 )
 from services.tenant_context import get_current_tenant_id, get_effective_tenant_slug
 

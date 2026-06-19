@@ -1,0 +1,12 @@
+Creative Commons Attribution-ShareAlike 4.0 International
+
+Documentation, screenshots, diagrams, and other narrative or visual material in
+this repository are licensed under CC BY-SA 4.0 unless a file says otherwise.
+
+Canonical legal code:
+
+https://creativecommons.org/licenses/by-sa/4.0/legalcode.en
+
+Human-readable deed:
+
+https://creativecommons.org/licenses/by-sa/4.0/

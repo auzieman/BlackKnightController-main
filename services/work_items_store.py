@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from services.rules_store import BASE_DIR
 
-
 WORK_ITEMS_PATH = BASE_DIR / "dictionaries" / "workflow_items.json"
 LOCAL_WORK_ITEMS_PATH = BASE_DIR / "dictionaries" / "workflow_items.local.json"
 

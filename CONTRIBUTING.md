@@ -4,6 +4,10 @@ We welcome community contributions! To maintain code quality and security standa
 
 ## Contribution Workflow
 
+By contributing, you agree that code contributions are provided under
+`GPL-3.0-or-later` and documentation, screenshots, diagrams, and narrative
+material are provided under `CC-BY-SA-4.0`, unless a file says otherwise.
+
 ### 1. Create a Feature Branch
 Always branch from `main` for new features, bug fixes, or improvements:
 
@@ -36,18 +40,20 @@ BlackKnightController uses encryption-at-rest for sensitive values:
 - Use `python3 bkc_cli.py migrate-secrets` to encrypt plaintext values
 
 #### What You CANNOT Commit
-❌ Base64-encoded credentials (easily reversible)  
-❌ Plaintext passwords or tokens in JSON files  
-❌ API keys or Bearer tokens in any form  
-❌ SSH private keys  
-❌ Database connection strings with credentials  
-❌ Any file in `keys/` directory  
+- Base64-encoded credentials (easily reversible)
+- Plaintext passwords or tokens in JSON files
+- API keys or Bearer tokens in any form
+- SSH private keys
+- Database connection strings with credentials
+- Any file in `keys/` directory
 
 #### Proper Token/Password Handling
-✅ All credentials must be **one-way hashed** (bcrypt, Argon2, PBKDF2)  
-✅ Follow existing password/token encryption models in the codebase  
-✅ Use `dictionaries/secrets_meta.json` for salt management  
-✅ Test credential handling without actual secrets  
+- All credentials must be **one-way hashed** or encrypted using the existing
+  credential handling utilities, depending on whether BKC must recover the
+  original value.
+- Follow existing password/token encryption models in the codebase.
+- Use `dictionaries/secrets_meta.json` for salt management.
+- Test credential handling without actual secrets.
 
 #### If You Accidentally Committed Secrets
 1. **Do not push** - catch it before the PR
@@ -114,4 +120,4 @@ Once your PR is approved and validated:
 - Review the README for architecture and usage detail
 - Ask in comments on related PRs/issues
 
-Thank you for contributing to BlackKnightController! 🚀
+Thank you for contributing to BlackKnightController.

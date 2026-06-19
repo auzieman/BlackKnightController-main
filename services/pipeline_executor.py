@@ -8,12 +8,16 @@ from services.automation_pipeline import (
     append_event,
     mark_run_active,
     mark_run_complete,
-    mark_run_failed,
 )
 from services.automation_runs import get_run, update_run, update_stage
 from services.docker_swarm import scan_docker_controller, sync_docker_inventory_to_rules
 from services.fresh_build_library import fresh_build_plan
-from services.integration_store import load_integrations, load_proxmox_snapshot, save_ansible_snapshot, save_docker_snapshot
+from services.integration_store import (
+    load_integrations,
+    load_proxmox_snapshot,
+    save_ansible_snapshot,
+    save_docker_snapshot,
+)
 from services.inventory_model import reconcile_rules_inventory
 from services.proxmox import ProxmoxClient, load_proxmox_config
 from services.remote_ops import run_remote_command

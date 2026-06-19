@@ -5,7 +5,6 @@ from services.integration_store import ANSIBLE_SNAPSHOT_PATH, load_snapshot
 from services.rules_store import BASE_DIR
 from services.template_assets import load_template_assets
 
-
 EXECUTION_ASSETS_PATH = BASE_DIR / "dictionaries" / "execution_assets.json"
 
 

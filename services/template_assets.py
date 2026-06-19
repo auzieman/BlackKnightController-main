@@ -10,7 +10,6 @@ except ImportError:  # pragma: no cover - runtime dependent
 from services.inventory_model import merge_host_config
 from services.rules_store import BASE_DIR, get_templates_path, load_rules
 
-
 GROUP_VARS_PATH = BASE_DIR / "dictionaries" / "group_vars.json"
 GLOBAL_VARS_PATH = BASE_DIR / "dictionaries" / "globals.json"
 ENV_VARS_PATH = BASE_DIR / "dictionaries" / "env_vars.json"

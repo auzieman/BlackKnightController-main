@@ -1,41 +1,48 @@
 # Black Knight Controller
 
-[![BlackKnightController Dashboard](https://github.com/auzieman/BlackKnightController-main/blob/main/docs/Screenshot1.png)](https://github.com/auzieman/BlackKnightController-main/blob/main/docs/Screenshot1.png)
+Black Knight Controller is a lightweight lab control plane for inventory,
+integrations, and tracked automation pipelines. It started as a web interface
+for a Fabric-style deployment system and has grown into a practical operator
+surface for SSH, Ansible, Docker Swarm, Kubernetes, Proxmox, and custom build
+lanes.
 
-## Real-World Validation: The 10-Minute Cluster Auto-Scale
+![BKC overview and pipeline run example](docs/images/Screenshot1.png)
 
-Imagine running a complex homelab or hybrid-cloud environment where your **k3s cluster** and your **Docker Swarm** simultaneously run out of storage space. Worse, your AI applications (like `open-webui`) begin throwing critical execution errors because your underlying hypervisor VMs are using generic virtualized CPU modes missing advanced instruction sets like AVX/AVX2.
+## Real-World Validation: Cluster Auto-Scale
 
-Fixing this manually requires hours of context-switching, writing temporary scripts, and dangerous hot-fixes. 
+A typical BKC story starts when a lab has several problems at once: a k3s
+cluster and a Docker Swarm are low on storage, an AI service such as
+`open-webui` is failing because guest CPUs are using generic virtualized
+profiles, and the fix touches Proxmox, SSH, container APIs, and observability.
 
-With **BlackKnightController** and an AI assistant (like Codex or GPT), the remediation takes exactly **10 minutes**:
+BKC turns that into a tracked run instead of a loose shell session:
 
-1. **Intelligent Topology Mapping:** The AI interrogates BKC's living **Resource Graph** to instantly correlate the failing application containers with the specific Proxmox virtual machines and backing storage pools.
-2. **Dynamic Generation:** Codex crafts target-specific, idempotent SSH overrides and Ansible playbooks to patch host kernel variables and fix cluster storage bottlenecks on the fly.
-3. **API-Driven Infrastructure Tuning:** BKC talks directly to the **Proxmox API** to dynamically adjust the VM hardware profiles to `host` CPU mode and hot-plug additional storage allocations.
-4. **Asynchronous Pipeline Execution:** The workload is handed off to BKC's background **Redis/RQ workers**, rolling out the fixes sequentially across both environments as a tracked, repeatable pipeline.
-5. **Observability Loop:** The pipeline automatically tracks state, verifies cluster recovery via **Grafana/Loki/Prometheus**, and confirms full service restoration without human intervention.
+1. Map the affected services, VMs, storage pools, and API endpoints through the
+   resource graph.
+2. Generate target-specific, idempotent SSH or Ansible remediation steps.
+3. Use the Proxmox API for VM hardware changes such as CPU mode or storage
+   adjustments.
+4. Hand slower work to Redis/RQ workers so the UI remains usable.
+5. Record stage state, validation output, and telemetry checks for the next
+   run.
 
-*This isn't an abstract concept—it is how BKC bridges 30 years of data center automation logic with the speed of modern generative AI.*
-
-> **Infrastructure orchestration that learns.** BlackKnightController intelligently maps APIs, relationships, and dependencies across your infrastructure, then dynamically creates pipeline stages to automate new integrations.
+The point is repeatability: the first repair can be discovered interactively,
+but the useful result becomes a pipeline that can be reviewed, rerun, and
+improved.
 
 ## System Architecture Mesh
 
 ```mermaid
 graph TD
-    %% Styling
     classDef ai fill:#f9f,stroke:#333,stroke-width:2px;
     classDef bkc fill:#bbf,stroke:#333,stroke-width:2px;
     classDef node fill:#bfb,stroke:#333,stroke-width:1px;
-    
-    %% AI & Operator Layer
+
     Operator[Operator Browser / CLI] --> BKC[BKC Web App / Control Plane]
     Codex[AI Assistant / Codex / GPT] <-->|Context & Intent Loop| BKC
     class Codex ai;
     class BKC bkc;
 
-    %% BKC Internal Orchestration Engine
     subgraph BKC Orchestration Engine
         BKC --> DB[(SQLite Auth & RBAC)]
         BKC --> Graph[Living Resource Graph]
@@ -43,33 +50,19 @@ graph TD
         Queue --> Worker[BKC Background Workers]
     end
 
-    %% Execution & Compute Fabric
     Worker -->|1. Proxmox API Actions| PVE[Proxmox Hypervisor]
     Worker -->|2. Native SSH / Ansible| Hosts[Target Clusters / Swarm / k3s]
     Worker -->|3. Declarative Payloads| AuziX[AuziX Operating System Nodes]
-    
+
     class PVE node;
     class Hosts node;
     class AuziX node;
 
-    %% Telemetry Feedback
     PVE -->|Metrics| Obs[Grafana / Loki / Prometheus]
     Hosts -->|Logs & State| Obs
     AuziX -->|State Manifests| Obs
     Obs -->|Telemetry Validation Loop| BKC
 ```
-
-### Context Note for the Project Readme
-Right under this diagram, you can drop a transparent engineering note to highlight the speed of the build. It explains the velocity to anyone tracking the commit history:
-
-```markdown
-> 💡 **Engineering Note:** The entire ecosystem—from the deterministic architecture of AuziX to the background execution pipelines of BlackKnightController—was designed and compiled in just a few man-work-hour days. By pairing 30 years of infrastructure QA and systems logic with hyper-focused AI code generation workflows (Codex/GPT), we eliminated the standard development friction to ship a functional, self-learning control plane at unprecedented velocity.
-```
-
-
-Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people[...]
-
-*However, please note that this project is purely fictional and not based on any factual evidence. And definitely not an indication that 42 is the ultimate answer. Also though this concept may seem[...]
 
 The project started as a group-and-host deployment console. It now also acts as a lightweight lab control plane that can:
 
@@ -77,13 +70,23 @@ The project started as a group-and-host deployment console. It now also acts as 
 - scan and sync Ansible controllers
 - scan and sync Docker Swarm state
 - queue automation runs through Redis/RQ workers
-- track pipelines for lab workflows such as monitoring bring-up and Auzix build/test loops
+- track pipelines for lab workflows such as monitoring bring-up and AuziX build/test loops
 - stage toward Proxmox-driven VM lifecycle automation
 - **learn new APIs and dynamically create orchestration stages**
 
-In addition to the initial functionality, the Black Knight Controller also includes an "Add Nodes" routine. This allows users to add a list of hosts (IP or hostname) to a specific group. The syste[...]
+In addition to the initial functionality, the Black Knight Controller also includes an "Add Nodes" routine. This allows users to add a list of hosts (IP or hostname) to a specific group. The system will test the credentials and save them, or perform a round of interactive steps to copy a preshared key to the destination.
 
-We hope that the Black Knight Controller will help simplify the deployment process and make it more accessible for users of all levels. Please feel free to use, modify, and contribute to this proj[...]
+We hope that the Black Knight Controller will help simplify lab operations and
+make repeatable automation more approachable. The project is now public:
+contributions, forks, experiments, and downstream lab-specific adaptations are
+welcome.
+
+## License
+
+Black Knight Controller code is licensed under **GPL-3.0-or-later**.
+Documentation, screenshots, diagrams, and other narrative or visual material are
+licensed under **CC BY-SA 4.0** unless a file says otherwise. See `LICENSE` and
+`LICENSES/`.
 
 ## Current lab direction
 
@@ -95,7 +98,7 @@ The current working model is:
 - **Proxmox** as the VM lifecycle tier
 - **Grafana / Loki / Prometheus** as observability
 
-The main user-facing term is now **pipeline**. Pipelines create tracked automation runs with stage state and event history. The older `workflow` term still exists in parts of the internal data mod[...]
+The main user-facing term is now **pipeline**. Pipelines create tracked automation runs with stage state and event history. The older `workflow` term still exists in parts of the internal data model, but operators should think in terms of pipelines.
 
 ### System map
 
@@ -133,7 +136,40 @@ The practical split is:
 - **Ansible** remains useful for existing playbooks and inventories.
 - **Pipelines** tie those pieces into tracked runs with stage history.
 
-For the next UI pass, BKC should treat the left navigation as a **resource graph**, not a machine-only tree. Nodes can be VMs, hosts, Git repositories, API interfaces, storage pools, actions, temp[...]
+For the next UI pass, BKC should treat the left navigation as a **resource graph**, not a machine-only tree. Nodes can be VMs, hosts, Git repositories, API interfaces, storage pools, actions, templates, pipelines, or services. See `docs/ui-resource-graph.md` for the working information architecture.
+
+## Example Stories
+
+### Turn A Lab Into A Resource Graph
+
+BKC can scan existing inventory and integrations, then present hosts, groups,
+Docker Swarm nodes, Kubernetes clusters, Proxmox guests, credentials, actions,
+and pipelines as related resources. The intent is not to hide the underlying
+systems; it is to make their relationships visible so an operator can move from
+"what exists?" to "what action can I safely run here?"
+
+### Track A Slow Build Without Blocking The UI
+
+Long jobs can be sent to a Redis/RQ worker queue. The standard worker handles
+normal scans and quick automation; the slow worker can run heavier lanes such as
+AuziX package builds, repository publication, image checks, or other tasks that
+should be visible but not interactive. Pipeline runs record stage state, events,
+and links so the browser can be closed and reopened without losing context.
+
+### Backfill A Fix Into A Repeatable Pipeline
+
+Some lab fixes start as direct manual work: SSH to a VM, repair networking,
+install a missing package, or test a browser permission issue. BKC gives those
+fixes a place to become repeatable afterward. A pipeline can encode the source
+commit, target host or cluster, validation command, and publication step so the
+next run is not dependent on memory or shell history.
+
+### Keep Proxmox In The Loop
+
+Proxmox is treated as the VM lifecycle tier. Pipelines can stage toward clone,
+boot, resize, install, and guest validation workflows while still using SSH,
+Ansible, Docker, or Kubernetes as the right tool inside the guest after the VM
+exists.
 
 ## Feature list
 
@@ -163,7 +199,7 @@ To ensure you have the right python libraries run your OS's version of this comm
 
 ### Automated tests
 
-Install dev tools with `pip install -r requirements.txt -r requirements-dev.txt`, then run **`ruff check .`** and **`pytest`** from the repo root. Tests use a temporary SQLite file (see `tests/con[...]
+Install dev tools with `pip install -r requirements.txt -r requirements-dev.txt`, then run **`ruff check .`** and **`pytest`** from the repo root. Tests use a temporary SQLite file (see `tests/conftest.py`) so your real `dictionaries/bkc.db` is untouched. GitHub Actions runs **Ruff** plus the test suite on Python 3.11 and 3.12 (`.github/workflows/ci.yml`).
 
 ## Community Edition (CE) — auth, tenants, and API
 
@@ -192,8 +228,8 @@ BKC CE targets **trusted homelab or small MSP-style lab** use: sign-in is requir
 ### Data layout
 
 - **Auth / RBAC / audit / API key hashes**: `dictionaries/bkc.db` (gitignored).
-- **Inventory overrides per tenant**: `dictionaries/tenants/<slug>/rules.local.json` (gitignored parent). The legacy `dictionaries/rules.local.json` is still read for the `default` tenant until y[...]
-- **Integrations and snapshots per tenant**: `dictionaries/tenants/<slug>/integrations.json`, `proxmox_inventory.json`, and `ansible_scan.json`. For the `default` tenant only, legacy files under [...]
+- **Inventory overrides per tenant**: `dictionaries/tenants/<slug>/rules.local.json` (gitignored parent). The legacy `dictionaries/rules.local.json` is still read for the `default` tenant until you save from the UI, which writes the tenant path first.
+- **Integrations and snapshots per tenant**: `dictionaries/tenants/<slug>/integrations.json`, `proxmox_inventory.json`, and `ansible_scan.json`. For the `default` tenant only, legacy files under `dictionaries/` (`integrations.json`, etc.) are still read if the per-tenant files do not exist yet.
 - **Docker snapshots per tenant**: `dictionaries/tenants/<slug>/docker_scan.json`
 - **Optional per-tenant file templates**: if `dictionaries/tenants/<slug>/file_templates/` exists, it overrides the global `file_templates/` for that tenant.
 
@@ -201,37 +237,37 @@ CLI and scripts can pick the tenant with `BKC_TENANT_SLUG` (defaults to `default
 
 ### Docker Compose (containers)
 
-`docker compose up --build` starts **BKC**, **bkc-worker**, and **Redis**. The BKC service sets `BKC_RATELIMIT_STORAGE_URI=redis://redis:6379/0` and **`BKC_JOB_QUEUE_URL=redis://redis:6379/2`** s[...]
+`docker compose up --build` starts **BKC**, **bkc-worker**, and **Redis**. The BKC service sets `BKC_RATELIMIT_STORAGE_URI=redis://redis:6379/0` and **`BKC_JOB_QUEUE_URL=redis://redis:6379/2`** so long tasks (Proxmox/Ansible inventory sync, Ansible scan, subnet discovery) run in the **worker container** instead of blocking the web UI. Mount `./dictionaries`, `./keys`, and `./file_templates` on both `bkc` and `bkc-worker`. To disable the queue locally, unset `BKC_JOB_QUEUE_URL` on the app (the worker can stay stopped).
 
-**JSON access logs (optional):** set `BKC_ACCESS_LOG_FORMAT=json` on the BKC container to emit **one JSON object per line** to stderr (request id, path, status, duration, user, tenant). Every res[...]
+**JSON access logs (optional):** set `BKC_ACCESS_LOG_FORMAT=json` on the BKC container to emit **one JSON object per line** to stderr (request id, path, status, duration, user, tenant). Every response also gets an **`X-Request-ID`** header for correlation.
 
-**Session cookies (HTTPS):** when users only reach BKC over TLS, set **`BKC_SESSION_COOKIE_SECURE=1`** (or **`BKC_TRUSTED_HTTPS=1`**) so the Flask session cookie is marked **Secure**. Optional **[...]
+**Session cookies (HTTPS):** when users only reach BKC over TLS, set **`BKC_SESSION_COOKIE_SECURE=1`** (or **`BKC_TRUSTED_HTTPS=1`**) so the Flask session cookie is marked **Secure**. Optional **`BKC_SESSION_SAMESITE`** = `Lax` (default), `Strict`, or `None` (only honored together with Secure). Baseline response headers (**`X-Content-Type-Options`**, **`X-Frame-Options`**, **`Referrer-Policy`**, **`Permissions-Policy`**) are added on every response; disable with **`BKC_DISABLE_SECURITY_HEADERS=1`** only if something in your stack conflicts. See **`SECURITY.md`** for reporting issues.
 
 **Superuser audit export:** `GET /settings/audit/export?format=json|csv` (optional `limit=`, max 100000) downloads the audit log while signed in as a platform superuser.
 
 ### Read-only HTTP API (`/api/v1`)
 
 - `GET /api/v1/health` — liveness, no auth.
-- `GET /api/v1/ready` — readiness: SQLite (`bkc.db`), Redis when `BKC_RATELIMIT_STORAGE_URI` is `redis://…`, and a write probe under `dictionaries/`. Returns **503** if any check fails (for l[...]
-- `GET /api/v1/me` and `GET /api/v1/inventory` — `Authorization: Bearer <api_key>` where the key is created under **Platform settings** (superuser only). The plaintext key is shown **once** whe[...]
+- `GET /api/v1/ready` — readiness: SQLite (`bkc.db`), Redis when `BKC_RATELIMIT_STORAGE_URI` is `redis://...`, and a write probe under `dictionaries/`. Returns **503** if any check fails (for load balancers / Kubernetes).
+- `GET /api/v1/me` and `GET /api/v1/inventory` — `Authorization: Bearer <api_key>` where the key is created under **Platform settings** (superuser only). The plaintext key is shown **once** when created.
 - `GET /api/v1/automation/runs`
 - `GET /api/v1/automation/runs/<run_id>`
 - `POST /api/v1/automation/trigger`
-- **Scopes** (comma-separated, stored on the key): `read:me`, `read:inventory`, or `*` for all current and future read endpoints. Keys without access to an endpoint receive **403** JSON `{"error"[...]
+- **Scopes** (comma-separated, stored on the key): `read:me`, `read:inventory`, or `*` for all current and future read endpoints. Keys without access to an endpoint receive **403** JSON `{"error":"insufficient_scope",...}`.
 - Automation scopes: `read:automation`, `write:automation`
-- **Rate limits:** `GET /api/v1/me` and `GET /api/v1/inventory` are limited **per API key** (Flask-Limiter). Optional per-key **requests/minute** is set when creating the key; otherwise use **`BK[...]
+- **Rate limits:** `GET /api/v1/me` and `GET /api/v1/inventory` are limited **per API key** (Flask-Limiter). Optional per-key **requests/minute** is set when creating the key; otherwise use **`BKC_API_KEY_RATE_LIMIT`** (default `120 per minute`). **`GET /api/v1/health`** and **`GET /api/v1/ready`** are not rate-limited by this rule.
 
 **Same readiness JSON** is also exposed at **`GET /ready`** on the app port (no auth), for probes that do not use the `/api/v1` prefix.
 
 ### Background jobs (RQ)
 
-When `BKC_JOB_QUEUE_URL` points at Redis (Compose uses database **/2** while rate limits use **/0**), selected integration actions and subnet scans are **enqueued** and handled by **`python bkc_w[...]
+When `BKC_JOB_QUEUE_URL` points at Redis (Compose uses database **/2** while rate limits use **/0**), selected integration actions and subnet scans are **enqueued** and handled by **`python bkc_worker.py`** (the `bkc-worker` container). Authenticated users can open **`/jobs/<job_id>`** (linked from the **Jobs** nav entry) for status, result JSON, and failures.
 
 ### Production habits
 
-- Prefer the included **Caddy** service (`docker compose --profile tls up --build`) or your own reverse proxy for TLS and security headers; keep BKC on an internal Docker network and only publish[...]
+- Prefer the included **Caddy** service (`docker compose --profile tls up --build`) or your own reverse proxy for TLS and security headers; keep BKC on an internal Docker network and only publish the proxy.
 - Put **real** session secrets in `BKC_SECRET_KEY` or the generated `keys/bkc_flask_secret` volume backup.
-- Multi-tenant **MSP isolation** on shared infrastructure still needs agents, jump hosts, or per-customer networking; CE gives you identity, RBAC, and tenant-scoped **inventory files**, not a ful[...]
+- Multi-tenant **MSP isolation** on shared infrastructure still needs agents, jump hosts, or per-customer networking; CE gives you identity, RBAC, and tenant-scoped **inventory files**, not a full zero-trust edge product.
 
 ## Secret Storage
 
@@ -256,9 +292,9 @@ See [SECURITY.md](SECURITY.md) for complete encryption architecture, key rotatio
 
 ## BKC SSH Mode
 
-BKC SSH mode is the lightweight execution path behind **Admin Mode -> Run host command**. It uses the inventory host metadata BKC already stores: `ip`, `user`, `port`, `password`, and/or `private[...]
+BKC SSH mode is the lightweight execution path behind **Admin Mode -> Run host command**. It uses the inventory host metadata BKC already stores: `ip`, `user`, `port`, `password`, and/or `private_key`.
 
-This overlaps with Ansible on purpose. Ansible is still the better fit for large reusable roles, complex dependency graphs, and dry-run/change reporting. BKC SSH mode is better for direct lab ope[...]
+This overlaps with Ansible on purpose. Ansible is still the better fit for large reusable roles, complex dependency graphs, and dry-run/change reporting. BKC SSH mode is better for direct lab operations where a readable shell command is enough: update packages, restart services, inspect logs, stage a config, or apply a small one-off change.
 
 ### Host readiness
 
@@ -356,7 +392,7 @@ fi
 The repo now ships with sanitized sample inventory data in `dictionaries/rules.json` and `dictionaries/integrations.sample.json`.
 
 - **Inventory:** prefer `dictionaries/tenants/<slug>/rules.local.json`; legacy `dictionaries/rules.local.json` remains supported for the `default` tenant.
-- **Integrations:** prefer `dictionaries/tenants/<slug>/integrations.json`; legacy `dictionaries/integrations.json` is still read for `default` until you save integrations in the UI (which writes[...]
+- **Integrations:** prefer `dictionaries/tenants/<slug>/integrations.json`; legacy `dictionaries/integrations.json` is still read for `default` until you save integrations in the UI (which writes the tenant path).
 - Git ignores `dictionaries/bkc.db`, `dictionaries/tenants/`, `dictionaries/rules.local.json`, and `dictionaries/integrations.json` so real lab state stays out of the repo.
 
 This keeps the tracked repo safe while still letting the app keep real lab state locally.
@@ -398,7 +434,7 @@ The UI will be available at `http://localhost:5000`.
 
 ### Optional reverse proxy (Caddy, profile `tls`)
 
-`docker compose --profile tls up --build` starts **Caddy** on port **8080** → BKC (see `docker/caddy/Caddyfile`): gzip/zstd, `X-Frame-Options`, `CSP`, and other baseline headers. Map host **80:[...]
+`docker compose --profile tls up --build` starts **Caddy** on port **8080** -> BKC (see `docker/caddy/Caddyfile`): gzip/zstd, `X-Frame-Options`, `CSP`, and other baseline headers. Map host **80:80** or **443:443** in `docker-compose.yml` when you are ready to put this on a real hostname; add a `tls` block or ACME email in Caddy when you expose HTTPS.
 
 Set **`BKC_BEHIND_PROXY=1`** on the BKC container when using Caddy (or any reverse proxy) so Flask applies **ProxyFix** and `request.remote_addr` / scheme match the client.
 
@@ -540,13 +576,10 @@ We welcome community contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md
 
 ## License
 
-BlackKnightController is licensed under the **Commons Clause + MIT License**. See [LICENSE](LICENSE) for details.
-
-- ✅ Free for non-commercial use, education, research
-- ✅ Source-available with proper encryption standards
-- ❌ No reselling or commercial derivatives without a commercial license
-
-For commercial licensing inquiries, contact the maintainer.
+Black Knight Controller code is licensed under **GPL-3.0-or-later**.
+Documentation, screenshots, diagrams, and other narrative or visual material are
+licensed under **CC BY-SA 4.0** unless a file says otherwise. See [LICENSE](LICENSE)
+and `LICENSES/` for details.
 
 ## Support & Community
 

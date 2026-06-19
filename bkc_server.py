@@ -13,8 +13,8 @@ from routes.group import groups
 from routes.health_public import health_public_blueprint
 from routes.index import index_blueprint
 from routes.integrations import integrations_blueprint
-from routes.jobs import jobs_blueprint
 from routes.inventory_console import inventory_console_blueprint
+from routes.jobs import jobs_blueprint
 from routes.pipelines import pipelines_blueprint
 from routes.proxmox_ops import proxmox_ops_blueprint
 from routes.settings import settings_blueprint

@@ -6,9 +6,9 @@ from pathlib import Path
 from flask import Blueprint, abort, current_app, g, jsonify, request
 from flask_limiter.util import get_remote_address
 from services import bkc_db
+from services.api_key_scopes import ENDPOINT_REQUIRED_SCOPE, parse_scopes, scope_allowed
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
 from services.automation_runs import get_run, load_runs
-from services.api_key_scopes import ENDPOINT_REQUIRED_SCOPE, parse_scopes, scope_allowed
 from services.health_checks import readiness_report
 from services.job_queue import enqueue_job, job_queue_enabled
 from services.pipeline_executor import workflow_job_timeout
