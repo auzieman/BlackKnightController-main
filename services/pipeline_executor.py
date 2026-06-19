@@ -57,6 +57,9 @@ K3S_NFS_MOUNTS = [
 LAB_STORAGE_SWARM_HOSTS = "swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com"
 LAB_STORAGE_K3S_HOSTS = "192.168.1.14 192.168.1.59"
 LAB_STORAGE_ALL_HOSTS = f"{LAB_STORAGE_SWARM_HOSTS} {LAB_STORAGE_K3S_HOSTS}"
+LAB_STORAGE_SWARM_HOST_LIST = LAB_STORAGE_SWARM_HOSTS.split()
+LAB_STORAGE_K3S_HOST_LIST = LAB_STORAGE_K3S_HOSTS.split()
+LAB_STORAGE_ALL_HOST_LIST = LAB_STORAGE_ALL_HOSTS.split()
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
@@ -814,6 +817,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "storage-preflight",
                 "transport": "ssh-manager",
                 "target": "manager",
+                "kind": "lab-storage-preflight",
                 "action": "ssh.lvm.grow_root",
                 "active": "Checking root LVM layout and free extents on both clusters.",
                 "complete": "All cluster guests have LVM-backed roots and sufficient capacity.",
@@ -833,6 +837,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "swarm-grow",
                 "transport": "ssh-manager",
                 "target": "manager",
+                "kind": "lab-storage-grow-swarm",
                 "action": "ssh.lvm.grow_root",
                 "active": "Growing Swarm root filesystems to 50 GiB where needed.",
                 "complete": "Swarm root filesystems meet the 50 GiB target.",
@@ -853,6 +858,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "k3s-grow",
                 "transport": "ssh-manager",
                 "target": "manager",
+                "kind": "lab-storage-grow-k3s",
                 "action": "ssh.lvm.grow_root",
                 "active": "Growing k3s root filesystems to 50 GiB where needed.",
                 "complete": "k3s root filesystems meet the 50 GiB target.",
@@ -873,6 +879,7 @@ WORKFLOW_DEFINITIONS = {
                 "name": "storage-verify",
                 "transport": "ssh-manager",
                 "target": "manager",
+                "kind": "lab-storage-verify",
                 "action": "ssh.lvm.grow_root",
                 "active": "Verifying root capacity and retained VG reserve.",
                 "complete": "Cluster storage expansion contract passed.",
@@ -3498,6 +3505,56 @@ def _run_auzix_vm130_validate(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-1200:] if output else "vm130 validation passed")
 
 
+def _run_lab_storage_command(hosts: list[str], command: str, *, timeout: int = 120) -> dict[str, str]:
+    results: dict[str, str] = {}
+    for host in hosts:
+        results[host] = run_remote_command(
+            host=host,
+            user="root",
+            command=command,
+            timeout=timeout,
+        )
+    return results
+
+
+def _run_lab_storage_preflight(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        "findmnt -n -o SOURCE /; "
+        "lvs --noheadings -o lv_size; "
+        "vgs --noheadings --units g -o vg_free"
+    )
+    results = _run_lab_storage_command(LAB_STORAGE_ALL_HOST_LIST, command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "All cluster guests have LVM-backed roots and sufficient capacity.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _run_lab_storage_grow(run_id: str, stage_name: str, hosts: list[str]) -> None:
+    command = (
+        "set -e; "
+        "lv=$(lvs --noheadings -o lv_path | xargs); "
+        "bytes=$(findmnt -bn -o SIZE /); "
+        "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+        "df -hT /"
+    )
+    results = _run_lab_storage_command(hosts, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "Root filesystems meet the 50 GiB target.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _run_lab_storage_verify(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        "bytes=$(findmnt -bn -o SIZE /); "
+        "[ \"$bytes\" -ge 53687091200 ]; "
+        "df -hT /; "
+        "vgs --noheadings -o vg_name,vg_free"
+    )
+    results = _run_lab_storage_command(LAB_STORAGE_ALL_HOST_LIST, command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Cluster storage expansion contract passed.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -3517,6 +3574,22 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             if message:
                 append_event(run_id, "info", stage_name, message)
             _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Stage completed.")))
+            continue
+
+        if kind == "lab-storage-preflight":
+            _run_lab_storage_preflight(run_id, stage_name)
+            continue
+
+        if kind == "lab-storage-grow-swarm":
+            _run_lab_storage_grow(run_id, stage_name, LAB_STORAGE_SWARM_HOST_LIST)
+            continue
+
+        if kind == "lab-storage-grow-k3s":
+            _run_lab_storage_grow(run_id, stage_name, LAB_STORAGE_K3S_HOST_LIST)
+            continue
+
+        if kind == "lab-storage-verify":
+            _run_lab_storage_verify(run_id, stage_name)
             continue
 
         if kind == "fedora-build-kit":
