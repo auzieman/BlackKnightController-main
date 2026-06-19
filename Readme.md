@@ -30,6 +30,44 @@ The point is repeatability: the first repair can be discovered interactively,
 but the useful result becomes a pipeline that can be reviewed, rerun, and
 improved.
 
+## Visual Tour
+
+BKC is intended for operators who are already comfortable with infrastructure
+tools such as Docker, `kubectl`, SSH, Ansible, and hypervisor APIs. The UI keeps
+those concepts visible instead of hiding them behind a wizard, which makes it a
+good surface for an engineer and an AI sidecar to reason over the same state.
+
+![BKC overview page](docs/images/Overview-page.png)
+
+The overview page is the landing console: resource counts, inferred
+relationships, active and failed run summaries, and jump points into the graph,
+inventory, integrations, and pipelines.
+
+![BKC resource graph](docs/images/ResourceGraph.png)
+
+The resource graph shows APIs, clusters, groups, hosts, VMs, containers,
+repositories, pipelines, actions, and credentials as related resources. Pick a
+resource to inspect its summary, relationships, available actions, or inventory
+membership.
+
+![BKC inventory console](docs/images/InventoryConsole.png)
+
+The inventory console keeps resources first and launch paths underneath. It is
+where groups, host facts, relationships, status grids, and direct inspect/deploy
+actions come together.
+
+![BKC integrations screen](docs/images/API-Integrations.png)
+
+The integrations screen is the flight deck for Proxmox, Ansible, Docker Swarm,
+SSH, and other API-backed inventory sources. Store credentials, test endpoints,
+pull inventories, and sync discovered resources into BKC.
+
+![BKC pipelines screen](docs/images/PipeLines.png)
+
+The pipelines screen turns manual fixes into tracked runs. Operators can browse
+pipeline templates, inspect stages and action bricks, queue work, and review
+recent run state without losing the underlying command/API model.
+
 ## System Architecture Mesh
 
 ```mermaid
