@@ -1,0 +1,71 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-installed-root-recovery",
+  "name": "AuziX Installed Root Recovery",
+  "status": "scaffold",
+  "owner": "auzix",
+  "summary": "Repeatable BKC lane for restoring installed-root permissions and validating GUI/browser/network state.",
+  "targets": {
+    "source_repo": "repo:AuziX",
+    "build_workspace": "storage:/srv/nfs/swarm/AuziX",
+    "test_vm": "vm:auzix-installed-test"
+  },
+  "gates": [
+    {
+      "id": "source-commit",
+      "kind": "source.commit",
+      "with": {
+        "path": "/srv/nfs/swarm/AuziX/src/.auzix-commit",
+        "expected": "0a64310"
+      }
+    },
+    {
+      "id": "workspace-free-space",
+      "kind": "storage.free_space",
+      "with": {
+        "path": "/srv/nfs/swarm/AuziX",
+        "minimum_gib": 16
+      }
+    },
+    {
+      "id": "target-disk-size",
+      "kind": "vm.disk_size",
+      "with": {
+        "minimum_gib": 16
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "verify-finalizer-contract",
+      "action": "repo.command.check",
+      "with": {
+        "command": "scripts/test-auzix-installer.sh"
+      }
+    },
+    {
+      "id": "deploy-installed-root",
+      "action": "auzix.installed_root.deploy",
+      "risk": "high",
+      "with": {
+        "finalizer": "/System/Tools/finalize-installed-root"
+      }
+    },
+    {
+      "id": "validate-installed-root",
+      "action": "auzix.installed_root.validate",
+      "with": {
+        "checks": [
+          "auzix-home-writable",
+          "run-user-1000",
+          "dev-shm-mode",
+          "sudo-mode",
+          "xorg-wrapper-mode",
+          "network-curl",
+          "browser-profile-state"
+        ]
+      }
+    }
+  ],
+  "notes": "Scaffold only. Keep direct VM repair as a fallback, not the normal path."
+}

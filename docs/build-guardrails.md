@@ -6,7 +6,9 @@ These are working rules for future BKC changes. They are intentionally practical
 
 - Prefer adding reusable actions over adding workflow-specific executor code.
 - New pipelines should be recipes of actions, templates, target selectors, and validations.
+- Give each migrated pipeline its own `pipelines/<pipeline-id>/` folder with the recipe, assets, checks, templates, and operator notes together.
 - Every stage should have a clear validation, not just a command that exits zero.
+- Expensive or destructive stages should have explicit preflight gates for source refs, free space, publish targets, and target disk capacity.
 - Stage output should record enough detail to debug without exposing secrets.
 - Successful stages should produce durable facts or relationships when possible.
 - Keep lab-specific addresses in inventory, pipeline inputs, or tenant config unless a built-in lab default is explicitly intended.

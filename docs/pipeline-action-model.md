@@ -28,6 +28,9 @@ The pipeline executor should interpret that recipe. It should not become the onl
 ## Pipeline Recipe Shape
 
 The long-term shape should be JSON/YAML friendly so the UI can edit simple cases and advanced users can keep recipes in Git.
+Repository-backed recipes should live under
+`pipelines/<pipeline-id>/pipeline.json` with sibling folders for assets,
+templates, checks, examples, and operator notes.
 
 ```json
 {
@@ -128,6 +131,7 @@ Ansible remains useful, but BKC native SSH actions should cover simple operation
 - Do not keep adding large workflow-specific function clusters to `pipeline_executor.py`.
 - Do not hard-code lab IPs inside reusable action logic when they can be pipeline inputs or inventory facts.
 - Do not treat raw command success as enough when a stronger validation is available.
+- Do not run image builds, repository publishes, or VM installs without explicit source, workspace, publish-target, and target-disk gates.
 - Do not create arbitrary relationships without a typed relationship rule.
 - Do not copy secrets into action or pipeline definitions; reference credential scopes.
 

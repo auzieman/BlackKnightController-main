@@ -95,11 +95,33 @@ Keep simple built-in pipeline definitions in Python for now, but prepare for rep
 
 Target locations:
 
-- `pipelines/*.json` or `pipelines/*.yaml` for built-in recipes
+- `pipelines/<pipeline-id>/pipeline.json` for built-in recipes
+- `pipelines/<pipeline-id>/assets/` for small static inputs
+- `pipelines/<pipeline-id>/templates/` for rendered scripts, manifests, and config
+- `pipelines/<pipeline-id>/checks/` for validation helpers
 - tenant override files under `dictionaries/tenants/<slug>/pipelines/`
 - external Git repository references later
 
 The UI should be able to edit metadata and simple stage inputs without hiding the source recipe from advanced users.
+
+## Priority 7: Build And Deploy Preflight Gates
+
+Add first-class resource gates before expensive or destructive stages.
+
+AuziX lanes should fail early when the source commit, build workspace, package
+repository, VM disk, or target filesystem is not in the expected state. The
+recent 4 GiB VM target is the exact failure mode this should catch: storage
+pressure can masquerade as package, permission, browser, or desktop regressions.
+
+Initial gates:
+
+- source ref or `.auzix-commit` matches the pipeline expectation
+- build workspace has enough free space for the lane
+- publish target is reachable and writable before repository publish
+- target VM disk meets the lane minimum before install/deploy
+- installed root exposes the expected finalizer, package receipts, and commands
+- post-run validation checks user state, sudo/Xorg permissions, network, and GUI
+  launch basics
 
 ## Defer For Now
 
