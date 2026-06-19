@@ -1,0 +1,13 @@
+{
+  "id": "installed-root-finalizer",
+  "kind": "check",
+  "summary": "Confirm installed-root permissions are repaired through the packaged finalizer.",
+  "path": "/System/Tools/finalize-installed-root",
+  "checks": [
+    "/Users/auzix browser and desktop state",
+    "/run/user/1000 ownership",
+    "/dev/shm mode",
+    "sudo mode",
+    "Xorg wrapper mode"
+  ]
+}

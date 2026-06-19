@@ -99,6 +99,8 @@ Target locations:
 - `pipelines/<pipeline-id>/assets/` for small static inputs
 - `pipelines/<pipeline-id>/templates/` for rendered scripts, manifests, and config
 - `pipelines/<pipeline-id>/checks/` for validation helpers
+- `dictionaries/pipelines/<Pipeline_Name>/pipeline.json` for mounted lab-local pipeline state
+- `dictionaries/pipelines/<Pipeline_Name>/items/*.json` for gates, checks, and work items
 - tenant override files under `dictionaries/tenants/<slug>/pipelines/`
 - external Git repository references later
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services import resource_graph
+from services import pipeline_catalog, resource_graph
 from services.action_catalog import action_by_id, actions_for_kind, list_actions
 from services.pipeline_catalog import pipeline_by_id
 from services.pipeline_executor import workflow_stage_definitions
@@ -43,6 +43,16 @@ def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     assert pipeline is not None
     assert pipeline["repo"] == "AuziX"
     assert pipeline["stages"] == ["source-verify", "runtime-deploy", "network-validate"]
+    assert pipeline["source_path"].endswith(
+        "dictionaries/pipelines/AuziX_VM130_Deploy/pipeline.json"
+    )
+    assert "target-disk-size" in pipeline["gates"]
+    assert {item["id"] for item in pipeline["items"]} >= {
+        "source-commit",
+        "target-disk-size",
+        "installed-root-finalizer",
+        "network-browser-validation",
+    }
 
     stages = workflow_stage_definitions("auzix-vm130-deploy")
     kinds = {stage["name"]: stage.get("kind", "remote-command") for stage in stages}
@@ -52,6 +62,41 @@ def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     source_verify = next(stage for stage in stages if stage["name"] == "source-verify")
     assert "libnssckbi.so" in source_verify["command"]
     assert "mdev.conf" in source_verify["command"]
+
+
+def test_folder_backed_pipeline_loader_keeps_items_scoped(monkeypatch, tmp_path):
+    pipeline_dir = tmp_path / "dictionaries" / "pipelines" / "Example_Pipeline"
+    items_dir = pipeline_dir / "items"
+    items_dir.mkdir(parents=True)
+    (pipeline_dir / "pipeline.json").write_text(
+        """{
+  "id": "example-folder-pipeline",
+  "name": "Example Folder Pipeline",
+  "repo": "Example",
+  "workflow": "candidate-import",
+  "description": "Loaded from dictionaries/pipelines.",
+  "stages": ["preflight"],
+  "editable": true
+}
+""",
+        encoding="utf-8",
+    )
+    (items_dir / "00-preflight.json").write_text(
+        """{
+  "kind": "gate",
+  "summary": "Preflight gate"
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(pipeline_catalog, "BASE_DIR", tmp_path)
+
+    pipeline = pipeline_catalog.pipeline_by_id("example-folder-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_path"].endswith("Example_Pipeline/pipeline.json")
+    assert pipeline["items"][0]["id"] == "00-preflight"
+    assert pipeline["items"][0]["source_path"].endswith("items/00-preflight.json")
 
 
 def test_auzix_installer_pipeline_is_non_destructive():

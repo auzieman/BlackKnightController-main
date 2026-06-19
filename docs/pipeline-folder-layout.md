@@ -29,6 +29,23 @@ The folder owns the whole lane:
   UI work.
 - `README.md`: operator notes, known risks, links, and recovery hints.
 
+Runtime dictionary state follows the same shape under the mounted dictionary
+volume:
+
+```text
+dictionaries/pipelines/<Pipeline_Name>/
+  README.md
+  pipeline.json
+  items/
+    00-preflight.json
+    10-build.json
+    20-validate.json
+```
+
+That path is visible inside the running BKC containers as `/app/dictionaries`.
+It is the right place for lab-local lane metadata that should be easy to inspect
+from an editor without opening one giant JSON file.
+
 ## Resource Gates
 
 Pipelines that build images, publish package repositories, install operating

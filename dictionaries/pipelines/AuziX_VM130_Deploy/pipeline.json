@@ -1,0 +1,32 @@
+{
+  "id": "auzix-vm130-deploy",
+  "name": "AuziX VM130 Deploy",
+  "repo": "AuziX",
+  "workflow": "auzix-vm130-deploy",
+  "description": "Repeatable SSH deployment for the AuziX installed-root test VM, with explicit source, disk, permission, and network/browser validation gates.",
+  "stages": [
+    "source-verify",
+    "runtime-deploy",
+    "network-validate"
+  ],
+  "actions": [
+    "repo.source.verify",
+    "auzix.installed_root.deploy",
+    "auzix.installed_root.validate"
+  ],
+  "gates": [
+    "source-commit",
+    "workspace-free-space",
+    "target-disk-size",
+    "installed-root-finalizer"
+  ],
+  "notes": "Dictionary-backed scaffold for the existing Python-backed VM130 lane. Keep direct root SSH repair as the fallback path, not the normal path.",
+  "editable": true,
+  "tags": [
+    "auzix",
+    "vm130",
+    "deploy",
+    "ssh",
+    "installed-root"
+  ]
+}
