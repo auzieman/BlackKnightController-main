@@ -88,6 +88,87 @@ def test_cluster_storage_pipeline_is_idempotent_and_retains_reserve():
     assert "192.168.1.59" in commands
 
 
+def test_installer_package_bot_runs_on_slow_queue_with_guarded_runner():
+    pipeline = pipeline_by_id("auzix-installer-package-bot")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "queue-contract",
+        "package-build",
+        "artifact-report",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
+    ]
+
+    stages = workflow_stage_definitions("auzix-installer-package-bot")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "run-auzix-package-bot.sh" in commands
+    assert "installer-ui.queue.json" in commands
+    assert "installer-ui.sources.json" in commands
+    assert "auzix/builder:local" in commands
+    assert "docker image inspect auzix/builder:local" in commands
+    assert "docker build --pull=false" in commands
+    assert "apt-get update" in commands
+    assert "xinit xserver-xorg-legacy" in commands
+    assert "build-auzix-package-repo.sh" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+    assert "http://192.168.1.10/auzix/repo/index.json" in commands
+    assert "git commit" not in commands
+    assert "git push" not in commands
+
+
+def test_trixie_package_intake_is_bounded_and_failure_tolerant():
+    pipeline = pipeline_by_id("auzix-trixie-package-intake")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "builder-prepare",
+        "package-intake",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
+    ]
+
+    stages = workflow_stage_definitions("auzix-trixie-package-intake")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "docker/trixie-builder/Dockerfile" in commands
+    assert "run-auzix-trixie-intake.sh" in commands
+    assert "profiles/packages/auzix-trixie-user-apps.packages" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+    assert "git commit" not in commands
+    assert "git push" not in commands
+
+
+def test_office_package_smoke_builds_tests_and_publishes_two_packages():
+    pipeline = pipeline_by_id("auzix-office-package-smoke")
+    assert pipeline is not None
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "builder-prepare",
+        "package-build",
+        "package-test",
+        "repository-build",
+        "repository-publish",
+        "repository-verify",
+    ]
+
+    stages = workflow_stage_definitions("auzix-office-package-smoke")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "auzix-office-smoke.packages" in commands
+    assert "office-smoke.report.json" in commands
+    assert "run-auzix-office-smoke.sh" in commands
+    assert "build-auzix-office-package.sh" not in commands
+    assert "test-auzix-office-smoke.sh" in commands
+    assert "audit-auzix-package-runtime.sh" in commands
+    assert "AbiWord" in commands
+    assert "Gnumeric" in commands
+    assert "publish-auzix-package-repo.sh" in commands
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(

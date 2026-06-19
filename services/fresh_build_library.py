@@ -1,8 +1,6 @@
-from pathlib import Path
 from string import Template
 
 from services.rules_store import BASE_DIR
-
 
 FRESH_BUILD_TEMPLATE_PATH = BASE_DIR / "file_templates" / "fedora-server-minimal.ks.j2"
 

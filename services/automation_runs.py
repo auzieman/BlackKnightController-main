@@ -68,6 +68,35 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["source-verify", "runtime-deploy", "network-validate"]
     if normalized == "auzix-installer-foundation":
         return ["source-verify", "installer-build", "contract-test", "artifact-report"]
+    if normalized == "auzix-installer-package-bot":
+        return [
+            "source-verify",
+            "queue-contract",
+            "package-build",
+            "artifact-report",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
+    if normalized == "auzix-trixie-package-intake":
+        return [
+            "source-verify",
+            "builder-prepare",
+            "package-intake",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
+    if normalized == "auzix-office-package-smoke":
+        return [
+            "source-verify",
+            "builder-prepare",
+            "package-build",
+            "package-test",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
     if normalized == "lab-cluster-storage":
         return ["storage-preflight", "swarm-grow", "k3s-grow", "storage-verify"]
     if normalized == "fedora-workstation-spin":

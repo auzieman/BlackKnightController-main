@@ -1,9 +1,7 @@
 from flask import Blueprint, render_template, request
-
 from services.inventory_model import build_actionable_inventory, resolve_group_hosts
 from services.resource_graph import RESOURCE_KIND_META, build_resource_graph, related_to
 from services.rules_store import load_rules
-
 
 inventory_console_blueprint = Blueprint("inventory_console", __name__)
 

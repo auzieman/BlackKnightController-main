@@ -1,7 +1,5 @@
 from flask import Blueprint, render_template, request
-
 from services.resource_graph import RESOURCE_KIND_META, build_resource_graph, related_to
-
 
 resource_graph_blueprint = Blueprint("resource_graph", __name__)
 

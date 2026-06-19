@@ -12,8 +12,8 @@ from services.remote_admin import (
     run_host_commands,
 )
 from services.rules_store import load_rules
-from services.tenant_context import get_current_tenant_id
 from services.template_assets import TemplateAssetError, load_template_assets, run_template_asset
+from services.tenant_context import get_current_tenant_id
 
 admin_blueprint = Blueprint("admin", __name__)
 register_admin_post_guard(admin_blueprint)

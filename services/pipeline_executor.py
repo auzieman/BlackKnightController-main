@@ -727,6 +727,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s installer/install-plan.schema.json && "
                     "test -s installer/questions.json && "
                     "test -s installer/auzix-installer.lua && "
+                    "test -s installer/auzix-package-setup.lua && "
                     "test -x scripts/build-auzix-installer-package.sh && "
                     "test -x scripts/test-auzix-installer.sh && "
                     "echo auzix-installer-source-ready'"
@@ -865,6 +866,355 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "Lab cluster storage expansion pipeline completed.",
+    },
+    "auzix-installer-package-bot": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the staged installer package queue and bot entry points.",
+                "complete": "Installer package queue source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s packages/installer-ui.queue.json && "
+                    "test -s packages/installer-ui.sources.json && "
+                    "test -s packages/package-build-queue.schema.json && "
+                    "test -x scripts/run-auzix-package-bot.sh && "
+                    "test -x scripts/test-auzix-package-bot.sh && "
+                    "test -x scripts/publish-auzix-package-repo.sh && "
+                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "echo auzix-package-bot-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "queue-contract",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Validating package states, script allowlisting, and required installer UI entries.",
+                "complete": "Installer package queue contract passed.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "{ docker image inspect auzix/installer-builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/installer-builder/Dockerfile "
+                    "-t auzix/installer-builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/installer-builder:local ./scripts/test-auzix-package-bot.sh'"
+                ),
+                "timeout": 900,
+            },
+            {
+                "name": "package-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building the installer UI package batch on the slow worker.",
+                "complete": "Installer UI package batch completed.",
+                "command": (
+                    "bash -lc '{ docker image inspect auzix/builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/builder/Dockerfile "
+                    "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "apt-get install -y --no-install-recommends "
+                    "xinit xserver-xorg-legacy >/dev/null && "
+                    "./scripts/run-auzix-package-bot.sh "
+                    "packages/installer-ui.queue.json installer-ui-core'\"'\"''"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "artifact-report",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying package receipts and the machine-readable batch report.",
+                "complete": "Installer UI package receipts and report are available.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "report=out/package-bot/installer-ui-core.report.json && "
+                    "jq -e '\"'\"'.format == \"auzix-package-build-report-v1\" "
+                    "and .status == \"complete\" and (.results | length == 6)'\"'\"' \"$report\" >/dev/null && "
+                    "for package in AuzixPackageTools AuzixInstaller Xorg Enlightenment Terminology LightDM; do "
+                    "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
+                    "-name \"$package-*.auzix.json\" -print -quit | grep -q .; "
+                    "done && jq . \"$report\"'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "repository-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building checksummed AuziX repository archives from package receipts.",
+                "complete": "AuziX repository archives and index were built.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "repository-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing verified archives and replacing the HTTP repository index.",
+                "complete": "AuziX package repository was published.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "./scripts/publish-auzix-package-repo.sh "
+                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
+                    "/srv/http/auzix/repo'"
+                ),
+                "timeout": 1800,
+            },
+            {
+                "name": "repository-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying installer packages through the served repository index.",
+                "complete": "Served AuziX repository contains the installer package batch.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "index=$(mktemp); trap '\"'\"'rm -f \"$index\"'\"'\"' EXIT; "
+                    "curl -fsS http://192.168.1.10/auzix/repo/index.json -o \"$index\"; "
+                    "jq -e '\"'\"'.format == \"auzix-repo-v1\"'\"'\"' \"$index\" >/dev/null; "
+                    "for package in AuzixPackageTools AuzixInstaller Xorg Enlightenment Terminology LightDM; do "
+                    "archive=$(jq -r --arg package \"$package\" "
+                    "'\"'\"'.packages[] | select(.name == $package) | .package'\"'\"' \"$index\" | head -1); "
+                    "test -n \"$archive\"; "
+                    "curl -fsSI \"http://192.168.1.10/auzix/repo/packages/$archive\" >/dev/null; "
+                    "done; jq '\"'\"'{created, package_count: (.packages | length)}'\"'\"' \"$index\"'"
+                ),
+                "timeout": 180,
+            },
+        ],
+        "complete_message": "AuziX installer package bot built and published the repository.",
+    },
+    "auzix-trixie-package-intake": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the Trixie package profile and intake scripts.",
+                "complete": "Trixie package intake source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s profiles/packages/auzix-trixie-user-apps.packages && "
+                    "test -s docker/trixie-builder/Dockerfile && "
+                    "test -x scripts/run-auzix-trixie-intake.sh && "
+                    "test -x scripts/test-auzix-trixie-intake.sh && "
+                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "./scripts/test-auzix-trixie-intake.sh'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "builder-prepare",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Preparing the dedicated Debian Trixie package intake image.",
+                "complete": "Debian Trixie package intake image is ready.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "docker build --pull=false "
+                    "-f /mnt/swarm/AuziX/src/docker/trixie-builder/Dockerfile "
+                    "-t auzix/trixie-builder:local /mnt/swarm/AuziX/src'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "package-intake",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Attempting the Trixie user application profile sequentially.",
+                "complete": "Trixie package intake attempts completed.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/trixie-builder:local bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "./scripts/run-auzix-trixie-intake.sh'\"'\"''"
+                ),
+                "timeout": 21600,
+            },
+            {
+                "name": "repository-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Rebuilding the AuziX repository with successful Trixie intake receipts.",
+                "complete": "AuziX repository includes successful Trixie intake packages.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "repository-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing successful Trixie intake packages.",
+                "complete": "Successful Trixie intake packages were published.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "./scripts/publish-auzix-package-repo.sh "
+                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
+                    "/srv/http/auzix/repo'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "repository-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the Trixie intake report and served compatibility packages.",
+                "complete": "Trixie intake report and published packages are available.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "report=out/package-bot/trixie-user-apps.report.json && "
+                    "jq -e '\"'\"'.format == \"auzix-trixie-intake-report-v1\" "
+                    "and .complete > 0'\"'\"' \"$report\" >/dev/null && "
+                    "curl -fsS http://192.168.1.10/auzix/repo/index.json | "
+                    "jq -e '\"'\"'any(.packages[]; (.name | startswith(\"Debian.\")))'\"'\"' >/dev/null && "
+                    "jq '\"'\"'{status, complete, failed}'\"'\"' \"$report\"'"
+                ),
+                "timeout": 180,
+            },
+        ],
+        "complete_message": "AuziX Trixie package intake completed and successful packages were published.",
+    },
+    "auzix-office-package-smoke": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the focused office package profile and smoke test.",
+                "complete": "Office package smoke source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s profiles/packages/auzix-office-smoke.packages && "
+                    "test -x scripts/test-auzix-office-smoke.sh && "
+                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "./scripts/test-auzix-office-smoke.sh'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "builder-prepare",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Preparing the Debian Trixie office package builder.",
+                "complete": "Office package builder is ready.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "docker build --pull=false "
+                    "-f /mnt/swarm/AuziX/src/docker/trixie-builder/Dockerfile "
+                    "-t auzix/trixie-builder:local /mnt/swarm/AuziX/src'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "package-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building AbiWord and Gnumeric compatibility packages.",
+                "complete": "AbiWord and Gnumeric package builds completed.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/trixie-builder:local bash -lc "
+                    "'\"'\"'./scripts/run-auzix-office-smoke.sh'\"'\"''"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "package-test",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Validating office package receipts and application payloads.",
+                "complete": "Office package receipts and payloads passed.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/trixie-builder:local "
+                    "bash -lc '\"'\"'./scripts/test-auzix-office-smoke.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot && "
+                    "./scripts/audit-auzix-package-runtime.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot AbiWord && "
+                    "./scripts/audit-auzix-package-runtime.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot Gnumeric'\"'\"''"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "repository-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building repository archives for the office package smoke.",
+                "complete": "Office package repository archives were built.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "repository-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Incrementally publishing the office package smoke results.",
+                "complete": "Office package smoke results were published.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "./scripts/publish-auzix-package-repo.sh "
+                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
+                    "/srv/http/auzix/repo'"
+                ),
+                "timeout": 3600,
+            },
+            {
+                "name": "repository-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying served AbiWord and Gnumeric package archives.",
+                "complete": "Served AbiWord and Gnumeric packages passed.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "report=out/package-bot/office-smoke.report.json && "
+                    "jq -e '\"'\"'.status == \"complete\" and .complete == 2 and .failed == 0'\"'\"' "
+                    "\"$report\" >/dev/null && "
+                    "index=$(mktemp); trap '\"'\"'rm -f \"$index\"'\"'\"' EXIT; "
+                    "curl -fsS http://192.168.1.10/auzix/repo/index.json >\"$index\"; "
+                    "for package in AbiWord Gnumeric; do "
+                    "archive=$(jq -r --arg package \"$package\" "
+                    "'\"'\"'.packages[] | select(.name == $package) | .package'\"'\"' "
+                    "\"$index\" | head -1); test -n \"$archive\"; "
+                    "curl -fsSI \"http://192.168.1.10/auzix/repo/packages/$archive\" >/dev/null; "
+                    "done; jq '\"'\"'{package_count: (.packages | length)}'\"'\"' \"$index\"'"
+                ),
+                "timeout": 180,
+            },
+        ],
+        "complete_message": "AuziX AbiWord and Gnumeric package smoke completed and published.",
     },
     "monitoring-stack": {
         "supports_undeploy": True,

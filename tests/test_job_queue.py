@@ -21,7 +21,6 @@ def test_enqueue_job_selects_requested_queue(monkeypatch):
             return object()
 
     monkeypatch.setattr(job_queue, "get_queue", lambda name: (calls.update(queue_name=name) or FakeQueue()))
-
     job_queue.enqueue_job("tasks.build", ("manifest.json",), queue_name="bkc-slow", job_timeout=3600)
 
     assert calls["queue_name"] == "bkc-slow"
