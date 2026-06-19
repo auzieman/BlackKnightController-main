@@ -54,6 +54,9 @@ K3S_NFS_MOUNTS = [
     ("192.168.1.10:/srv/nfs/swarm/AuziX", "/mnt/swarm/AuziX"),
     ("192.168.1.10:/srv/nfs/swarm/blackknightcontroller", "/mnt/swarm/blackknightcontroller"),
 ]
+LAB_STORAGE_SWARM_HOSTS = "swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com"
+LAB_STORAGE_K3S_HOSTS = "192.168.1.14 192.168.1.59"
+LAB_STORAGE_ALL_HOSTS = f"{LAB_STORAGE_SWARM_HOSTS} {LAB_STORAGE_K3S_HOSTS}"
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
@@ -102,6 +105,18 @@ def _remote_settings() -> dict[str, str]:
         "manager_user": manager_user,
         "manager_password": manager_password,
     }
+
+
+def _lab_storage_known_hosts_prelude(hosts: str = LAB_STORAGE_ALL_HOSTS) -> str:
+    return (
+        "mkdir -p /root/.ssh; chmod 700 /root/.ssh; "
+        f"for host in {hosts}; do "
+        "ssh-keygen -R \"$host\" >/dev/null 2>&1 || true; "
+        "ssh-keyscan -H \"$host\" >> /root/.ssh/known_hosts 2>/dev/null || true; "
+        "done; "
+        "sort -u /root/.ssh/known_hosts -o /root/.ssh/known_hosts; "
+        "chmod 600 /root/.ssh/known_hosts; "
+    )
 
 
 def _refresh_inventory(run_id: str) -> None:
@@ -804,9 +819,10 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "All cluster guests have LVM-backed roots and sufficient capacity.",
                 "command": (
                     "bash -lc 'set -e; "
-                    "for host in swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com "
-                    "192.168.1.14 192.168.1.59; do "
-                    "ssh -o BatchMode=yes root@$host "
+                    f"{_lab_storage_known_hosts_prelude()}"
+                    f"for host in {LAB_STORAGE_ALL_HOSTS}; do "
+                    "ssh -o BatchMode=yes -o UserKnownHostsFile=/root/.ssh/known_hosts "
+                    "-o StrictHostKeyChecking=yes root@$host "
                     "\"findmnt -n -o SOURCE /; lvs --noheadings -o lv_size; "
                     "vgs --noheadings --units g -o vg_free\"; "
                     "done'"
@@ -821,9 +837,11 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Growing Swarm root filesystems to 50 GiB where needed.",
                 "complete": "Swarm root filesystems meet the 50 GiB target.",
                 "command": (
-                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
-                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com; do "
-                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "bash -lc 'set -e; "
+                    f"{_lab_storage_known_hosts_prelude(LAB_STORAGE_SWARM_HOSTS)}"
+                    f"for host in {LAB_STORAGE_SWARM_HOSTS}; do "
+                    "ssh -o BatchMode=yes -o UserKnownHostsFile=/root/.ssh/known_hosts "
+                    "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
                     "lv=$(lvs --noheadings -o lv_path | xargs); "
                     "bytes=$(findmnt -bn -o SIZE /); "
                     "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
@@ -839,8 +857,11 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Growing k3s root filesystems to 50 GiB where needed.",
                 "complete": "k3s root filesystems meet the 50 GiB target.",
                 "command": (
-                    "bash -lc 'set -e; for host in 192.168.1.14 192.168.1.59; do "
-                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "bash -lc 'set -e; "
+                    f"{_lab_storage_known_hosts_prelude(LAB_STORAGE_K3S_HOSTS)}"
+                    f"for host in {LAB_STORAGE_K3S_HOSTS}; do "
+                    "ssh -o BatchMode=yes -o UserKnownHostsFile=/root/.ssh/known_hosts "
+                    "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
                     "lv=$(lvs --noheadings -o lv_path | xargs); "
                     "bytes=$(findmnt -bn -o SIZE /); "
                     "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
@@ -856,9 +877,11 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Verifying root capacity and retained VG reserve.",
                 "complete": "Cluster storage expansion contract passed.",
                 "command": (
-                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
-                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com 192.168.1.14 192.168.1.59; do "
-                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "bash -lc 'set -e; "
+                    f"{_lab_storage_known_hosts_prelude()}"
+                    f"for host in {LAB_STORAGE_ALL_HOSTS}; do "
+                    "ssh -o BatchMode=yes -o UserKnownHostsFile=/root/.ssh/known_hosts "
+                    "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
                     "bytes=$(findmnt -bn -o SIZE /); [ \"$bytes\" -ge 53687091200 ]; "
                     "df -hT /; vgs --noheadings -o vg_name,vg_free'\"'\"'; done'"
                 ),
