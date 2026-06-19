@@ -884,7 +884,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -x scripts/run-auzix-package-bot.sh && "
                     "test -x scripts/test-auzix-package-bot.sh && "
                     "test -x scripts/publish-auzix-package-repo.sh && "
-                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
                     "echo auzix-package-bot-source-ready'"
                 ),
                 "timeout": 60,
@@ -1012,7 +1012,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -s docker/trixie-builder/Dockerfile && "
                     "test -x scripts/run-auzix-trixie-intake.sh && "
                     "test -x scripts/test-auzix-trixie-intake.sh && "
-                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
                     "./scripts/test-auzix-trixie-intake.sh'"
                 ),
                 "timeout": 120,
@@ -1109,7 +1109,7 @@ WORKFLOW_DEFINITIONS = {
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
                     "test -s profiles/packages/auzix-office-smoke.packages && "
                     "test -x scripts/test-auzix-office-smoke.sh && "
-                    "grep -Fx 7c159e0 .auzix-commit >/dev/null && "
+                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
                     "./scripts/test-auzix-office-smoke.sh'"
                 ),
                 "timeout": 120,
