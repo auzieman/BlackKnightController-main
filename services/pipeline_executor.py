@@ -60,6 +60,7 @@ LAB_STORAGE_ALL_HOSTS = f"{LAB_STORAGE_SWARM_HOSTS} {LAB_STORAGE_K3S_HOSTS}"
 LAB_STORAGE_SWARM_HOST_LIST = LAB_STORAGE_SWARM_HOSTS.split()
 LAB_STORAGE_K3S_HOST_LIST = LAB_STORAGE_K3S_HOSTS.split()
 LAB_STORAGE_ALL_HOST_LIST = LAB_STORAGE_ALL_HOSTS.split()
+LAB_STORAGE_MIN_ROOT_BYTES = 50_000_000_000
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
@@ -849,7 +850,7 @@ WORKFLOW_DEFINITIONS = {
                     "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
                     "lv=$(lvs --noheadings -o lv_path | xargs); "
                     "bytes=$(findmnt -bn -o SIZE /); "
-                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    f"[ \"$bytes\" -ge {LAB_STORAGE_MIN_ROOT_BYTES} ] || lvextend -r -L 50G \"$lv\"; "
                     "df -hT /'\"'\"'; done'"
                 ),
                 "timeout": 300,
@@ -870,7 +871,7 @@ WORKFLOW_DEFINITIONS = {
                     "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
                     "lv=$(lvs --noheadings -o lv_path | xargs); "
                     "bytes=$(findmnt -bn -o SIZE /); "
-                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    f"[ \"$bytes\" -ge {LAB_STORAGE_MIN_ROOT_BYTES} ] || lvextend -r -L 50G \"$lv\"; "
                     "df -hT /'\"'\"'; done'"
                 ),
                 "timeout": 300,
@@ -889,7 +890,7 @@ WORKFLOW_DEFINITIONS = {
                     f"for host in {LAB_STORAGE_ALL_HOSTS}; do "
                     "ssh -o BatchMode=yes -o UserKnownHostsFile=/root/.ssh/known_hosts "
                     "-o StrictHostKeyChecking=yes root@$host '\"'\"'set -e; "
-                    "bytes=$(findmnt -bn -o SIZE /); [ \"$bytes\" -ge 53687091200 ]; "
+                    f"bytes=$(findmnt -bn -o SIZE /); [ \"$bytes\" -ge {LAB_STORAGE_MIN_ROOT_BYTES} ]; "
                     "df -hT /; vgs --noheadings -o vg_name,vg_free'\"'\"'; done'"
                 ),
                 "timeout": 120,
@@ -3534,7 +3535,7 @@ def _run_lab_storage_grow(run_id: str, stage_name: str, hosts: list[str]) -> Non
         "set -e; "
         "lv=$(lvs --noheadings -o lv_path | xargs); "
         "bytes=$(findmnt -bn -o SIZE /); "
-        "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+        f"[ \"$bytes\" -ge {LAB_STORAGE_MIN_ROOT_BYTES} ] || lvextend -r -L 50G \"$lv\"; "
         "df -hT /"
     )
     results = _run_lab_storage_command(hosts, command, timeout=300)
@@ -3546,7 +3547,7 @@ def _run_lab_storage_verify(run_id: str, stage_name: str) -> None:
     command = (
         "set -e; "
         "bytes=$(findmnt -bn -o SIZE /); "
-        "[ \"$bytes\" -ge 53687091200 ]; "
+        f"[ \"$bytes\" -ge {LAB_STORAGE_MIN_ROOT_BYTES} ]; "
         "df -hT /; "
         "vgs --noheadings -o vg_name,vg_free"
     )
