@@ -12,12 +12,14 @@ LEGACY_INTEGRATIONS_PATH = BASE_DIR / "dictionaries" / "integrations.json"
 LEGACY_PROXMOX_SNAPSHOT_PATH = BASE_DIR / "dictionaries" / "proxmox_inventory.json"
 LEGACY_ANSIBLE_SNAPSHOT_PATH = BASE_DIR / "dictionaries" / "ansible_scan.json"
 LEGACY_DOCKER_SNAPSHOT_PATH = BASE_DIR / "dictionaries" / "docker_scan.json"
+LEGACY_KUBERNETES_SNAPSHOT_PATH = BASE_DIR / "dictionaries" / "kubernetes_scan.json"
 
 # Deprecated module-level paths — use get_*() for tenant-aware resolution.
 INTEGRATIONS_PATH = LEGACY_INTEGRATIONS_PATH
 PROXMOX_SNAPSHOT_PATH = LEGACY_PROXMOX_SNAPSHOT_PATH
 ANSIBLE_SNAPSHOT_PATH = LEGACY_ANSIBLE_SNAPSHOT_PATH
 DOCKER_SNAPSHOT_PATH = LEGACY_DOCKER_SNAPSHOT_PATH
+KUBERNETES_SNAPSHOT_PATH = LEGACY_KUBERNETES_SNAPSHOT_PATH
 
 DEFAULT_INTEGRATIONS = {
     "proxmox": {
@@ -40,7 +42,18 @@ DEFAULT_INTEGRATIONS = {
         "manager_host": "",
         "manager_user": "",
         "manager_password": "",
+        "context_name": "",
+        "api_endpoint": "",
+        "api_mode": "context",
         "stack_name": "",
+    },
+    "kubernetes": {
+        "cluster_name": "",
+        "api_url": "",
+        "kubeconfig_path": "~/.kube/config",
+        "context": "",
+        "namespace": "default",
+        "verify_ssl": True,
     },
     "ssh": {
         "key_name": "bkc_id_rsa",
@@ -69,6 +82,10 @@ def get_ansible_snapshot_path(slug: str | None = None) -> Path:
 
 def get_docker_snapshot_path(slug: str | None = None) -> Path:
     return BASE_DIR / "dictionaries" / "tenants" / _tenant_slug(slug) / "docker_scan.json"
+
+
+def get_kubernetes_snapshot_path(slug: str | None = None) -> Path:
+    return BASE_DIR / "dictionaries" / "tenants" / _tenant_slug(slug) / "kubernetes_scan.json"
 
 
 def _merge_integrations_payload(data: dict) -> dict:
@@ -149,6 +166,17 @@ def load_docker_snapshot() -> dict | None:
     return None
 
 
+def load_kubernetes_snapshot() -> dict | None:
+    slug = _tenant_slug()
+    p = get_kubernetes_snapshot_path(slug)
+    data = load_snapshot(p)
+    if data is not None:
+        return data
+    if slug == "default":
+        return load_snapshot(LEGACY_KUBERNETES_SNAPSHOT_PATH)
+    return None
+
+
 def save_snapshot(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -166,3 +194,7 @@ def save_ansible_snapshot(payload: dict) -> None:
 
 def save_docker_snapshot(payload: dict) -> None:
     save_snapshot(get_docker_snapshot_path(), payload)
+
+
+def save_kubernetes_snapshot(payload: dict) -> None:
+    save_snapshot(get_kubernetes_snapshot_path(), payload)

@@ -125,6 +125,22 @@
                     <input type="password" name="manager_password" value="{{ integrations.docker.manager_password }}">
                 </label>
                 <label>
+                    Docker context
+                    <input type="text" name="context_name" value="{{ integrations.docker.context_name }}" placeholder="auzix-swarm">
+                </label>
+                <label>
+                    API endpoint
+                    <input type="text" name="api_endpoint" value="{{ integrations.docker.api_endpoint }}" placeholder="ssh://root@swarm1.lab.auzietek.com">
+                </label>
+                <label>
+                    API mode
+                    <select name="api_mode">
+                        <option value="host" {% if integrations.docker.api_mode == 'host' %}selected{% endif %}>Docker host</option>
+                        <option value="context" {% if integrations.docker.api_mode == 'context' %}selected{% endif %}>Docker context</option>
+                        <option value="ssh" {% if integrations.docker.api_mode == 'ssh' %}selected{% endif %}>SSH fallback</option>
+                    </select>
+                </label>
+                <label>
                     Preferred stack
                     <input type="text" name="stack_name" value="{{ integrations.docker.stack_name }}" placeholder="blackknight">
                 </label>
@@ -141,6 +157,46 @@
                 {{ csrf_field() }}
                 <input type="hidden" name="action" value="sync-docker-inventory">
                 <button class="button secondary" type="submit">Sync Docker inventory into BKC</button>
+            </form>
+        </article>
+
+        <article class="form-shell">
+            <h3>Kubernetes API</h3>
+            <form method="post" class="form-grid">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="save-kubernetes">
+                <label>
+                    Cluster name
+                    <input type="text" name="cluster_name" value="{{ integrations.kubernetes.cluster_name }}" placeholder="auzix-k3s">
+                </label>
+                <label>
+                    API URL
+                    <input type="text" name="kubernetes_api_url" value="{{ integrations.kubernetes.api_url }}" placeholder="https://kube1.lab.auzietek.com:6443">
+                </label>
+                <label>
+                    Kubeconfig path
+                    <input type="text" name="kubeconfig_path" value="{{ integrations.kubernetes.kubeconfig_path }}" placeholder="~/.kube/config">
+                </label>
+                <label>
+                    Context
+                    <input type="text" name="kubernetes_context" value="{{ integrations.kubernetes.context }}" placeholder="auzix-k3s">
+                </label>
+                <label>
+                    Namespace
+                    <input type="text" name="kubernetes_namespace" value="{{ integrations.kubernetes.namespace }}" placeholder="auzix-build">
+                </label>
+                <label class="checkbox-row wide">
+                    <input type="checkbox" name="kubernetes_verify_ssl" {% if integrations.kubernetes.verify_ssl %}checked{% endif %}>
+                    Verify Kubernetes certificate
+                </label>
+                <div class="wide">
+                    <button class="button" type="submit">Save Kubernetes settings</button>
+                </div>
+            </form>
+            <form method="post" class="inline-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="action" value="scan-kubernetes">
+                <button class="button secondary" type="submit">Scan Kubernetes cluster</button>
             </form>
         </article>
     </section>
@@ -331,6 +387,56 @@
                         {% else %}
                             <tr>
                                 <td colspan="3">No stacks returned.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </section>
+    {% endif %}
+
+    {% if kubernetes_scan %}
+        <section class="form-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Scanned from Kubernetes</p>
+                    <h3>Kubernetes snapshot</h3>
+                </div>
+            </div>
+            <section class="meta-panel">
+                <p><strong>Cluster:</strong> {{ kubernetes_scan.cluster_name }}</p>
+                <p><strong>Context:</strong> {{ kubernetes_scan.context }}</p>
+                <p><strong>Namespace:</strong> {{ kubernetes_scan.namespace }}</p>
+                <p><strong>Nodes:</strong> {{ kubernetes_scan.nodes | length }}</p>
+                <p><strong>Namespaces:</strong> {{ kubernetes_scan.namespaces | length }}</p>
+                <p><strong>Pods:</strong> {{ kubernetes_scan.pods | length }}</p>
+                <p><strong>Services:</strong> {{ kubernetes_scan.services | length }}</p>
+            </section>
+            <section class="table-card top-gap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Node</th>
+                            <th>Role</th>
+                            <th>Ready</th>
+                            <th>IP</th>
+                            <th>Kubelet</th>
+                            <th>Runtime</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for node in kubernetes_scan.nodes %}
+                            <tr>
+                                <td>{{ node.name or 'unknown' }}</td>
+                                <td>{{ node.role or '-' }}</td>
+                                <td>{{ node.ready or 'unknown' }}</td>
+                                <td>{{ node.internal_ip or '-' }}</td>
+                                <td>{{ node.kubelet or '-' }}</td>
+                                <td>{{ node.container_runtime or '-' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="6">No Kubernetes nodes returned.</td>
                             </tr>
                         {% endfor %}
                     </tbody>

@@ -1,6 +1,10 @@
 # Black Knight Controller
 
-Black Knight Controller is a web-based interface for managing a Fabric-based deployment system. The name is a nod to the urban legend of an ancient alien craft orbiting the Earth, which some people believe is recording and guiding humanity.
+Black Knight Controller is a lightweight lab control plane for inventory,
+integrations, and tracked automation pipelines. It started as a web interface
+for a Fabric-style deployment system and has grown into a practical operator
+surface for SSH, Ansible, Docker Swarm, Kubernetes, Proxmox, and custom build
+lanes.
 
 *However, please note that this project is purely fictional and not based on any factual evidence. And definitely not an indication that 42 is the ultimate answer. Also though this concept may seem alien its just a human and some AI working together :) *
 
@@ -15,7 +19,17 @@ The project started as a group-and-host deployment console. It now also acts as 
 
 In addition to the initial functionality, the Black Knight Controller also includes an "Add Nodes" routine. This allows users to add a list of hosts (IP or hostname) to a specific group. The system will test the credentials and save them, or perform a round of interactive steps to copy a preshared key to the destination.
 
-We hope that the Black Knight Controller will help simplify the deployment process and make it more accessible for users of all levels. Please feel free to use, modify, and contribute to this project as you see fit.
+We hope that the Black Knight Controller will help simplify lab operations and
+make repeatable automation more approachable. The project is now public:
+contributions, forks, experiments, and downstream lab-specific adaptations are
+welcome.
+
+## License
+
+Black Knight Controller code is licensed under **GPL-3.0-or-later**.
+Documentation, screenshots, diagrams, and other narrative or visual material are
+licensed under **CC BY-SA 4.0** unless a file says otherwise. See `LICENSE` and
+`LICENSES/`.
 
 ## Current lab direction
 
@@ -72,6 +86,57 @@ The execution model should follow the same resource-first direction: pipelines a
 - `docs/pipeline-action-model.md` for the target pipeline/action model
 - `docs/near-term-priorities.md` for the current implementation sequence
 - `docs/build-guardrails.md` for day-to-day engineering constraints
+
+![BKC overview and pipeline run example](docs/images/Screenshot1.png)
+
+## Example Stories
+
+### Turn A Lab Into A Resource Graph
+
+BKC can scan existing inventory and integrations, then present hosts, groups,
+Docker Swarm nodes, Kubernetes clusters, Proxmox guests, credentials, actions,
+and pipelines as related resources. The intent is not to hide the underlying
+systems; it is to make their relationships visible so an operator can move from
+"what exists?" to "what action can I safely run here?"
+
+### Run Direct Docker And Kubernetes API Scans
+
+For container platforms, BKC does not have to shell through a generic host path.
+It can call the Docker CLI against an explicit `DOCKER_HOST` or context and can
+call `kubectl -o json` against a configured kubeconfig/context. This is useful
+when the cluster already exposes a real API and SSH should remain the bootstrap
+or repair path rather than the daily query path.
+
+### Track A Slow Build Without Blocking The UI
+
+Long jobs can be sent to a Redis/RQ worker queue. The standard worker handles
+normal scans and quick automation; the slow worker can run heavier lanes such as
+AuziX package builds, repository publication, image checks, or other tasks that
+should be visible but not interactive. Pipeline runs record stage state, events,
+and links so the browser can be closed and reopened without losing context.
+
+### Backfill A Fix Into A Repeatable Pipeline
+
+Some lab fixes start as direct manual work: SSH to a VM, repair networking,
+install a missing package, or test a browser permission issue. BKC gives those
+fixes a place to become repeatable afterward. A pipeline can encode the source
+commit, target host or cluster, validation command, and publication step so the
+next run is not dependent on memory or shell history.
+
+### Build An Operating-System Package Lane
+
+The AuziX work uses BKC to run source verification, builder preparation,
+package construction, runtime audits, repository publication, and served-index
+verification. The important pattern is generic: keep the package rules in the
+source tree, let BKC queue and observe the run, and only publish when the
+validation stages pass.
+
+### Keep Proxmox In The Loop
+
+Proxmox is treated as the VM lifecycle tier. Pipelines can stage toward clone,
+boot, resize, install, and guest validation workflows while still using SSH,
+Ansible, Docker, or Kubernetes as the right tool inside the guest after the VM
+exists.
 
 ## Feature list
 

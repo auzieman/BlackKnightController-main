@@ -24,7 +24,10 @@ That removes the kube-side source-tree dependency while staying inside the exist
 
 ## Native Kubernetes Mode
 
-A later `kubernetes` integration can store a kubeconfig or service-account token in BKC settings and run Kubernetes API operations directly from the BKC worker. That should be a separate executor transport, not a replacement for SSH:
+The `kubernetes` integration stores a kubeconfig path and context in BKC
+settings and runs Kubernetes API operations directly from the BKC worker through
+`kubectl -o json`. That is a separate executor transport, not a replacement for
+SSH:
 
 - `bkc-ssh`: good for host bootstrap, k3s install, local image import, NFS, firewall, and emergency repair.
 - `kubernetes-api`: good for namespace, apply, rollout, events, pod logs, service discovery, and health summaries.

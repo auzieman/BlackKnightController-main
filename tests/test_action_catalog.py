@@ -58,6 +58,7 @@ def test_auzix_installer_pipeline_is_non_destructive():
     pipeline = pipeline_by_id("auzix-installer-foundation")
     assert pipeline is not None
     assert pipeline["repo"] == "AuziX"
+    assert pipeline["resource_class"] == "slow"
     assert pipeline["stages"] == ["source-verify", "installer-build", "contract-test", "artifact-report"]
 
     stages = workflow_stage_definitions("auzix-installer-foundation")
@@ -66,6 +67,25 @@ def test_auzix_installer_pipeline_is_non_destructive():
     assert "test-auzix-installer" in commands
     assert "auzix-install-disk" not in commands
     assert "192.168.1.163" not in commands
+
+
+def test_cluster_storage_pipeline_is_idempotent_and_retains_reserve():
+    pipeline = pipeline_by_id("lab-cluster-storage")
+    assert pipeline is not None
+    assert pipeline["actions"] == ["ssh.lvm.grow_root"]
+
+    stages = workflow_stage_definitions("lab-cluster-storage")
+    assert [stage["name"] for stage in stages] == [
+        "storage-preflight",
+        "swarm-grow",
+        "k3s-grow",
+        "storage-verify",
+    ]
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "lvextend -r -L 50G" in commands
+    assert 'findmnt -bn -o SIZE /' in commands
+    assert "swarm3.lab.auzietek.com" in commands
+    assert "192.168.1.59" in commands
 
 
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):

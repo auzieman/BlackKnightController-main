@@ -9,14 +9,17 @@ from services.integration_store import (
     load_ansible_snapshot,
     load_docker_snapshot,
     load_integrations,
+    load_kubernetes_snapshot,
     load_proxmox_snapshot,
     save_ansible_snapshot,
     save_docker_snapshot,
     save_integrations,
+    save_kubernetes_snapshot,
     save_proxmox_snapshot,
 )
 from services.inventory_model import reconcile_rules_inventory
 from services.job_queue import enqueue_job, job_queue_enabled
+from services.kubernetes_api import KubernetesScanError, scan_kubernetes_cluster
 from services.proxmox import (
     ProxmoxAPIError,
     ProxmoxClient,
@@ -39,6 +42,7 @@ _INTEGRATION_ASYNC_JOBS = {
     "sync-ansible-inventory": "services.job_tasks.sync_ansible_inventory_job",
     "scan-docker": "services.job_tasks.scan_docker_job",
     "sync-docker-inventory": "services.job_tasks.sync_docker_inventory_job",
+    "scan-kubernetes": "services.job_tasks.scan_kubernetes_job",
 }
 
 
@@ -89,6 +93,7 @@ def integrations():
     proxmox_inventory = load_proxmox_snapshot()
     ansible_scan = load_ansible_snapshot()
     docker_scan = load_docker_snapshot()
+    kubernetes_scan = load_kubernetes_snapshot()
 
     if request.method == "POST":
         action = request.form.get("action", "save")
@@ -144,6 +149,9 @@ def integrations():
                 "manager_host": _clean(request.form.get("manager_host", "")),
                 "manager_user": _clean(request.form.get("manager_user", "")),
                 "manager_password": _clean(request.form.get("manager_password", "")),
+                "context_name": _clean(request.form.get("context_name", "")),
+                "api_endpoint": _clean(request.form.get("api_endpoint", "")),
+                "api_mode": _clean(request.form.get("api_mode", "")) or "context",
                 "stack_name": _clean(request.form.get("stack_name", "")),
             }
             save_integrations(integrations)
@@ -152,6 +160,28 @@ def integrations():
                 int(current_user.id),
                 get_current_tenant_id(),
                 "integrations.save_docker",
+                "integrations",
+                {},
+                request.remote_addr,
+            )
+            return redirect(url_for("integrations.integrations"))
+
+        if action == "save-kubernetes":
+            integrations["kubernetes"] = {
+                "cluster_name": _clean(request.form.get("cluster_name", "")),
+                "api_url": _clean(request.form.get("kubernetes_api_url", "")),
+                "kubeconfig_path": _clean(request.form.get("kubeconfig_path", ""))
+                or "~/.kube/config",
+                "context": _clean(request.form.get("kubernetes_context", "")),
+                "namespace": _clean(request.form.get("kubernetes_namespace", "")) or "default",
+                "verify_ssl": request.form.get("kubernetes_verify_ssl") == "on",
+            }
+            save_integrations(integrations)
+            flash("Saved Kubernetes settings.")
+            bkc_db.append_audit(
+                int(current_user.id),
+                get_current_tenant_id(),
+                "integrations.save_kubernetes",
                 "integrations",
                 {},
                 request.remote_addr,
@@ -315,6 +345,22 @@ def integrations():
             except DockerScanError as exc:
                 flash(f"Docker inventory sync failed: {exc}")
 
+        if action == "scan-kubernetes":
+            queued = _try_enqueue_integration_job(action)
+            if queued is not None:
+                return queued
+            try:
+                kubernetes_scan = scan_kubernetes_cluster()
+                save_kubernetes_snapshot(kubernetes_scan)
+                flash(
+                    f"Scanned Kubernetes: "
+                    f"{len(kubernetes_scan['nodes'])} nodes, "
+                    f"{len(kubernetes_scan['namespaces'])} namespaces, "
+                    f"{len(kubernetes_scan['pods'])} pods."
+                )
+            except KubernetesScanError as exc:
+                flash(f"Kubernetes scan failed: {exc}")
+
         if action == "generate-ssh-key":
             key_info = ensure_key_pair(
                 integrations["ssh"]["private_key_path"],
@@ -335,4 +381,5 @@ def integrations():
         proxmox_inventory=proxmox_inventory,
         ansible_scan=ansible_scan,
         docker_scan=docker_scan,
+        kubernetes_scan=kubernetes_scan,
     )

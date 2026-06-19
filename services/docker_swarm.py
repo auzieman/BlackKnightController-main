@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
-import paramiko
-
 from services.integration_store import load_integrations
-from services.ssh_keys import read_key_pair
 
 
 class DockerScanError(RuntimeError):
     pass
 
 
-def _run_command(client: paramiko.SSHClient, command: str) -> str:
+def _run_command(client, command: str) -> str:
     stdin, stdout, stderr = client.exec_command(command)
     output = stdout.read().decode("utf-8", errors="replace")
     error = stderr.read().decode("utf-8", errors="replace")
@@ -35,10 +33,69 @@ def _json_lines(output: str) -> list[dict]:
     return items
 
 
+def _docker_cli(context_name: str, api_endpoint: str, args: list[str]) -> str:
+    cmd = ["docker"]
+    if api_endpoint:
+        cmd.extend(["--host", api_endpoint])
+    elif context_name:
+        cmd.extend(["--context", context_name])
+    cmd.extend(args)
+    try:
+        completed = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError as exc:
+        raise DockerScanError("docker CLI is not installed on the BKC host.") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise DockerScanError(detail) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise DockerScanError("docker CLI timed out while contacting the swarm manager.") from exc
+    return completed.stdout.strip()
+
+
+def _scan_docker_context(docker_cfg: dict) -> dict:
+    context_name = str(docker_cfg.get("context_name") or "").strip()
+    api_endpoint = str(docker_cfg.get("api_endpoint") or "").strip()
+    if not context_name and not api_endpoint:
+        raise DockerScanError("Set a Docker context name or API endpoint, or use SSH manager mode.")
+
+    swarm_info = _docker_cli(context_name, api_endpoint, ["info", "--format", "{{json .Swarm}}"])
+    node_ls = _docker_cli(context_name, api_endpoint, ["node", "ls", "--format", "{{json .}}"])
+    stack_ls = _docker_cli(context_name, api_endpoint, ["stack", "ls", "--format", "{{json .}}"])
+    service_ls = _docker_cli(context_name, api_endpoint, ["service", "ls", "--format", "{{json .}}"])
+
+    try:
+        swarm = json.loads(swarm_info) if swarm_info else {}
+    except json.JSONDecodeError:
+        swarm = {"raw": swarm_info}
+
+    auth_method = "docker-host" if api_endpoint else "docker-context"
+    return {
+        "manager_host": str(docker_cfg.get("manager_host") or ""),
+        "manager_user": str(docker_cfg.get("manager_user") or ""),
+        "auth_method": auth_method,
+        "context_name": context_name,
+        "api_endpoint": api_endpoint,
+        "swarm": swarm,
+        "nodes": _json_lines(node_ls),
+        "stacks": _json_lines(stack_ls),
+        "services": _json_lines(service_ls),
+    }
+
+
 def scan_docker_controller() -> dict:
     integrations = load_integrations()
     docker_cfg = integrations["docker"]
     ssh = integrations["ssh"]
+
+    api_mode = str(docker_cfg.get("api_mode") or "").strip()
+    if api_mode in {"context", "host"} or docker_cfg.get("context_name") or docker_cfg.get("api_endpoint"):
+        return _scan_docker_context(docker_cfg)
 
     manager_host = docker_cfg.get("manager_host", "").strip()
     manager_user = docker_cfg.get("manager_user", "").strip()
@@ -46,6 +103,12 @@ def scan_docker_controller() -> dict:
 
     if not manager_host or not manager_user:
         raise DockerScanError("Set Docker manager host and user first.")
+
+    try:
+        import paramiko
+        from services.ssh_keys import read_key_pair
+    except ImportError as exc:
+        raise DockerScanError("paramiko is required for Docker SSH fallback mode.") from exc
 
     key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
     private_key = Path(key_info["private_key_path"])

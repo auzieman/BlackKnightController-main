@@ -51,6 +51,7 @@ K3S_LIVE_NODES = [
 K3S_NFS_MOUNTS = [
     ("192.168.1.10:/srv/nfs/swarm/shared", "/mnt/swarm/shared"),
     ("192.168.1.10:/srv/nfs/swarm/tabor-linux-forge", "/mnt/swarm/tabor-linux-forge"),
+    ("192.168.1.10:/srv/nfs/swarm/AuziX", "/mnt/swarm/AuziX"),
     ("192.168.1.10:/srv/nfs/swarm/blackknightcontroller", "/mnt/swarm/blackknightcontroller"),
 ]
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
@@ -446,6 +447,158 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "WordPress appliance import pipeline completed.",
     },
+    "lab-demo": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "repo-sync",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Checking for the staged tabor-linux-forge source tree on the swarm builder host.",
+                "complete": "Staged tabor-linux-forge source is present on the builder host.",
+                "command": (
+                    "bash -lc '"
+                    "test -f /srv/stacks/tabor-linux-forge/docker-compose.yml && "
+                    "test -f /mnt/swarm/tabor-linux-forge/src/Readme.md && "
+                    "test -x /mnt/swarm/tabor-linux-forge/src/scripts/scaffold-auzix-strict-root.sh && "
+                    "test -x /mnt/swarm/tabor-linux-forge/src/scripts/audit-auzix-strict-root.sh && "
+                    "echo auzix-lab-source-ready'"
+                ),
+                "timeout": 45,
+            },
+            {
+                "name": "builder-ready",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Checking the existing tabor-linux-forge container substrate.",
+                "complete": "The tabor-linux-forge builder container is ready.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/stacks/tabor-linux-forge && "
+                    "docker image inspect tabor-linux-forge-kernel --format \"{{.Id}} {{.Created}}\" || "
+                    "{ echo tabor-linux-forge-kernel image missing; echo run the heavier tabor-build lane to rebuild it; exit 1; }'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "strict-root-scaffold",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Creating the staged AuzixRoot strict filesystem skeleton inside the builder lane.",
+                "complete": "AuzixRoot strict filesystem skeleton created.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/stacks/tabor-linux-forge && "
+                    "/usr/local/bin/tabor-build ./scripts/scaffold-auzix-strict-root.sh && "
+                    "find /mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot -maxdepth 2 -type d | sort | head -80'"
+                ),
+                "timeout": 240,
+            },
+            {
+                "name": "sample-payload-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Compiling the first native AuzixProbe package into /Programs.",
+                "complete": "AuzixProbe package installed under /Programs with a compatibility export.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/stacks/tabor-linux-forge && "
+                    "/usr/local/bin/tabor-build ./scripts/build-auzix-probe-package.sh && "
+                    "/mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot/Programs/AuzixProbe/0.1/Commands/auzix-probe && "
+                    "find /mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot/Programs/AuzixProbe -maxdepth 3 -type f -o -type l'"
+                ),
+                "timeout": 240,
+            },
+            {
+                "name": "busybox-package-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building static BusyBox as the first shell-capable Auzix package.",
+                "complete": "BusyBox installed under /Programs with /bin compatibility applets.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/stacks/tabor-linux-forge && "
+                    "/usr/local/bin/tabor-build ./scripts/build-auzix-busybox-package.sh && "
+                    "bb=/mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot/Programs/BusyBox/1.36.1/Commands/busybox && "
+                    "\"$bb\" sh -c \"echo busybox-shell-ok\" && "
+                    "\"$bb\" readlink /mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot/bin && "
+                    "\"$bb\" readlink /mnt/swarm/tabor-linux-forge/src/out/auzix-strict/AuzixRoot/System/Compatibility/bin/sh'"
+                ),
+                "timeout": 1800,
+            },
+            {
+                "name": "strict-root-audit",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Auditing native top-level directories, compatibility links, and legacy path strays.",
+                "complete": "AuzixRoot strict filesystem audit passed.",
+                "command": (
+                    "bash -lc '"
+                    "cd /srv/stacks/tabor-linux-forge && "
+                    "/usr/local/bin/tabor-build ./scripts/audit-auzix-strict-root.sh && "
+                    "tail -80 /mnt/swarm/tabor-linux-forge/src/out/auzix-strict/audit-report.txt'"
+                ),
+                "timeout": 240,
+            },
+            {
+                "name": "strict-container-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Importing the staged AuzixRoot as a tiny shellable container image.",
+                "complete": "auzix-strict:local container image is ready for shell inspection.",
+                "command": (
+                    "bash -lc '"
+                    "cd /mnt/swarm/tabor-linux-forge/src && "
+                    "./scripts/build-auzix-strict-container.sh && "
+                    "docker run --rm auzix-strict:local /Programs/BusyBox/1.36.1/Commands/busybox sh -c \"pwd; ls -1 / | head -8; /Programs/AuzixProbe/0.1/Commands/auzix-probe\"'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "legacy-prune-test",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Removing top-level legacy links and proving native /Programs paths still run.",
+                "complete": "Pruned AuzixRoot container runs without top-level /bin, /usr, /lib, /var, or /etc links.",
+                "command": (
+                    "bash -lc '"
+                    "cd /mnt/swarm/tabor-linux-forge/src && "
+                    "./scripts/test-auzix-pruned-root.sh && "
+                    "docker run --rm auzix-strict:pruned /Programs/BusyBox/1.36.1/Commands/busybox sh -c \"ls -1 / | head -8; test ! -e /bin; test ! -e /usr; test ! -e /lib; /Programs/AuzixProbe/0.1/Commands/auzix-probe\"'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "artifact-publish",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Publishing the strict-root audit report location for operators.",
+                "complete": "Strict-root audit report is available on the shared tabor forge workspace.",
+                "command": (
+                    "bash -lc '"
+                    "report=/mnt/swarm/tabor-linux-forge/src/out/auzix-strict/audit-report.txt && "
+                    "test -s \"$report\" && "
+                    "printf \"strict-root-report=%s\\n\" \"$report\" && "
+                    "grep -F \"Auzix strict root audit: PASS\" \"$report\"'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "dashboard-link",
+                "transport": "internal",
+                "kind": "event-note",
+                "active": "Publishing the next Auzix lab demo handoff.",
+                "complete": "Auzix lab demo handoff published.",
+                "message": "Strict-root contract passed in the tabor builder substrate. Next leg can add a tiny payload recipe, then graduate to a VM image only after ldd/readelf checks stay clean.",
+            },
+        ],
+        "complete_message": "Auzix lab demo pipeline completed.",
+        "runtime_snapshot": {
+            "kind": "container-prefix",
+            "container_name_prefix": "tabor-linux-forge-kernel-builder-run",
+            "display_name": "auzix-strict-root-builder",
+        },
+    },
     "tabor-build": {
         "supports_undeploy": False,
         "stage_plan": [
@@ -453,12 +606,13 @@ WORKFLOW_DEFINITIONS = {
                 "name": "repo-sync",
                 "transport": "ssh-controller",
                 "target": "controller",
-                "active": "Checking for the staged Auzix builder source tree on ns1.",
-                "complete": "Staged Auzix builder source is present on ns1.",
+                "active": "Checking for the staged AuziX source tree on ns1.",
+                "complete": "Staged AuziX source is present on ns1.",
                 "command": (
                     "bash -lc '"
-                    "test -d /srv/nfs/swarm/tabor-linux-forge/src/.git -o -f /srv/nfs/swarm/tabor-linux-forge/src/Readme.md "
-                    "&& echo tabor-source-ready'"
+                    "test -f /srv/nfs/swarm/AuziX/src/README.md && "
+                    "test -x /srv/nfs/swarm/AuziX/src/scripts/build-auzix-strict-all.sh && "
+                    "echo auzix-source-ready'"
                 ),
                 "timeout": 45,
             },
@@ -466,12 +620,14 @@ WORKFLOW_DEFINITIONS = {
                 "name": "builder-prepare",
                 "transport": "ssh-controller",
                 "target": "controller",
-                "active": "Rendering the swarm image-builder lane for tabor-linux-forge through Ansible.",
-                "complete": "Swarm image-builder lane is rendered and validated.",
+                "active": "Preparing the AuziX NFS workspace for the swarm builder.",
+                "complete": "AuziX NFS workspace is ready for the swarm builder.",
                 "command": (
-                    "cd /srv/ansible && "
-                    "ANSIBLE_CONFIG=/srv/ansible/ansible.cfg "
-                    "/opt/ansible-venv/bin/ansible-playbook -i inventory/lab.yml tabor-linux-forge-builder.yml"
+                    "bash -lc '"
+                    "mkdir -p /srv/nfs/swarm/AuziX/src /srv/nfs/swarm/AuziX/artifacts && "
+                    "test -f /srv/nfs/swarm/AuziX/src/compose.yaml && "
+                    "test -f /srv/nfs/swarm/AuziX/src/docker/builder/Dockerfile && "
+                    "echo auzix-workspace-ready'"
                 ),
                 "timeout": 240,
             },
@@ -479,17 +635,15 @@ WORKFLOW_DEFINITIONS = {
                 "name": "image-build",
                 "transport": "ssh-manager",
                 "target": "manager",
-                "active": "Building the current Auzix artifact set on swarm1 through the staged builder container.",
-                "complete": "Auzix builder finished on swarm1.",
+                "active": "Building the current AuziX artifact set on swarm1 through the staged builder container.",
+                "complete": "AuziX builder finished on swarm1.",
                 "command": (
                     "bash -lc '"
-                    "cd /srv/stacks/tabor-linux-forge && "
-                    "docker compose -f docker-compose.yml build kernel-builder && "
-                    "/usr/local/bin/tabor-build ./scripts/fetch-linux.sh profiles/kernel/upstream-6.6-lts.env && "
-                    "/usr/local/bin/tabor-build ./scripts/apply-patches.sh && "
-                    "/usr/local/bin/tabor-build ./scripts/configure-tabor.sh && "
-                    "/usr/local/bin/tabor-build ./scripts/build-kernel.sh && "
-                    "/usr/local/bin/tabor-build ./scripts/package-kernel.sh'"
+                    "mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs 192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "cd /mnt/swarm/AuziX/src && "
+                    "docker compose build builder && "
+                    "docker compose run --rm builder'"
                 ),
                 "timeout": 5400,
             },
@@ -497,19 +651,19 @@ WORKFLOW_DEFINITIONS = {
                 "name": "artifact-publish",
                 "transport": "ssh-manager",
                 "target": "manager",
-                "active": "Verifying that Auzix build artifacts landed on shared storage.",
+                "active": "Verifying that AuziX build artifacts landed on shared storage.",
                 "complete": "Artifacts are present on the NFS-backed build share.",
                 "command": (
                     "bash -lc '"
-                    "first=$(find /mnt/swarm/tabor-linux-forge/artifacts -maxdepth 2 -type f | head -n 1); "
-                    "test -n \"$first\" || { echo no-tabor-artifacts; exit 1; }; "
-                    "find /mnt/swarm/tabor-linux-forge/artifacts -maxdepth 2 -type f | head -n 12'"
+                    "first=$(find /mnt/swarm/AuziX/src/artifacts /mnt/swarm/AuziX/artifacts -maxdepth 3 -type f 2>/dev/null | head -n 1); "
+                    "test -n \"$first\" || { echo no-auzix-artifacts; exit 1; }; "
+                    "find /mnt/swarm/AuziX/src/artifacts /mnt/swarm/AuziX/artifacts -maxdepth 3 -type f 2>/dev/null | head -n 12'"
                 ),
                 "timeout": 60,
             },
         ],
-        "dashboard_message": "Auzix build artifacts should now exist under /srv/nfs/swarm/tabor-linux-forge/artifacts on ns1 and the matching NFS mount on the swarm hosts. The later hypervisor handoff will consume the produced boot media and VM image outputs.",
-        "complete_message": "Auzix image build pipeline completed.",
+        "dashboard_message": "AuziX build artifacts should now exist under /srv/nfs/swarm/AuziX on ns1 and the matching NFS mount on the swarm hosts. The later hypervisor handoff will consume the produced boot media and VM image outputs.",
+        "complete_message": "AuziX image build pipeline completed.",
         "runtime_snapshot": {
             "kind": "container-prefix",
             "container_name_prefix": "tabor-linux-forge-kernel-builder-run",
@@ -636,6 +790,81 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "AuziX installer foundation pipeline completed.",
+    },
+    "lab-cluster-storage": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "storage-preflight",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Checking root LVM layout and free extents on both clusters.",
+                "complete": "All cluster guests have LVM-backed roots and sufficient capacity.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "for host in swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com "
+                    "192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host "
+                    "\"findmnt -n -o SOURCE /; lvs --noheadings -o lv_size; "
+                    "vgs --noheadings --units g -o vg_free\"; "
+                    "done'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "swarm-grow",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Growing Swarm root filesystems to 50 GiB where needed.",
+                "complete": "Swarm root filesystems meet the 50 GiB target.",
+                "command": (
+                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
+                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "lv=$(lvs --noheadings -o lv_path | xargs); "
+                    "bytes=$(findmnt -bn -o SIZE /); "
+                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    "df -hT /'\"'\"'; done'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "k3s-grow",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Growing k3s root filesystems to 50 GiB where needed.",
+                "complete": "k3s root filesystems meet the 50 GiB target.",
+                "command": (
+                    "bash -lc 'set -e; for host in 192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "lv=$(lvs --noheadings -o lv_path | xargs); "
+                    "bytes=$(findmnt -bn -o SIZE /); "
+                    "[ \"$bytes\" -ge 53687091200 ] || lvextend -r -L 50G \"$lv\"; "
+                    "df -hT /'\"'\"'; done'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "storage-verify",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "action": "ssh.lvm.grow_root",
+                "active": "Verifying root capacity and retained VG reserve.",
+                "complete": "Cluster storage expansion contract passed.",
+                "command": (
+                    "bash -lc 'set -e; for host in swarm1.lab.auzietek.com "
+                    "swarm2.lab.auzietek.com swarm3.lab.auzietek.com 192.168.1.14 192.168.1.59; do "
+                    "ssh -o BatchMode=yes root@$host '\"'\"'set -e; "
+                    "bytes=$(findmnt -bn -o SIZE /); [ \"$bytes\" -ge 53687091200 ]; "
+                    "df -hT /; vgs --noheadings -o vg_name,vg_free'\"'\"'; done'"
+                ),
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "Lab cluster storage expansion pipeline completed.",
     },
     "monitoring-stack": {
         "supports_undeploy": True,

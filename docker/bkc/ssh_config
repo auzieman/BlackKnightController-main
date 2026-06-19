@@ -1,0 +1,13 @@
+Host swarm1.lab.auzietek.com
+  HostName swarm1.lab.auzietek.com
+  User root
+  IdentityFile /app/keys/bkc_id_rsa
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new
+
+Host kube1.lab.auzietek.com
+  HostName kube1.lab.auzietek.com
+  User root
+  IdentityFile /app/keys/bkc_id_rsa
+  IdentitiesOnly yes
+  StrictHostKeyChecking accept-new

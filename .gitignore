@@ -8,6 +8,7 @@ venv/
 
 keys/*
 !keys/.gitkeep
+docker/bkc/known_hosts
 
 dictionaries/integrations.json
 dictionaries/proxmox_inventory.json
