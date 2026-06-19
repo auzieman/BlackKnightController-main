@@ -6,7 +6,63 @@ for a Fabric-style deployment system and has grown into a practical operator
 surface for SSH, Ansible, Docker Swarm, Kubernetes, Proxmox, and custom build
 lanes.
 
-*However, please note that this project is purely fictional and not based on any factual evidence. And definitely not an indication that 42 is the ultimate answer. Also though this concept may seem alien its just a human and some AI working together :) *
+![BKC overview and pipeline run example](docs/images/Screenshot1.png)
+
+## Real-World Validation: Cluster Auto-Scale
+
+A typical BKC story starts when a lab has several problems at once: a k3s
+cluster and a Docker Swarm are low on storage, an AI service such as
+`open-webui` is failing because guest CPUs are using generic virtualized
+profiles, and the fix touches Proxmox, SSH, container APIs, and observability.
+
+BKC turns that into a tracked run instead of a loose shell session:
+
+1. Map the affected services, VMs, storage pools, and API endpoints through the
+   resource graph.
+2. Generate target-specific, idempotent SSH or Ansible remediation steps.
+3. Use the Proxmox API for VM hardware changes such as CPU mode or storage
+   adjustments.
+4. Hand slower work to Redis/RQ workers so the UI remains usable.
+5. Record stage state, validation output, and telemetry checks for the next
+   run.
+
+The point is repeatability: the first repair can be discovered interactively,
+but the useful result becomes a pipeline that can be reviewed, rerun, and
+improved.
+
+## System Architecture Mesh
+
+```mermaid
+graph TD
+    classDef ai fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef bkc fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef node fill:#bfb,stroke:#333,stroke-width:1px;
+
+    Operator[Operator Browser / CLI] --> BKC[BKC Web App / Control Plane]
+    Codex[AI Assistant / Codex / GPT] <-->|Context & Intent Loop| BKC
+    class Codex ai;
+    class BKC bkc;
+
+    subgraph BKC Orchestration Engine
+        BKC --> DB[(SQLite Auth & RBAC)]
+        BKC --> Graph[Living Resource Graph]
+        BKC --> Queue[(Redis / RQ Job Queue)]
+        Queue --> Worker[BKC Background Workers]
+    end
+
+    Worker -->|1. Proxmox API Actions| PVE[Proxmox Hypervisor]
+    Worker -->|2. Native SSH / Ansible| Hosts[Target Clusters / Swarm / k3s]
+    Worker -->|3. Declarative Payloads| AuziX[AuziX Operating System Nodes]
+
+    class PVE node;
+    class Hosts node;
+    class AuziX node;
+
+    PVE -->|Metrics| Obs[Grafana / Loki / Prometheus]
+    Hosts -->|Logs & State| Obs
+    AuziX -->|State Manifests| Obs
+    Obs -->|Telemetry Validation Loop| BKC
+```
 
 The project started as a group-and-host deployment console. It now also acts as a lightweight lab control plane that can:
 
@@ -14,8 +70,9 @@ The project started as a group-and-host deployment console. It now also acts as 
 - scan and sync Ansible controllers
 - scan and sync Docker Swarm state
 - queue automation runs through Redis/RQ workers
-- track pipelines for lab workflows such as monitoring bring-up and Auzix build/test loops
+- track pipelines for lab workflows such as monitoring bring-up and AuziX build/test loops
 - stage toward Proxmox-driven VM lifecycle automation
+- **learn new APIs and dynamically create orchestration stages**
 
 In addition to the initial functionality, the Black Knight Controller also includes an "Add Nodes" routine. This allows users to add a list of hosts (IP or hostname) to a specific group. The system will test the credentials and save them, or perform a round of interactive steps to copy a preshared key to the destination.
 
@@ -86,8 +143,6 @@ The execution model should follow the same resource-first direction: pipelines a
 - `docs/pipeline-action-model.md` for the target pipeline/action model
 - `docs/near-term-priorities.md` for the current implementation sequence
 - `docs/build-guardrails.md` for day-to-day engineering constraints
-
-![BKC overview and pipeline run example](docs/images/Screenshot1.png)
 
 ## Example Stories
 
@@ -215,7 +270,7 @@ CLI and scripts can pick the tenant with `BKC_TENANT_SLUG` (defaults to `default
 ### Read-only HTTP API (`/api/v1`)
 
 - `GET /api/v1/health` — liveness, no auth.
-- `GET /api/v1/ready` — readiness: SQLite (`bkc.db`), Redis when `BKC_RATELIMIT_STORAGE_URI` is `redis://…`, and a write probe under `dictionaries/`. Returns **503** if any check fails (for load balancers / Kubernetes).
+- `GET /api/v1/ready` — readiness: SQLite (`bkc.db`), Redis when `BKC_RATELIMIT_STORAGE_URI` is `redis://...`, and a write probe under `dictionaries/`. Returns **503** if any check fails (for load balancers / Kubernetes).
 - `GET /api/v1/me` and `GET /api/v1/inventory` — `Authorization: Bearer <api_key>` where the key is created under **Platform settings** (superuser only). The plaintext key is shown **once** when created.
 - `GET /api/v1/automation/runs`
 - `GET /api/v1/automation/runs/<run_id>`
@@ -254,6 +309,8 @@ Back them up outside the repo. If the app is damaged but those two files survive
 To migrate existing plaintext secret values into encrypted form, run:
 
 `python3 bkc_cli.py migrate-secrets`
+
+See [SECURITY.md](SECURITY.md) for complete encryption architecture, key rotation, and best practices for credentials in contributions.
 
 ## BKC SSH Mode
 
@@ -399,7 +456,7 @@ The UI will be available at `http://localhost:5000`.
 
 ### Optional reverse proxy (Caddy, profile `tls`)
 
-`docker compose --profile tls up --build` starts **Caddy** on port **8080** → BKC (see `docker/caddy/Caddyfile`): gzip/zstd, `X-Frame-Options`, `CSP`, and other baseline headers. Map host **80:80** or **443:443** in `docker-compose.yml` when you are ready to put this on a real hostname; add a `tls` block or ACME email in Caddy when you expose HTTPS.
+`docker compose --profile tls up --build` starts **Caddy** on port **8080** -> BKC (see `docker/caddy/Caddyfile`): gzip/zstd, `X-Frame-Options`, `CSP`, and other baseline headers. Map host **80:80** or **443:443** in `docker-compose.yml` when you are ready to put this on a real hostname; add a `tls` block or ACME email in Caddy when you expose HTTPS.
 
 Set **`BKC_BEHIND_PROXY=1`** on the BKC container when using Caddy (or any reverse proxy) so Flask applies **ProxyFix** and `request.remote_addr` / scheme match the client.
 
@@ -530,3 +587,27 @@ That gives BKC a stable workflow:
 3. Clone or create the VM via API.
 4. Wait for guest networking and SSH.
 5. Hand off to cloud-init, Ansible, or BKC-native deployment logic.
+
+## Contributing
+
+We welcome community contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Branch workflow (feature/bugfix/docs branches)
+- Security & secrets compliance requirements
+- Pull request validation process
+- Alpha UI development opportunities
+
+## License
+
+BlackKnightController is licensed under the **Commons Clause + MIT License**. See [LICENSE](LICENSE) for details.
+
+- ✅ Free for non-commercial use, education, research
+- ✅ Source-available with proper encryption standards
+- ❌ No reselling or commercial derivatives without a commercial license
+
+For commercial licensing inquiries, contact the maintainer.
+
+## Support & Community
+
+- **Issues**: [GitHub Issues](https://github.com/auzieman/BlackKnightController-main/issues)
+- **Security**: See [SECURITY.md](SECURITY.md) for vulnerability reporting
+- **Documentation**: Check the README sections and CONTRIBUTING guide
