@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -40,6 +41,19 @@ PIPELINE_TAGS = (
     "hypervisor",
     "telemetry",
 )
+
+
+def _run_timestamp(run: dict) -> datetime:
+    value = str(run.get("updated_at") or run.get("created_at") or "").strip()
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _stage_summary(run: dict) -> dict:
@@ -109,6 +123,8 @@ def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
         tags.add("build")
     if workflow == "auzix-vm130-deploy":
         tags.update({"deploy", "ssh", "auzix"})
+    if workflow == "auzix-vm134-install-refresh":
+        tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
@@ -173,6 +189,8 @@ def _run_tags(run: dict) -> list[str]:
         tags.add("build")
     if workflow == "auzix-vm130-deploy":
         tags.update({"deploy", "ssh", "auzix"})
+    if workflow == "auzix-vm134-install-refresh":
+        tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
@@ -660,7 +678,7 @@ def pipelines():
         visible_pipelines.append(enriched)
 
     visible_runs = []
-    for run in load_runs():
+    for run in sorted(load_runs(), key=_run_timestamp, reverse=True):
         if run.get("tenant_slug") != tenant_slug:
             continue
         run_tags = _run_tags(run)
@@ -676,6 +694,13 @@ def pipelines():
     latest_runs_by_workflow: dict[str, dict] = {}
     for run in visible_runs:
         latest_runs_by_workflow.setdefault(str(run.get("workflow", "")), run)
+    visible_pipelines.sort(
+        key=lambda item: (
+            latest_runs_by_workflow.get(str(item.get("workflow", ""))) is None,
+            -_run_timestamp(latest_runs_by_workflow.get(str(item.get("workflow", "")), {})).timestamp(),
+            str(item.get("name", "")).lower(),
+        )
+    )
     selected_pipeline = next((item for item in visible_pipelines if item.get("id") == selected_pipeline_id), None)
     if not selected_pipeline and visible_pipelines:
         selected_pipeline = visible_pipelines[0]

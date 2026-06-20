@@ -102,6 +102,78 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "--force --bootloader grub" not in commands
 
 
+def test_resource_graph_sorts_pipeline_tree_by_latest_run(monkeypatch):
+    monkeypatch.setattr(resource_graph, "load_integrations", lambda: {})
+    monkeypatch.setattr(resource_graph, "load_rules", lambda: {"groups": {}})
+    monkeypatch.setattr(
+        resource_graph,
+        "_snapshot_indexes",
+        lambda: {
+            "proxmox": {"nodes": {}, "vms": {}, "containers": {}},
+            "ansible": {"hosts": {}},
+            "docker": {"nodes": {}, "services": {}, "containers": {}},
+        },
+    )
+    monkeypatch.setattr(
+        resource_graph,
+        "demo_pipelines",
+        lambda: [
+            {
+                "id": "older-pipeline",
+                "name": "Older Pipeline",
+                "workflow": "older-workflow",
+                "repo": "Example",
+                "stages": ["one"],
+                "actions": [],
+            },
+            {
+                "id": "auzix-vm134-install-refresh",
+                "name": "AuziX VM134 Install Refresh",
+                "workflow": "auzix-vm134-install-refresh",
+                "repo": "AuziX",
+                "stages": ["source-verify"],
+                "actions": [],
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        resource_graph,
+        "load_runs",
+        lambda: [
+            {
+                "id": "older-run",
+                "tenant_slug": "default",
+                "workflow": "older-workflow",
+                "status": "complete",
+                "updated_at": "2026-06-19T00:00:00+00:00",
+                "extra": {"pipeline_id": "older-pipeline"},
+            },
+            {
+                "id": "vm134-run",
+                "tenant_slug": "default",
+                "workflow": "auzix-vm134-install-refresh",
+                "status": "failed",
+                "updated_at": "2026-06-20T01:30:43+00:00",
+                "extra": {"pipeline_id": "auzix-vm134-install-refresh"},
+            },
+        ],
+    )
+
+    graph = resource_graph.build_resource_graph()
+    pipeline_group = next(group for group in graph["tree"] if group["kind"] == "pipeline")
+    pipeline_ids = [item["id"] for item in pipeline_group["resources"]]
+
+    assert pipeline_ids[0] == "pipeline:auzix-vm134-install-refresh"
+    vm134 = graph["resources_by_id"]["pipeline:auzix-vm134-install-refresh"]
+    assert vm134["state"] == "failed"
+    assert vm134["facts"]["latest status"] == "failed"
+    assert any(
+        relationship["source_id"] == "pipeline:auzix-vm134-install-refresh"
+        and relationship["target_id"] == "action:vm134-run"
+        for relationship in graph["relationships"]
+    )
+
+
 def test_lab_demo_rebuilds_missing_tabor_builder_image():
     stages = workflow_stage_definitions("lab-demo")
     builder_ready = next(stage for stage in stages if stage["name"] == "builder-ready")

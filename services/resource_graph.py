@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from copy import deepcopy
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from services.action_catalog import actions_for_kind, list_actions
@@ -112,6 +113,31 @@ def _add_relationship(graph: dict, source_id: str, relation_type: str, target_id
             "summary": summary,
         }
     )
+
+
+def _run_timestamp(run: dict) -> datetime:
+    value = str(run.get("updated_at") or run.get("created_at") or "").strip()
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _resource_sort_key(resource: dict) -> tuple:
+    kind = str(resource.get("kind", ""))
+    if kind in {"pipeline", "action"}:
+        latest = resource.get("facts", {}).get("latest run at") or resource.get("facts", {}).get("updated") or ""
+        return (
+            kind not in {"pipeline", "action"},
+            -_run_timestamp({"updated_at": latest}).timestamp(),
+            resource["name"].lower(),
+        )
+    return (False, 0, resource["name"].lower())
 
 
 def _node_kind(node_data: dict, resolved: dict) -> str:
@@ -462,22 +488,53 @@ def build_resource_graph() -> dict:
             if "api:ssh" in graph["resources_by_id"]:
                 _add_relationship(graph, "credential:ssh-default", "authenticates", host_id, "SSH operations can target this resource.")
 
+    tenant_runs = sorted(
+        [run for run in load_runs() if run.get("tenant_slug") == tenant_slug],
+        key=_run_timestamp,
+        reverse=True,
+    )
+    latest_runs_by_pipeline: dict[str, dict] = {}
+    latest_runs_by_workflow: dict[str, dict] = {}
+    for run in tenant_runs:
+        workflow = str(run.get("workflow") or "")
+        pipeline_key = str(run.get("extra", {}).get("pipeline_id") or "")
+        if pipeline_key:
+            latest_runs_by_pipeline.setdefault(pipeline_key, run)
+        if workflow:
+            latest_runs_by_workflow.setdefault(workflow, run)
+
     for pipeline in demo_pipelines():
         pipeline_id = f"pipeline:{pipeline['id']}"
+        latest_run = latest_runs_by_pipeline.get(str(pipeline["id"])) or latest_runs_by_workflow.get(
+            str(pipeline.get("workflow", ""))
+        )
+        facts = {
+            "workflow": pipeline.get("workflow", "unset"),
+            "repo": pipeline.get("repo", "unset"),
+            "stages": str(len(pipeline.get("stages", []))),
+        }
+        if latest_run:
+            facts.update(
+                {
+                    "latest run": latest_run.get("id") or "unset",
+                    "latest status": latest_run.get("status") or "unset",
+                    "latest run at": latest_run.get("updated_at") or latest_run.get("created_at") or "unset",
+                }
+            )
         _add_resource(
             graph,
             {
                 "id": pipeline_id,
                 "kind": "pipeline",
                 "name": pipeline["name"],
-                "state": "editable" if pipeline.get("editable") else "defined",
+                "state": latest_run.get("status", "editable" if pipeline.get("editable") else "defined")
+                if latest_run
+                else "editable"
+                if pipeline.get("editable")
+                else "defined",
                 "summary": pipeline.get("description", ""),
                 "sources": ["pipeline catalog"],
-                "facts": {
-                    "workflow": pipeline.get("workflow", "unset"),
-                    "repo": pipeline.get("repo", "unset"),
-                    "stages": str(len(pipeline.get("stages", []))),
-                },
+                "facts": facts,
                 "actions": _pipeline_actions(pipeline),
                 "raw": {"stages": pipeline.get("stages", []), "notes": pipeline.get("notes", "")},
             },
@@ -504,9 +561,7 @@ def build_resource_graph() -> dict:
             )
             _add_relationship(graph, pipeline_id, "uses", repo_id, "Pipeline source or working tree.")
 
-    for run in load_runs()[:20]:
-        if run.get("tenant_slug") != tenant_slug:
-            continue
+    for run in tenant_runs[:20]:
         action_id = f"action:{run.get('id')}"
         workflow = str(run.get("workflow") or "workflow")
         _add_resource(
@@ -527,7 +582,8 @@ def build_resource_graph() -> dict:
                 "raw": {"stages": run.get("stages", [])},
             },
         )
-        pipeline_id = f"pipeline:{workflow}"
+        pipeline_key = str(run.get("extra", {}).get("pipeline_id") or workflow)
+        pipeline_id = f"pipeline:{pipeline_key}"
         if pipeline_id in graph["resources_by_id"]:
             _add_relationship(graph, pipeline_id, "created", action_id, "Recent execution.")
         repo = str(run.get("repo") or "").strip()
@@ -543,7 +599,7 @@ def build_resource_graph() -> dict:
         {
             "kind": kind,
             "meta": RESOURCE_KIND_META.get(kind, {"label": kind.title(), "short": kind[:3].upper(), "order": 999}),
-            "resources": sorted(items, key=lambda item: item["name"].lower()),
+            "resources": sorted(items, key=_resource_sort_key),
         }
         for kind, items in sorted(
             resources_by_kind.items(),
@@ -552,7 +608,7 @@ def build_resource_graph() -> dict:
     ]
     graph["resources"] = sorted(
         graph["resources"],
-        key=lambda item: (RESOURCE_KIND_META.get(item["kind"], {}).get("order", 999), item["name"].lower()),
+        key=lambda item: (RESOURCE_KIND_META.get(item["kind"], {}).get("order", 999), *_resource_sort_key(item)),
     )
     return graph
 
