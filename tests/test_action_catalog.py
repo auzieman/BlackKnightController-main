@@ -97,6 +97,9 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "auzix-strict-installer-test" in commands
     assert "auzix-strict-grub" in commands
     assert "auzix-strict-audit" not in commands
+    assert "grub_current=$(readlink out/auzix-strict/AuzixRoot/Programs/GRUB/current)" in commands
+    assert 'AuzixRoot${grub_current}/Resources/i386-pc' in commands
+    assert "Programs/GRUB/current/Resources/i386-pc" not in commands
     assert "auzix-strict-desktop-vm134.iso" in commands
     assert "qm set 134 --ide2" in commands
     assert "--force --bootloader grub" not in commands
