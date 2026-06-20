@@ -92,6 +92,7 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     stages = workflow_stage_definitions("auzix-vm134-install-refresh")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
     assert "apt-get update" in commands
+    assert "grub2-common grub-pc-bin" in commands
     assert "auzix-strict-live-tools" in commands
     assert "auzix-strict-installer-test" in commands
     assert "auzix-strict-grub" in commands

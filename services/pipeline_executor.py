@@ -776,6 +776,8 @@ WORKFLOW_DEFINITIONS = {
                     "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
                     "auzix/builder:local bash -lc "
                     "'\"'\"'apt-get update >/dev/null && "
+                    "apt-get install -y --no-install-recommends "
+                    "grub2-common grub-pc-bin >/dev/null && "
                     "make auzix-strict-live-tools "
                     "auzix-strict-package-tools "
                     "auzix-strict-installer "
