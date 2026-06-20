@@ -125,6 +125,8 @@ def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
         tags.update({"deploy", "ssh", "auzix"})
     if workflow == "auzix-vm134-install-refresh":
         tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
+    if workflow == "auzix-vm135-fresh-install-target":
+        tags.update({"auzix", "deploy", "installer", "iso", "proxmox", "vm135"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
@@ -191,6 +193,8 @@ def _run_tags(run: dict) -> list[str]:
         tags.update({"deploy", "ssh", "auzix"})
     if workflow == "auzix-vm134-install-refresh":
         tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
+    if workflow == "auzix-vm135-fresh-install-target":
+        tags.update({"auzix", "deploy", "installer", "iso", "proxmox", "vm135"})
     if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
     if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:

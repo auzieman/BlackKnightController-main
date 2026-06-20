@@ -67,8 +67,14 @@ RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
 AUZIX_VM130_HOST = "192.168.1.163"
 AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
 AUZIX_VM134_ID = 134
+AUZIX_ARTIFACT_ROOT = "/mnt/swarm/AuziX/src"
+AUZIX_ARTIFACT_HOST = "192.168.1.15"
 AUZIX_VM134_ISO_NAME = "auzix-strict-desktop-vm134.iso"
 AUZIX_VM134_MIN_DISK_GIB = 32
+AUZIX_VM135_ID = 135
+AUZIX_VM135_NAME = "Auzix-VM135"
+AUZIX_VM135_ISO_NAME = "auzix-strict-desktop-vm135.iso"
+AUZIX_VM135_MIN_DISK_GIB = 32
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -879,6 +885,111 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "AuziX VM134 install refresh preflight completed.",
+    },
+    "auzix-vm135-fresh-install-target": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "artifact-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying the freshly-built AuziX install ISO artifact and checksum.",
+                "complete": "AuziX install ISO artifact is ready for VM135.",
+                "command": (
+                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
+                    f"root@{AUZIX_ARTIFACT_HOST} "
+                    "'\"'\"'"
+                    f"cd {AUZIX_ARTIFACT_ROOT} && "
+                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
+                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256 && "
+                    f"expected=$(awk \"{{print \\$1}}\" artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256) && "
+                    f"actual=$(sha256sum artifacts/auzix/{AUZIX_VM134_ISO_NAME} | awk \"{{print \\$1}}\") && "
+                    "test \"$expected\" = \"$actual\"'\"'\"''"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "iso-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing the fresh AuziX install ISO to Proxmox for VM135.",
+                "complete": "Proxmox local ISO storage has the VM135 install media.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    f"iso={AUZIX_ARTIFACT_ROOT}/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
+                    f"root@{AUZIX_ARTIFACT_HOST} \"test -s $iso\"; "
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    "\"mkdir -p /var/lib/vz/template/iso\"; "
+                    "scp -3 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
+                    f"root@{AUZIX_ARTIFACT_HOST}:\"$iso\" "
+                    f"root@192.168.1.9:/var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME}; "
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    f"\"test -s /var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
+                    f"pvesm list local --content iso | grep -F {AUZIX_VM135_ISO_NAME}\"'"
+                ),
+                "timeout": 420,
+            },
+            {
+                "name": "vm135-recreate",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Destroying any existing VM135 and recreating it as a fresh AuziX install target.",
+                "complete": "VM135 exists with a fresh disk and ISO-first boot order.",
+                "command": (
+                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    "'\"'\"'set -e; "
+                    f"if qm config {AUZIX_VM135_ID} >/dev/null 2>&1; then "
+                    f"qm status {AUZIX_VM135_ID} | grep -q running && qm stop {AUZIX_VM135_ID} --timeout 30 || true; "
+                    f"qm destroy {AUZIX_VM135_ID} --purge 1 || qm destroy {AUZIX_VM135_ID}; "
+                    "fi; "
+                    f"qm create {AUZIX_VM135_ID} --name {AUZIX_VM135_NAME} --memory 12682 --cores 4 --sockets 2 "
+                    "--numa 0 --ostype l26 --scsihw virtio-scsi-single "
+                    "--net0 virtio,bridge=vmbr0,firewall=1; "
+                    f"qm set {AUZIX_VM135_ID} --scsi0 local-lvm:{AUZIX_VM135_MIN_DISK_GIB},iothread=1; "
+                    f"qm set {AUZIX_VM135_ID} --ide2 local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom; "
+                    f"qm set {AUZIX_VM135_ID} --boot order=ide2\\;scsi0\\;net0; "
+                    f"cfg=$(qm config {AUZIX_VM135_ID}); "
+                    "printf \"%s\\n\" \"$cfg\"; "
+                    f"printf \"%s\\n\" \"$cfg\" | grep -F \"name: {AUZIX_VM135_NAME}\" >/dev/null; "
+                    f"printf \"%s\\n\" \"$cfg\" | grep -F \"ide2: local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom\" >/dev/null; "
+                    "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
+                    f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM135_MIN_DISK_GIB}; "
+                    "echo auzix-vm135-target-ready'\"'\"''"
+                ),
+                "timeout": 180,
+            },
+            {
+                "name": "vm135-start",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Starting VM135 from the fresh AuziX install ISO.",
+                "complete": "VM135 is running from the fresh AuziX install media.",
+                "command": (
+                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    "'\"'\"'set -e; "
+                    f"qm start {AUZIX_VM135_ID}; "
+                    "sleep 5; "
+                    f"qm status {AUZIX_VM135_ID} | grep -F \"status: running\"; "
+                    f"qm config {AUZIX_VM135_ID} | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
+                    "echo auzix-vm135-running'\"'\"''"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "install-handoff",
+                "transport": "internal",
+                "kind": "event-note",
+                "active": "Publishing the VM135 install handoff.",
+                "complete": "VM135 install handoff published.",
+                "message": (
+                    "VM135 is a fresh disposable AuziX install target booting the latest ISO. "
+                    "Use `/System/Tools/auzix-installer-gui` or `/System/Tools/auzix-installer tui`, "
+                    "target `/dev/sda`, and keep VM134 untouched for comparison."
+                ),
+            },
+        ],
+        "complete_message": "AuziX VM135 fresh install target is running.",
     },
     "auzix-installer-foundation": {
         "supports_undeploy": False,

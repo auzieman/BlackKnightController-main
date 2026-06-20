@@ -1,0 +1,9 @@
+{
+  "id": "vm135-source-artifact",
+  "kind": "gate",
+  "summary": "The completed AuziX ISO artifact exists with a matching checksum before Proxmox is touched.",
+  "checks": [
+    "/mnt/swarm/AuziX/src/artifacts/auzix/auzix-strict-desktop-vm134.iso",
+    "/mnt/swarm/AuziX/src/artifacts/auzix/auzix-strict-desktop-vm134.iso.sha256"
+  ]
+}

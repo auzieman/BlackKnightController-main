@@ -106,6 +106,41 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "--force --bootloader grub" not in commands
 
 
+def test_auzix_vm135_fresh_install_target_recreates_disposable_vm():
+    pipeline = pipeline_by_id("auzix-vm135-fresh-install-target")
+    assert pipeline is not None
+    assert pipeline["repo"] == "AuziX"
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "artifact-verify",
+        "iso-publish",
+        "vm135-recreate",
+        "vm135-start",
+        "install-handoff",
+    ]
+    assert pipeline["source_path"].endswith(
+        "dictionaries/pipelines/AuziX_VM135_Fresh_Install_Target/pipeline.json"
+    )
+    assert "vm135-target-disk" in pipeline["gates"]
+    assert {item["id"] for item in pipeline["items"]} >= {
+        "vm135-source-artifact",
+        "vm135-boot-media",
+        "vm135-target-disk",
+    }
+
+    stages = workflow_stage_definitions("auzix-vm135-fresh-install-target")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "expected=$(awk" in commands
+    assert "auzix-strict-desktop-vm134.iso" in commands
+    assert "auzix-strict-desktop-vm135.iso" in commands
+    assert "qm destroy 135" in commands
+    assert "qm create 135" in commands
+    assert "qm set 135 --scsi0 local-lvm:32" in commands
+    assert "qm set 135 --ide2 local:iso/auzix-strict-desktop-vm135.iso" in commands
+    assert "qm start 135" in commands
+    assert "auzix-strict-iso" not in commands
+
+
 def test_resource_graph_sorts_pipeline_tree_by_latest_run(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_integrations", lambda: {})
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"groups": {}})
