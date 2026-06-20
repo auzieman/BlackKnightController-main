@@ -1,0 +1,55 @@
+{
+  "id": "auzix-vm134-install-refresh",
+  "name": "AuziX VM134 Install Refresh",
+  "repo": "AuziX",
+  "workflow": "auzix-vm134-install-refresh",
+  "description": "Build a refreshed AuziX live/install root, produce install media, publish it to Proxmox, and verify VM134 is shaped for a larger installed-root boot.",
+  "resource_class": "slow",
+  "stages": [
+    "source-verify",
+    "installer-root-build",
+    "iso-build",
+    "iso-publish",
+    "vm-target-verify",
+    "install-handoff"
+  ],
+  "actions": [
+    "repo.source.verify",
+    "docker.builder.prepare",
+    "auzix.installer_root.build",
+    "auzix.iso.build",
+    "proxmox.iso.publish",
+    "proxmox.vm.install_target.verify"
+  ],
+  "gates": [
+    "source-commit",
+    "installer-runtime",
+    "grub-runtime",
+    "vm134-target-disk",
+    "vm134-boot-media"
+  ],
+  "notes": "First repeatable lane for the newer VM134 target. This intentionally stops at a guarded install handoff until the live installer path is proven from the UI/TUI.",
+  "editable": true,
+  "links": [
+    {
+      "label": "AuziX Repository",
+      "url": "http://192.168.1.10/auzix/repo/"
+    },
+    {
+      "label": "Proxmox",
+      "url": "https://192.168.1.9:8006"
+    },
+    {
+      "label": "Pipeline Runs",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-vm134-install-refresh"
+    }
+  ],
+  "tags": [
+    "auzix",
+    "vm134",
+    "installer",
+    "proxmox",
+    "iso",
+    "slow-worker"
+  ]
+}

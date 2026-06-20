@@ -1,0 +1,10 @@
+{
+  "id": "grub-runtime",
+  "kind": "gate",
+  "summary": "The refreshed strict root must include the packaged BIOS GRUB runtime used by auzix-install-disk --bootloader grub.",
+  "required_paths": [
+    "/Programs/GRUB/current/Commands/grub-install",
+    "/System/Compatibility/usr/sbin/grub-install",
+    "/System/Compatibility/usr/lib/grub/i386-pc"
+  ]
+}

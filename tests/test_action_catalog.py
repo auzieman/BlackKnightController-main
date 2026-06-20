@@ -64,6 +64,41 @@ def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     assert "mdev.conf" in source_verify["command"]
 
 
+def test_auzix_vm134_install_refresh_has_guarded_install_contract():
+    pipeline = pipeline_by_id("auzix-vm134-install-refresh")
+    assert pipeline is not None
+    assert pipeline["repo"] == "AuziX"
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "installer-root-build",
+        "iso-build",
+        "iso-publish",
+        "vm-target-verify",
+        "install-handoff",
+    ]
+    assert pipeline["source_path"].endswith(
+        "dictionaries/pipelines/AuziX_VM134_Install_Refresh/pipeline.json"
+    )
+    assert "vm134-target-disk" in pipeline["gates"]
+    assert {item["id"] for item in pipeline["items"]} >= {
+        "source-commit",
+        "installer-runtime",
+        "grub-runtime",
+        "vm134-target-disk",
+        "vm134-boot-media",
+    }
+
+    stages = workflow_stage_definitions("auzix-vm134-install-refresh")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "auzix-strict-live-tools" in commands
+    assert "auzix-strict-installer-test" in commands
+    assert "auzix-strict-grub" in commands
+    assert "auzix-strict-desktop-vm134.iso" in commands
+    assert "qm set 134 --ide2" in commands
+    assert "--force --bootloader grub" not in commands
+
+
 def test_lab_demo_rebuilds_missing_tabor_builder_image():
     stages = workflow_stage_definitions("lab-demo")
     builder_ready = next(stage for stage in stages if stage["name"] == "builder-ready")

@@ -66,6 +66,9 @@ RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
 AUZIX_VM130_HOST = "192.168.1.163"
 AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
+AUZIX_VM134_ID = 134
+AUZIX_VM134_ISO_NAME = "auzix-strict-desktop-vm134.iso"
+AUZIX_VM134_MIN_DISK_GIB = 32
 
 
 def _set_stage(run_id: str, stage_name: str, status: str, detail: str) -> None:
@@ -732,6 +735,141 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "AuziX VM130 deployment pipeline completed.",
+    },
+    "auzix-vm134-install-refresh": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying AuziX source has installer, package, GRUB, and ISO build contracts.",
+                "complete": "AuziX source contracts for VM134 install refresh are present.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
+                    "test -x scripts/add-auzix-live-tools.sh && "
+                    "test -x scripts/build-auzix-installer-package.sh && "
+                    "test -x scripts/build-auzix-grub-package.sh && "
+                    "test -x scripts/build-auzix-boot-iso.sh && "
+                    "test -x scripts/test-auzix-installer.sh && "
+                    "grep -F \"install_grub_bootloader\" scripts/add-auzix-live-tools.sh >/dev/null && "
+                    "grep -F \"auzix-strict-grub:\" Makefile >/dev/null && "
+                    "grep -F \"auzix-install-disk\" installer/auzix-installer.lua >/dev/null && "
+                    "echo auzix-vm134-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "installer-root-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Refreshing the staged strict root with live tools, Lua installer, package tools, and GRUB.",
+                "complete": "Staged strict root contains installer, finalizer, package tools, and GRUB.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "{ docker image inspect auzix/builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/builder/Dockerfile "
+                    "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local bash -lc "
+                    "'\"'\"'make auzix-strict-live-tools "
+                    "auzix-strict-package-tools "
+                    "auzix-strict-installer "
+                    "auzix-strict-installer-test "
+                    "auzix-strict-grub "
+                    "auzix-strict-audit && "
+                    "test -x out/auzix-strict/AuzixRoot/System/Tools/auzix-install-disk && "
+                    "test -x out/auzix-strict/AuzixRoot/System/Tools/finalize-installed-root && "
+                    "test -L out/auzix-strict/AuzixRoot/System/Tools/auzix-installer-gui && "
+                    "test -L out/auzix-strict/AuzixRoot/System/Compatibility/usr/sbin/grub-install && "
+                    "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
+                    "\\( -name \"AuzixInstaller-*.auzix.json\" -o -name \"GRUB-*.auzix.json\" "
+                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"''"
+                ),
+                "timeout": 1800,
+            },
+            {
+                "name": "iso-build",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Building a VM134 install ISO from the refreshed strict root.",
+                "complete": "VM134 install ISO and checksum are available on the AuziX artifact share.",
+                "command": (
+                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "auzix/builder:local bash -lc "
+                    f"'\"'\"'AUZIX_ISO_NAME={AUZIX_VM134_ISO_NAME} "
+                    "AUZIX_LIVE_ROOT_MODE=iso-root "
+                    "make auzix-strict-iso && "
+                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
+                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256 && "
+                    f"sha256sum -c artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256'\"'\"''"
+                ),
+                "timeout": 2400,
+            },
+            {
+                "name": "iso-publish",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing the VM134 install ISO to Proxmox local ISO storage.",
+                "complete": "Proxmox local ISO storage has the VM134 install media.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    f"iso=/srv/nfs/swarm/AuziX/src/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
+                    "test -s \"$iso\"; "
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    f"\"mkdir -p /var/lib/vz/template/iso\"; "
+                    "scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new \"$iso\" "
+                    f"root@192.168.1.9:/var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME}; "
+                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    f"\"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
+                    f"pvesm list local --content iso | grep -F {AUZIX_VM134_ISO_NAME}\"'"
+                ),
+                "timeout": 300,
+            },
+            {
+                "name": "vm-target-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying VM134 has a large disk, ISO boot media, and disk fallback boot order.",
+                "complete": "VM134 target shape is ready for the live installer handoff.",
+                "command": (
+                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
+                    "'\"'\"'set -e; "
+                    f"cfg=$(qm config {AUZIX_VM134_ID}); "
+                    "printf \"%s\\n\" \"$cfg\"; "
+                    "printf \"%s\\n\" \"$cfg\" | grep -F \"name: Auzix\" >/dev/null; "
+                    "printf \"%s\\n\" \"$cfg\" | grep -F \"scsi0: local-lvm:\" >/dev/null; "
+                    "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
+                    f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM134_MIN_DISK_GIB}; "
+                    "printf \"%s\\n\" \"$cfg\" | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
+                    f"qm set {AUZIX_VM134_ID} --ide2 local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom; "
+                    f"qm set {AUZIX_VM134_ID} --boot order=ide2\\;scsi0\\;net0; "
+                    f"qm config {AUZIX_VM134_ID} | grep -F \"ide2: local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom\" >/dev/null; "
+                    "echo auzix-vm134-target-ready'\"'\"''"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "install-handoff",
+                "transport": "internal",
+                "kind": "event-note",
+                "active": "Publishing the VM134 install handoff.",
+                "complete": "VM134 install handoff published.",
+                "message": (
+                    "VM134 is prepared for the guarded live installer path. Boot the ISO, run "
+                    "`/System/Tools/auzix-installer-gui` or "
+                    "`/System/Tools/auzix-installer tui`, choose `/dev/sda` with GRUB, and only "
+                    "then let BKC add the destructive install execution stage."
+                ),
+            },
+        ],
+        "complete_message": "AuziX VM134 install refresh preflight completed.",
     },
     "auzix-installer-foundation": {
         "supports_undeploy": False,

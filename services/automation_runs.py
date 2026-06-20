@@ -66,6 +66,15 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["repo-sync", "builder-prepare", "image-build", "artifact-publish"]
     if normalized == "auzix-vm130-deploy":
         return ["source-verify", "runtime-deploy", "network-validate"]
+    if normalized == "auzix-vm134-install-refresh":
+        return [
+            "source-verify",
+            "installer-root-build",
+            "iso-build",
+            "iso-publish",
+            "vm-target-verify",
+            "install-handoff",
+        ]
     if normalized == "auzix-installer-foundation":
         return ["source-verify", "installer-build", "contract-test", "artifact-report"]
     if normalized == "auzix-installer-package-bot":
