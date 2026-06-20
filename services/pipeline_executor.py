@@ -823,6 +823,7 @@ WORKFLOW_DEFINITIONS = {
                     "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
                     "auzix/builder:local bash -lc "
                     f"'\"'\"'AUZIX_ISO_NAME={AUZIX_VM134_ISO_NAME} "
+                    "AUZIX_ISO_WORK_DIR=/var/tmp/auzix-iso-vm134 "
                     "AUZIX_LIVE_ROOT_MODE=iso-root "
                     "make auzix-strict-iso && "
                     f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
