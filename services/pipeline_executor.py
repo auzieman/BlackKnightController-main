@@ -495,7 +495,9 @@ WORKFLOW_DEFINITIONS = {
                     "bash -lc '"
                     "cd /srv/stacks/tabor-linux-forge && "
                     "docker image inspect tabor-linux-forge-kernel --format \"{{.Id}} {{.Created}}\" || "
-                    "{ echo tabor-linux-forge-kernel image missing; echo run the heavier tabor-build lane to rebuild it; exit 1; }'"
+                    "{ echo tabor-linux-forge-kernel image missing; "
+                    "docker compose -f /srv/stacks/tabor-linux-forge/docker-compose.yml build kernel-builder; } && "
+                    "docker image inspect tabor-linux-forge-kernel --format \"{{.Id}} {{.Created}}\"'"
                 ),
                 "timeout": 60,
             },

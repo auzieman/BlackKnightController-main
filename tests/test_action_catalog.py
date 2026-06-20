@@ -64,6 +64,15 @@ def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     assert "mdev.conf" in source_verify["command"]
 
 
+def test_lab_demo_rebuilds_missing_tabor_builder_image():
+    stages = workflow_stage_definitions("lab-demo")
+    builder_ready = next(stage for stage in stages if stage["name"] == "builder-ready")
+    command = builder_ready["command"]
+
+    assert "docker image inspect tabor-linux-forge-kernel" in command
+    assert "docker compose -f /srv/stacks/tabor-linux-forge/docker-compose.yml build kernel-builder" in command
+
+
 def test_folder_backed_pipeline_loader_keeps_items_scoped(monkeypatch, tmp_path):
     pipeline_dir = tmp_path / "dictionaries" / "pipelines" / "Example_Pipeline"
     items_dir = pipeline_dir / "items"
