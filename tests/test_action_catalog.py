@@ -94,9 +94,12 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "apt-get update" in commands
     assert "grub2-common grub-pc-bin" in commands
     assert "auzix-strict-busybox" in commands
+    assert "auzix-strict-access" in commands
     assert "auzix-strict-live-tools" in commands
     assert "auzix-strict-installer-test" in commands
     assert "auzix-strict-grub" in commands
+    assert 'grep -F "auzix:x:1000:1000:"' in commands
+    assert "out/auzix-strict/AuzixRoot/Users/auzix" in commands
     assert "auzix-strict-audit" not in commands
     assert "grub_current=$(readlink out/auzix-strict/AuzixRoot/Programs/GRUB/current)" in commands
     assert 'AuzixRoot${grub_current}/Resources/i386-pc' in commands
