@@ -5,6 +5,7 @@ import json
 import re
 import shlex
 import socket
+import tempfile
 import time
 from base64 import b64decode, b64encode
 from pathlib import Path
@@ -28,7 +29,12 @@ from services.integration_store import (
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.proxmox import ProxmoxClient, load_proxmox_config
-from services.remote_ops import run_remote_command, upload_remote_bytes
+from services.remote_ops import (
+    download_remote_file,
+    run_remote_command,
+    upload_remote_bytes,
+    upload_remote_file,
+)
 from services.rules_store import load_rules, save_rules
 from services.ssh_keys import read_key_pair
 
@@ -821,7 +827,7 @@ WORKFLOW_DEFINITIONS = {
                 "transport": "ssh-manager",
                 "target": "manager",
                 "active": "Building a VM134 install ISO from the refreshed strict root.",
-                "complete": "VM134 install ISO and checksum are available on the AuziX artifact share.",
+                "complete": "VM134 install ISO and checksum are available in local build scratch.",
                 "command": (
                     "bash -lc 'set -e; "
                     "scratch=/var/tmp/auzix-vm134-build; "
@@ -843,45 +849,18 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "iso-publish",
-                "transport": "ssh-manager",
-                "target": "manager",
+                "transport": "internal",
+                "kind": "auzix-vm134-iso-publish",
                 "active": "Publishing the VM134 install ISO to Proxmox local ISO storage.",
                 "complete": "Proxmox local ISO storage has the VM134 install media.",
-                "command": (
-                    "bash -lc 'set -e; "
-                    f"iso=/var/tmp/auzix-vm134-build/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
-                    "test -s \"$iso\"; "
-                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    f"\"mkdir -p /var/lib/vz/template/iso\"; "
-                    "scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new \"$iso\" "
-                    f"root@192.168.1.9:/var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME}; "
-                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    f"\"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
-                    f"pvesm list local --content iso | grep -F {AUZIX_VM134_ISO_NAME}\"'"
-                ),
                 "timeout": 300,
             },
             {
                 "name": "vm-target-verify",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "internal",
+                "kind": "auzix-vm134-target-verify",
                 "active": "Verifying VM134 has a large disk, ISO boot media, and disk fallback boot order.",
                 "complete": "VM134 target shape is ready for the live installer handoff.",
-                "command": (
-                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    "'\"'\"'set -e; "
-                    f"cfg=$(qm config {AUZIX_VM134_ID}); "
-                    "printf \"%s\\n\" \"$cfg\"; "
-                    "printf \"%s\\n\" \"$cfg\" | grep -F \"name: Auzix\" >/dev/null; "
-                    "printf \"%s\\n\" \"$cfg\" | grep -F \"scsi0: local-lvm:\" >/dev/null; "
-                    "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
-                    f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM134_MIN_DISK_GIB}; "
-                    "printf \"%s\\n\" \"$cfg\" | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
-                    f"qm set {AUZIX_VM134_ID} --ide2 local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom; "
-                    f"qm set {AUZIX_VM134_ID} --boot order=ide2\\;scsi0\\;net0; "
-                    f"qm config {AUZIX_VM134_ID} | grep -F \"ide2: local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom\" >/dev/null; "
-                    "echo auzix-vm134-target-ready'\"'\"''"
-                ),
                 "timeout": 120,
             },
             {
@@ -905,83 +884,34 @@ WORKFLOW_DEFINITIONS = {
         "stage_plan": [
             {
                 "name": "artifact-verify",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "internal",
+                "kind": "auzix-vm135-artifact-verify",
                 "active": "Verifying the freshly-built AuziX install ISO artifact and checksum.",
                 "complete": "AuziX install ISO artifact is ready for VM135.",
-                "command": (
-                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    "'\"'\"'"
-                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
-                    f"pvesm list local --content iso | grep -F {AUZIX_VM134_ISO_NAME}"
-                    "'\"'\"''"
-                ),
                 "timeout": 120,
             },
             {
                 "name": "iso-publish",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "internal",
+                "kind": "auzix-vm135-iso-publish",
                 "active": "Publishing the fresh AuziX install ISO to Proxmox for VM135.",
                 "complete": "Proxmox local ISO storage has the VM135 install media.",
-                "command": (
-                    "bash -lc 'set -e; "
-                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
-                    "root@192.168.1.9 "
-                    "'\"'\"'"
-                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
-                    f"cp -f /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} "
-                    f"/var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
-                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
-                    f"pvesm list local --content iso | grep -F {AUZIX_VM135_ISO_NAME}"
-                    "'\"'\"''"
-                ),
                 "timeout": 420,
             },
             {
                 "name": "vm135-recreate",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "internal",
+                "kind": "auzix-vm135-recreate",
                 "active": "Destroying any existing VM135 and recreating it as a fresh AuziX install target.",
                 "complete": "VM135 exists with a fresh disk and ISO-first boot order.",
-                "command": (
-                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    "'\"'\"'set -e; "
-                    f"if qm config {AUZIX_VM135_ID} >/dev/null 2>&1; then "
-                    f"qm status {AUZIX_VM135_ID} | grep -q running && qm stop {AUZIX_VM135_ID} --timeout 30 || true; "
-                    f"qm destroy {AUZIX_VM135_ID} --purge 1 || qm destroy {AUZIX_VM135_ID}; "
-                    "fi; "
-                    f"qm create {AUZIX_VM135_ID} --name {AUZIX_VM135_NAME} --memory 12682 --cores 4 --sockets 2 "
-                    "--numa 0 --ostype l26 --scsihw virtio-scsi-single "
-                    "--net0 virtio,bridge=vmbr0,firewall=1; "
-                    f"qm set {AUZIX_VM135_ID} --scsi0 local-lvm:{AUZIX_VM135_MIN_DISK_GIB},iothread=1; "
-                    f"qm set {AUZIX_VM135_ID} --ide2 local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom; "
-                    f"qm set {AUZIX_VM135_ID} --boot order=ide2\\;scsi0\\;net0; "
-                    f"cfg=$(qm config {AUZIX_VM135_ID}); "
-                    "printf \"%s\\n\" \"$cfg\"; "
-                    f"printf \"%s\\n\" \"$cfg\" | grep -F \"name: {AUZIX_VM135_NAME}\" >/dev/null; "
-                    f"printf \"%s\\n\" \"$cfg\" | grep -F \"ide2: local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom\" >/dev/null; "
-                    "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
-                    f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM135_MIN_DISK_GIB}; "
-                    "echo auzix-vm135-target-ready'\"'\"''"
-                ),
                 "timeout": 180,
             },
             {
                 "name": "vm135-start",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "internal",
+                "kind": "auzix-vm135-start",
                 "active": "Starting VM135 from the fresh AuziX install ISO.",
                 "complete": "VM135 is running from the fresh AuziX install media.",
-                "command": (
-                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    "'\"'\"'set -e; "
-                    f"qm start {AUZIX_VM135_ID}; "
-                    "sleep 5; "
-                    f"qm status {AUZIX_VM135_ID} | grep -F \"status: running\"; "
-                    f"qm config {AUZIX_VM135_ID} | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
-                    "echo auzix-vm135-running'\"'\"''"
-                ),
                 "timeout": 120,
             },
             {
@@ -2011,6 +1941,145 @@ def _proxmox_ssh_target(config: dict) -> tuple[str, str, str]:
         username.split("@", 1)[0] or "root",
         str(config.get("password", "")).strip(),
     )
+
+
+def _run_proxmox_ssh_command(command: str, *, timeout: int = 120) -> str:
+    host, user, password = _proxmox_ssh_target(load_proxmox_config())
+    return run_remote_command(
+        host=host,
+        user=user,
+        password=password,
+        command=command,
+        timeout=timeout,
+    )
+
+
+def _run_auzix_vm134_iso_publish(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    manager_host, manager_user, manager_password = _command_target(settings, "manager")
+    proxmox_host, proxmox_user, proxmox_password = _proxmox_ssh_target(load_proxmox_config())
+    source_iso = f"/var/tmp/auzix-vm134-build/artifacts/auzix/{AUZIX_VM134_ISO_NAME}"
+    target_iso = f"/var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME}"
+
+    _set_stage(run_id, stage_name, "active", "Copying VM134 ISO from manager scratch to Proxmox local ISO storage.")
+    run_remote_command(
+        host=manager_host,
+        user=manager_user,
+        password=manager_password,
+        command=f"test -s {shlex.quote(source_iso)}",
+        timeout=60,
+    )
+    with tempfile.TemporaryDirectory(prefix="bkc-auzix-vm134-") as temp_dir:
+        local_iso = str(Path(temp_dir) / AUZIX_VM134_ISO_NAME)
+        download_remote_file(
+            host=manager_host,
+            user=manager_user,
+            password=manager_password,
+            remote_path=source_iso,
+            local_path=local_iso,
+            timeout=300,
+        )
+        _run_proxmox_ssh_command("mkdir -p /var/lib/vz/template/iso", timeout=60)
+        upload_remote_file(
+            host=proxmox_host,
+            user=proxmox_user,
+            password=proxmox_password,
+            remote_path=target_iso,
+            local_path=local_iso,
+            mode=0o644,
+            timeout=300,
+        )
+
+    output = _run_proxmox_ssh_command(
+        f"test -s {shlex.quote(target_iso)} && pvesm list local --content iso | "
+        f"grep -F {shlex.quote(AUZIX_VM134_ISO_NAME)}",
+        timeout=120,
+    )
+    _set_stage(run_id, stage_name, "complete", "Proxmox local ISO storage has the VM134 install media.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm134 iso published")
+
+
+def _run_auzix_vm134_target_verify(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        f"cfg=$(qm config {AUZIX_VM134_ID}); "
+        "printf \"%s\\n\" \"$cfg\"; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"name: Auzix\" >/dev/null; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"scsi0: local-lvm:\" >/dev/null; "
+        "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
+        f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM134_MIN_DISK_GIB}; "
+        f"qm set {AUZIX_VM134_ID} --ide2 local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom; "
+        f"qm set {AUZIX_VM134_ID} --boot order=ide2\\;scsi0\\;net0; "
+        f"qm config {AUZIX_VM134_ID} | grep -F \"ide2: local:iso/{AUZIX_VM134_ISO_NAME},media=cdrom\" >/dev/null; "
+        f"qm config {AUZIX_VM134_ID} | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
+        "echo auzix-vm134-target-ready"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "VM134 target shape is ready for the live installer handoff.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm134 target ready")
+
+
+def _run_auzix_vm135_artifact_verify(run_id: str, stage_name: str) -> None:
+    command = (
+        f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
+        f"pvesm list local --content iso | grep -F {AUZIX_VM134_ISO_NAME}"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "AuziX install ISO artifact is ready for VM135.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm134 source iso ready")
+
+
+def _run_auzix_vm135_iso_publish(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME}; "
+        f"cp -f /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} "
+        f"/var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME}; "
+        f"test -s /var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME}; "
+        f"pvesm list local --content iso | grep -F {AUZIX_VM135_ISO_NAME}"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=420)
+    _set_stage(run_id, stage_name, "complete", "Proxmox local ISO storage has the VM135 install media.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm135 iso published")
+
+
+def _run_auzix_vm135_recreate(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        f"if qm config {AUZIX_VM135_ID} >/dev/null 2>&1; then "
+        f"qm status {AUZIX_VM135_ID} | grep -q running && qm stop {AUZIX_VM135_ID} --timeout 30 || true; "
+        f"qm destroy {AUZIX_VM135_ID} --purge 1 || qm destroy {AUZIX_VM135_ID}; "
+        "fi; "
+        f"qm create {AUZIX_VM135_ID} --name {AUZIX_VM135_NAME} --memory 12682 --cores 4 --sockets 2 "
+        "--numa 0 --ostype l26 --scsihw virtio-scsi-single "
+        "--net0 virtio,bridge=vmbr0,firewall=1; "
+        f"qm set {AUZIX_VM135_ID} --scsi0 local-lvm:{AUZIX_VM135_MIN_DISK_GIB},iothread=1; "
+        f"qm set {AUZIX_VM135_ID} --ide2 local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom; "
+        f"qm set {AUZIX_VM135_ID} --boot order=ide2\\;scsi0\\;net0; "
+        f"cfg=$(qm config {AUZIX_VM135_ID}); "
+        "printf \"%s\\n\" \"$cfg\"; "
+        f"printf \"%s\\n\" \"$cfg\" | grep -F \"name: {AUZIX_VM135_NAME}\" >/dev/null; "
+        f"printf \"%s\\n\" \"$cfg\" | grep -F \"ide2: local:iso/{AUZIX_VM135_ISO_NAME},media=cdrom\" >/dev/null; "
+        "disk_gib=$(printf \"%s\\n\" \"$cfg\" | sed -n \"s/.*scsi0: .*size=\\([0-9][0-9]*\\)G.*/\\1/p\" | head -1); "
+        f"test -n \"$disk_gib\" && test \"$disk_gib\" -ge {AUZIX_VM135_MIN_DISK_GIB}; "
+        "echo auzix-vm135-target-ready"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=180)
+    _set_stage(run_id, stage_name, "complete", "VM135 exists with a fresh disk and ISO-first boot order.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm135 target ready")
+
+
+def _run_auzix_vm135_start(run_id: str, stage_name: str) -> None:
+    command = (
+        "set -e; "
+        f"qm start {AUZIX_VM135_ID}; "
+        "sleep 5; "
+        f"qm status {AUZIX_VM135_ID} | grep -F \"status: running\"; "
+        f"qm config {AUZIX_VM135_ID} | grep -F \"boot: order=ide2;scsi0;net0\" >/dev/null; "
+        "echo auzix-vm135-running"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "VM135 is running from the fresh AuziX install media.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vm135 running")
 
 
 def _fedora_root_password() -> str:
@@ -4015,6 +4084,30 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "auzix-vm130-validate":
             _run_auzix_vm130_validate(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm134-iso-publish":
+            _run_auzix_vm134_iso_publish(run_id, stage_name, settings)
+            continue
+
+        if kind == "auzix-vm134-target-verify":
+            _run_auzix_vm134_target_verify(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm135-artifact-verify":
+            _run_auzix_vm135_artifact_verify(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm135-iso-publish":
+            _run_auzix_vm135_iso_publish(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm135-recreate":
+            _run_auzix_vm135_recreate(run_id, stage_name)
+            continue
+
+        if kind == "auzix-vm135-start":
+            _run_auzix_vm135_start(run_id, stage_name)
             continue
 
         if kind == "wordpress-source-select":

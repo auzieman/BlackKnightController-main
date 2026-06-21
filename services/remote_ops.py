@@ -123,3 +123,95 @@ def upload_remote_bytes(
         raise RemoteCommandError(str(exc)) from exc
     finally:
         client.close()
+
+
+def download_remote_file(
+    *,
+    host: str,
+    user: str,
+    remote_path: str,
+    local_path: str,
+    password: str = "",
+    timeout: int = 30,
+) -> None:
+    if not host or not user or not remote_path or not local_path:
+        raise RemoteCommandError("Remote host, user, remote path, and local path are required.")
+
+    integrations = load_integrations()
+    ssh = integrations["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key = Path(key_info["private_key_path"])
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        connect_kwargs = {
+            "hostname": host,
+            "username": user,
+            "timeout": timeout,
+        }
+        if password:
+            connect_kwargs["password"] = password
+        elif private_key.exists():
+            connect_kwargs["pkey"] = _load_private_key(private_key)
+            connect_kwargs["look_for_keys"] = False
+            connect_kwargs["allow_agent"] = False
+        else:
+            raise RemoteCommandError(
+                "No usable SSH auth. Install the BKC SSH key or provide a password."
+            )
+
+        client.connect(**connect_kwargs)
+        with client.open_sftp() as sftp:
+            sftp.get(remote_path, local_path)
+    except Exception as exc:
+        raise RemoteCommandError(str(exc)) from exc
+    finally:
+        client.close()
+
+
+def upload_remote_file(
+    *,
+    host: str,
+    user: str,
+    remote_path: str,
+    local_path: str,
+    password: str = "",
+    mode: int = 0o644,
+    timeout: int = 30,
+) -> None:
+    if not host or not user or not remote_path or not local_path:
+        raise RemoteCommandError("Remote host, user, remote path, and local path are required.")
+
+    integrations = load_integrations()
+    ssh = integrations["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key = Path(key_info["private_key_path"])
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        connect_kwargs = {
+            "hostname": host,
+            "username": user,
+            "timeout": timeout,
+        }
+        if password:
+            connect_kwargs["password"] = password
+        elif private_key.exists():
+            connect_kwargs["pkey"] = _load_private_key(private_key)
+            connect_kwargs["look_for_keys"] = False
+            connect_kwargs["allow_agent"] = False
+        else:
+            raise RemoteCommandError(
+                "No usable SSH auth. Install the BKC SSH key or provide a password."
+            )
+
+        client.connect(**connect_kwargs)
+        with client.open_sftp() as sftp:
+            sftp.put(local_path, remote_path)
+            sftp.chmod(remote_path, mode)
+    except Exception as exc:
+        raise RemoteCommandError(str(exc)) from exc
+    finally:
+        client.close()

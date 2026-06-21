@@ -91,6 +91,7 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
 
     stages = workflow_stage_definitions("auzix-vm134-install-refresh")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    kinds = {stage["name"]: stage.get("kind", "remote-command") for stage in stages}
     assert "apt-get update" in commands
     assert "grub2-common grub-pc-bin" in commands
     assert "auzix-strict-root" in commands
@@ -113,8 +114,9 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "-v /mnt/swarm/AuziX/src:/workspace" not in commands
     assert 'rsync -a --delete "$scratch/out/auzix-strict"' not in commands
     assert 'rsync -a "$scratch/artifacts/auzix/"' not in commands
-    assert "iso=/var/tmp/auzix-vm134-build/artifacts/auzix/auzix-strict-desktop-vm134.iso" in commands
-    assert "qm set 134 --ide2" in commands
+    assert "root@192.168.1.9" not in commands
+    assert kinds["iso-publish"] == "auzix-vm134-iso-publish"
+    assert kinds["vm-target-verify"] == "auzix-vm134-target-verify"
     assert "--force --bootloader grub" not in commands
 
 
@@ -142,17 +144,14 @@ def test_auzix_vm135_fresh_install_target_recreates_disposable_vm():
 
     stages = workflow_stage_definitions("auzix-vm135-fresh-install-target")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    kinds = {stage["name"]: stage.get("kind", "remote-command") for stage in stages}
     assert "expected=$(awk" not in commands
-    assert "/var/lib/vz/template/iso/auzix-strict-desktop-vm134.iso" in commands
-    assert "cp -f /var/lib/vz/template/iso/auzix-strict-desktop-vm134.iso" in commands
+    assert "root@192.168.1.9" not in commands
     assert "root@192.168.1.10" not in commands
-    assert "auzix-strict-desktop-vm134.iso" in commands
-    assert "auzix-strict-desktop-vm135.iso" in commands
-    assert "qm destroy 135" in commands
-    assert "qm create 135" in commands
-    assert "qm set 135 --scsi0 local-lvm:32" in commands
-    assert "qm set 135 --ide2 local:iso/auzix-strict-desktop-vm135.iso" in commands
-    assert "qm start 135" in commands
+    assert kinds["artifact-verify"] == "auzix-vm135-artifact-verify"
+    assert kinds["iso-publish"] == "auzix-vm135-iso-publish"
+    assert kinds["vm135-recreate"] == "auzix-vm135-recreate"
+    assert kinds["vm135-start"] == "auzix-vm135-start"
     assert "auzix-strict-iso" not in commands
 
 
