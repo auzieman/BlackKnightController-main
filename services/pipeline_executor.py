@@ -977,7 +977,7 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "AuZiX core validation source is ready.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx ebfd041 .auzix-commit >/dev/null && "
+                    "grep -Fx 29e96e1 .auzix-commit >/dev/null && "
                     "test -x scripts/run-auzix-core-validation.sh && "
                     "test -x scripts/audit-auzix-strict-root.sh && "
                     "test -x scripts/audit-auzix-package-runtime.sh && "

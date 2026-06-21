@@ -201,6 +201,7 @@ def test_auzix_core_root_validation_is_pre_iso_gate():
 
     stages = workflow_stage_definitions("auzix-core-root-validation")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "grep -Fx 29e96e1 .auzix-commit" in commands
     assert "run-auzix-core-validation.sh" in commands
     assert "AUZIX_CORE_CONTAINER=0 make auzix-core-validation" in commands
     assert "build-auzix-strict-container.sh" in commands
