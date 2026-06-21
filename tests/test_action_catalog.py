@@ -106,6 +106,10 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "Programs/GRUB/current/Resources/i386-pc" not in commands
     assert "auzix-strict-desktop-vm134.iso" in commands
     assert "AUZIX_ISO_WORK_DIR=/var/tmp/auzix-iso-vm134" in commands
+    assert "scratch=/var/tmp/auzix-vm134-build" in commands
+    assert "rsync -a --delete --exclude out/ --exclude artifacts/" in commands
+    assert 'docker run --rm -v "$scratch":/workspace -w /workspace' in commands
+    assert "-v /mnt/swarm/AuziX/src:/workspace" not in commands
     assert "qm set 134 --ide2" in commands
     assert "--force --bootloader grub" not in commands
 

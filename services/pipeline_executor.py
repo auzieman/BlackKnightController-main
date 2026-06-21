@@ -773,13 +773,18 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Refreshing the staged strict root with live tools, Lua installer, package tools, and GRUB.",
                 "complete": "Staged strict root contains installer, finalizer, package tools, and GRUB.",
                 "command": (
-                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "bash -lc 'set -e; "
+                    "scratch=/var/tmp/auzix-vm134-build; "
+                    "mkdir -p /mnt/swarm/AuziX && "
                     "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
                     "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "rm -rf \"$scratch\" && mkdir -p \"$scratch\" && "
+                    "rsync -a --delete --exclude out/ --exclude artifacts/ "
+                    "/mnt/swarm/AuziX/src/ \"$scratch\"/ && "
                     "{ docker image inspect auzix/builder:local >/dev/null 2>&1 || "
-                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/builder/Dockerfile "
-                    "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
-                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "docker build --pull=false -f \"$scratch/docker/builder/Dockerfile\" "
+                    "-t auzix/builder:local \"$scratch\"; } && "
+                    "docker run --rm -v \"$scratch\":/workspace -w /workspace "
                     "auzix/builder:local bash -lc "
                     "'\"'\"'apt-get update >/dev/null && "
                     "apt-get install -y --no-install-recommends "
@@ -806,7 +811,9 @@ WORKFLOW_DEFINITIONS = {
                     "test -d \"out/auzix-strict/AuzixRoot${grub_current}/Resources/i386-pc\" && "
                     "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
                     "\\( -name \"AuzixInstaller-*.auzix.json\" -o -name \"GRUB-*.auzix.json\" "
-                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"''"
+                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"' && "
+                    "mkdir -p /mnt/swarm/AuziX/src/out && "
+                    "rsync -a --delete \"$scratch/out/auzix-strict\" /mnt/swarm/AuziX/src/out/'"
                 ),
                 "timeout": 1800,
             },
@@ -817,10 +824,13 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Building a VM134 install ISO from the refreshed strict root.",
                 "complete": "VM134 install ISO and checksum are available on the AuziX artifact share.",
                 "command": (
-                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
+                    "bash -lc 'set -e; "
+                    "scratch=/var/tmp/auzix-vm134-build; "
+                    "mkdir -p /mnt/swarm/AuziX && "
                     "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
                     "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
-                    "docker run --rm -v /mnt/swarm/AuziX/src:/workspace -w /workspace "
+                    "test -d \"$scratch/out/auzix-strict/AuzixRoot\" && "
+                    "docker run --rm -v \"$scratch\":/workspace -w /workspace "
                     "auzix/builder:local bash -lc "
                     f"'\"'\"'AUZIX_ISO_NAME={AUZIX_VM134_ISO_NAME} "
                     "AUZIX_ISO_WORK_DIR=/var/tmp/auzix-iso-vm134 "
@@ -828,7 +838,9 @@ WORKFLOW_DEFINITIONS = {
                     "make auzix-strict-iso && "
                     f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
                     f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256 && "
-                    f"sha256sum -c artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256'\"'\"''"
+                    f"sha256sum -c artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256'\"'\"' && "
+                    "mkdir -p /mnt/swarm/AuziX/src/artifacts/auzix && "
+                    "rsync -a \"$scratch/artifacts/auzix/\" /mnt/swarm/AuziX/src/artifacts/auzix/'"
                 ),
                 "timeout": 2400,
             },
