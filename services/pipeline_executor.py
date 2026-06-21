@@ -812,9 +812,7 @@ WORKFLOW_DEFINITIONS = {
                     "test -d \"out/auzix-strict/AuzixRoot${grub_current}/Resources/i386-pc\" && "
                     "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
                     "\\( -name \"AuzixInstaller-*.auzix.json\" -o -name \"GRUB-*.auzix.json\" "
-                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"' && "
-                    "mkdir -p /mnt/swarm/AuziX/src/out && "
-                    "rsync -a --delete \"$scratch/out/auzix-strict\" /mnt/swarm/AuziX/src/out/'"
+                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"''"
                 ),
                 "timeout": 1800,
             },

@@ -111,6 +111,7 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "rsync -a --delete --exclude out/ --exclude artifacts/" in commands
     assert 'docker run --rm -v "$scratch":/workspace -w /workspace' in commands
     assert "-v /mnt/swarm/AuziX/src:/workspace" not in commands
+    assert 'rsync -a --delete "$scratch/out/auzix-strict"' not in commands
     assert "qm set 134 --ide2" in commands
     assert "--force --bootloader grub" not in commands
 
