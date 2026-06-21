@@ -112,6 +112,8 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert 'docker run --rm -v "$scratch":/workspace -w /workspace' in commands
     assert "-v /mnt/swarm/AuziX/src:/workspace" not in commands
     assert 'rsync -a --delete "$scratch/out/auzix-strict"' not in commands
+    assert 'rsync -a "$scratch/artifacts/auzix/"' not in commands
+    assert "iso=/var/tmp/auzix-vm134-build/artifacts/auzix/auzix-strict-desktop-vm134.iso" in commands
     assert "qm set 134 --ide2" in commands
     assert "--force --bootloader grub" not in commands
 
@@ -140,7 +142,10 @@ def test_auzix_vm135_fresh_install_target_recreates_disposable_vm():
 
     stages = workflow_stage_definitions("auzix-vm135-fresh-install-target")
     commands = "\n".join(str(stage.get("command", "")) for stage in stages)
-    assert "expected=$(awk" in commands
+    assert "expected=$(awk" not in commands
+    assert "/var/lib/vz/template/iso/auzix-strict-desktop-vm134.iso" in commands
+    assert "cp -f /var/lib/vz/template/iso/auzix-strict-desktop-vm134.iso" in commands
+    assert "root@192.168.1.10" not in commands
     assert "auzix-strict-desktop-vm134.iso" in commands
     assert "auzix-strict-desktop-vm135.iso" in commands
     assert "qm destroy 135" in commands

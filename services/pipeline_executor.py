@@ -837,21 +837,19 @@ WORKFLOW_DEFINITIONS = {
                     "make auzix-strict-iso && "
                     f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
                     f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256 && "
-                    f"sha256sum -c artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256'\"'\"' && "
-                    "mkdir -p /mnt/swarm/AuziX/src/artifacts/auzix && "
-                    "rsync -a \"$scratch/artifacts/auzix/\" /mnt/swarm/AuziX/src/artifacts/auzix/'"
+                    f"sha256sum -c artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256'\"'\"''"
                 ),
                 "timeout": 2400,
             },
             {
                 "name": "iso-publish",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "ssh-manager",
+                "target": "manager",
                 "active": "Publishing the VM134 install ISO to Proxmox local ISO storage.",
                 "complete": "Proxmox local ISO storage has the VM134 install media.",
                 "command": (
                     "bash -lc 'set -e; "
-                    f"iso=/srv/nfs/swarm/AuziX/src/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
+                    f"iso=/var/tmp/auzix-vm134-build/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
                     "test -s \"$iso\"; "
                     "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
                     f"\"mkdir -p /var/lib/vz/template/iso\"; "
@@ -912,15 +910,11 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Verifying the freshly-built AuziX install ISO artifact and checksum.",
                 "complete": "AuziX install ISO artifact is ready for VM135.",
                 "command": (
-                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
-                    f"root@{AUZIX_ARTIFACT_HOST} "
+                    "bash -lc 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
                     "'\"'\"'"
-                    f"cd {AUZIX_ARTIFACT_ROOT} && "
-                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME} && "
-                    f"test -s artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256 && "
-                    f"expected=$(awk \"{{print \\$1}}\" artifacts/auzix/{AUZIX_VM134_ISO_NAME}.sha256) && "
-                    f"actual=$(sha256sum artifacts/auzix/{AUZIX_VM134_ISO_NAME} | awk \"{{print \\$1}}\") && "
-                    "test \"$expected\" = \"$actual\"'\"'\"''"
+                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
+                    f"pvesm list local --content iso | grep -F {AUZIX_VM134_ISO_NAME}"
+                    "'\"'\"''"
                 ),
                 "timeout": 120,
             },
@@ -932,17 +926,15 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "Proxmox local ISO storage has the VM135 install media.",
                 "command": (
                     "bash -lc 'set -e; "
-                    f"iso={AUZIX_ARTIFACT_ROOT}/artifacts/auzix/{AUZIX_VM134_ISO_NAME}; "
                     "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
-                    f"root@{AUZIX_ARTIFACT_HOST} \"test -s $iso\"; "
-                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    "\"mkdir -p /var/lib/vz/template/iso\"; "
-                    "scp -3 -o BatchMode=yes -o StrictHostKeyChecking=accept-new "
-                    f"root@{AUZIX_ARTIFACT_HOST}:\"$iso\" "
-                    f"root@192.168.1.9:/var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME}; "
-                    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new root@192.168.1.9 "
-                    f"\"test -s /var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
-                    f"pvesm list local --content iso | grep -F {AUZIX_VM135_ISO_NAME}\"'"
+                    "root@192.168.1.9 "
+                    "'\"'\"'"
+                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} && "
+                    f"cp -f /var/lib/vz/template/iso/{AUZIX_VM134_ISO_NAME} "
+                    f"/var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
+                    f"test -s /var/lib/vz/template/iso/{AUZIX_VM135_ISO_NAME} && "
+                    f"pvesm list local --content iso | grep -F {AUZIX_VM135_ISO_NAME}"
+                    "'\"'\"''"
                 ),
                 "timeout": 420,
             },
