@@ -759,7 +759,7 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "AuziX source contracts for VM134 install refresh are present.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx 29e96e1 .auzix-commit >/dev/null && "
+                    "grep -Fx e182842 .auzix-commit >/dev/null && "
                     "test -x scripts/add-auzix-live-tools.sh && "
                     "test -x scripts/build-auzix-installer-package.sh && "
                     "test -x scripts/build-auzix-grub-package.sh && "
@@ -977,7 +977,7 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "AuZiX core validation source is ready.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx 29e96e1 .auzix-commit >/dev/null && "
+                    "grep -Fx e182842 .auzix-commit >/dev/null && "
                     "test -x scripts/run-auzix-core-validation.sh && "
                     "test -x scripts/audit-auzix-strict-root.sh && "
                     "test -x scripts/audit-auzix-package-runtime.sh && "
