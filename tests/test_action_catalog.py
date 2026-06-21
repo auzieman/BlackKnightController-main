@@ -178,6 +178,37 @@ def test_auzix_vm135_fresh_install_target_recreates_disposable_vm():
     assert "auzix-strict-iso" not in commands
 
 
+def test_auzix_core_root_validation_is_pre_iso_gate():
+    pipeline = pipeline_by_id("auzix-core-root-validation")
+    assert pipeline is not None
+    assert pipeline["repo"] == "AuZiX"
+    assert pipeline["resource_class"] == "slow"
+    assert pipeline["stages"] == [
+        "source-verify",
+        "builder-prepare",
+        "core-validation",
+        "prompt-report",
+    ]
+    assert pipeline["source_path"].endswith(
+        "dictionaries/pipelines/AuziX_Core_Root_Validation/pipeline.json"
+    )
+    assert {item["id"] for item in pipeline["items"]} >= {
+        "core-root-contract",
+        "package-runtime-contract",
+        "container-smoke",
+        "bounded-triage-prompt",
+    }
+
+    stages = workflow_stage_definitions("auzix-core-root-validation")
+    commands = "\n".join(str(stage.get("command", "")) for stage in stages)
+    assert "run-auzix-core-validation.sh" in commands
+    assert "AUZIX_CORE_CONTAINER=0 make auzix-core-validation" in commands
+    assert "build-auzix-strict-container.sh" in commands
+    assert "ollama-prompt.md" in commands
+    assert "auzix-vm135" not in commands
+    assert "qm " not in commands
+
+
 def test_resource_graph_sorts_pipeline_tree_by_latest_run(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_integrations", lambda: {})
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"groups": {}})

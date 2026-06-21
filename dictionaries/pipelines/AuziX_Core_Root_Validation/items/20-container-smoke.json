@@ -1,0 +1,5 @@
+{
+  "id": "container-smoke",
+  "summary": "The staged root must import as a container and pass CLI checks for BusyBox, installer settings, Enlightenment session launcher, and installer autostart.",
+  "validation": "scripts/build-auzix-strict-container.sh plus docker run smoke checks"
+}

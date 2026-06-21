@@ -1,0 +1,5 @@
+{
+  "id": "package-runtime-contract",
+  "summary": "Package receipts must describe existing commands, exports, runtime libraries, and loader validation where declared.",
+  "validation": "scripts/audit-auzix-package-runtime.sh"
+}

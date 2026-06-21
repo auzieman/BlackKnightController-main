@@ -1,0 +1,45 @@
+{
+  "id": "auzix-core-root-validation",
+  "name": "AuZiX Core Root Validation",
+  "repo": "AuZiX",
+  "workflow": "auzix-core-root-validation",
+  "description": "Build the AuZiX strict root, run root/package audits, import it as a container, and publish an Ollama-ready triage prompt before ISO or VM work.",
+  "resource_class": "slow",
+  "stages": [
+    "source-verify",
+    "builder-prepare",
+    "core-validation",
+    "prompt-report"
+  ],
+  "actions": [
+    "source.contract.verify",
+    "docker.builder.prepare",
+    "auzix.core.validate",
+    "ollama.prompt.publish"
+  ],
+  "gates": [
+    "core-root-contract",
+    "package-runtime-contract",
+    "container-smoke",
+    "bounded-triage-prompt"
+  ],
+  "notes": "Cheap first gate for sustaining work. This lane intentionally avoids ISO publishing and Proxmox VM recreation.",
+  "links": [
+    {
+      "label": "BlackKnightController",
+      "url": "http://swarm1.lab.auzietek.com:5000"
+    },
+    {
+      "label": "Core Validation Report",
+      "url": "file:///srv/nfs/swarm/AuziX/src/out/core-validation/summary.json"
+    }
+  ],
+  "tags": [
+    "auzix",
+    "core",
+    "validation",
+    "container",
+    "ollama",
+    "slow-worker"
+  ]
+}

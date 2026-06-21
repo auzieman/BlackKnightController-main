@@ -759,7 +759,7 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "AuziX source contracts for VM134 install refresh are present.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx ebfd041 .auzix-commit >/dev/null && "
+                    "grep -Fx 29e96e1 .auzix-commit >/dev/null && "
                     "test -x scripts/add-auzix-live-tools.sh && "
                     "test -x scripts/build-auzix-installer-package.sh && "
                     "test -x scripts/build-auzix-grub-package.sh && "
@@ -965,6 +965,113 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "AuziX VM135 fresh install target is running.",
+    },
+    "auzix-core-root-validation": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "source-verify",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Verifying AuZiX core validation entry points in the staged source.",
+                "complete": "AuZiX core validation source is ready.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "grep -Fx ebfd041 .auzix-commit >/dev/null && "
+                    "test -x scripts/run-auzix-core-validation.sh && "
+                    "test -x scripts/audit-auzix-strict-root.sh && "
+                    "test -x scripts/audit-auzix-package-runtime.sh && "
+                    "test -x scripts/build-auzix-strict-container.sh && "
+                    "grep -F \"auzix-core-validation:\" Makefile >/dev/null && "
+                    "echo auzix-core-validation-source-ready'"
+                ),
+                "timeout": 60,
+            },
+            {
+                "name": "builder-prepare",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Preparing the AuZiX builder image for the core validation loop.",
+                "complete": "AuZiX builder image is ready.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "mkdir -p /mnt/swarm/AuziX && "
+                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
+                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
+                    "{ docker image inspect auzix/builder:local >/dev/null 2>&1 || "
+                    "docker build --pull=false -f /mnt/swarm/AuziX/src/docker/builder/Dockerfile "
+                    "-t auzix/builder:local /mnt/swarm/AuziX/src; } && "
+                    "docker image inspect auzix/builder:local >/dev/null && "
+                    "echo auzix-core-builder-ready'"
+                ),
+                "timeout": 900,
+            },
+            {
+                "name": "core-validation",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Running the cheap AuZiX root/container validation loop before ISO or VM work.",
+                "complete": "AuZiX core validation loop completed.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "scratch=/var/tmp/auzix-core-validation; "
+                    "rm -rf \"$scratch\" && mkdir -p \"$scratch\" && "
+                    "rsync -a --delete --exclude out/ --exclude artifacts/ "
+                    "/mnt/swarm/AuziX/src/ \"$scratch\"/ && "
+                    "rc=0; "
+                    "docker run --rm -v \"$scratch\":/workspace -w /workspace "
+                    "auzix/builder:local bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "apt-get install -y --no-install-recommends "
+                    "grub2-common grub-pc-bin "
+                    "xinit xserver-xorg-core xserver-xorg-legacy "
+                    "xserver-xorg-input-libinput xserver-xorg-video-fbdev "
+                    "xserver-xorg-video-vesa enlightenment terminology "
+                    "lightdm lightdm-gtk-greeter dbus dbus-x11 udev acpid "
+                    "pulseaudio strace xterm >/dev/null && "
+                    "AUZIX_CORE_CONTAINER=0 make auzix-core-validation'\"'\"' || rc=$?; "
+                    "AUZIX_STRICT_IMAGE=auzix-strict:core-validation "
+                    "\"$scratch/scripts/build-auzix-strict-container.sh\" "
+                    ">>\"$scratch/out/core-validation/container-smoke.txt\" 2>&1 || rc=$?; "
+                    "if docker image inspect auzix-strict:core-validation >/dev/null 2>&1; then "
+                    "docker run --rm auzix-strict:core-validation "
+                    "/Programs/BusyBox/1.36.1/Commands/busybox sh -c "
+                    "'\"'\"'test -x /System/Tools/start-enlightenment-session && "
+                    "test -e /System/Tools/launch-auzix-installer && "
+                    "test -s /Users/auzix/.config/autostart/auzix-installer.desktop && "
+                    "echo core-container-smoke-ok'\"'\"' "
+                    ">>\"$scratch/out/core-validation/container-smoke.txt\" 2>&1 || rc=$?; "
+                    "else rc=1; fi; "
+                    "mkdir -p /mnt/swarm/AuziX/src/out/core-validation && "
+                    "rsync -a \"$scratch/out/core-validation/\" "
+                    "/mnt/swarm/AuziX/src/out/core-validation/ && "
+                    "jq -e '\\'' .format == \"auzix-core-validation-report-v1\" '\\'' "
+                    "/mnt/swarm/AuziX/src/out/core-validation/summary.json >/dev/null && "
+                    "cat /mnt/swarm/AuziX/src/out/core-validation/summary.json && "
+                    "exit \"$rc\"'"
+                ),
+                "timeout": 2400,
+            },
+            {
+                "name": "prompt-report",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing the bounded core validation summary and Ollama prompt paths.",
+                "complete": "AuZiX core validation prompt is ready for review or worker triage.",
+                "command": (
+                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "test -s out/core-validation/summary.json && "
+                    "test -s out/core-validation/ollama-prompt.md && "
+                    "jq -e '\"'\"'.format == \"auzix-core-validation-report-v1\"'\"'\"' "
+                    "out/core-validation/summary.json >/dev/null && "
+                    "printf \"summary=%s\\nprompt=%s\\n\" "
+                    "\"/srv/nfs/swarm/AuziX/src/out/core-validation/summary.json\" "
+                    "\"/srv/nfs/swarm/AuziX/src/out/core-validation/ollama-prompt.md\"'"
+                ),
+                "timeout": 60,
+            },
+        ],
+        "complete_message": "AuZiX core root validation pipeline completed.",
     },
     "auzix-installer-foundation": {
         "supports_undeploy": False,
