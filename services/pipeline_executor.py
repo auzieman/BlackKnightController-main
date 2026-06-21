@@ -755,18 +755,22 @@ WORKFLOW_DEFINITIONS = {
                 "name": "source-verify",
                 "transport": "ssh-controller",
                 "target": "controller",
-                "active": "Verifying AuziX source has installer, package, GRUB, and ISO build contracts.",
+                "active": "Verifying AuziX source has installer, package, GRUB, X11 Enlightenment, and ISO build contracts.",
                 "complete": "AuziX source contracts for VM134 install refresh are present.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
+                    "grep -Fx 113fbc0 .auzix-commit >/dev/null && "
                     "test -x scripts/add-auzix-live-tools.sh && "
                     "test -x scripts/build-auzix-installer-package.sh && "
                     "test -x scripts/build-auzix-grub-package.sh && "
                     "test -x scripts/build-auzix-boot-iso.sh && "
                     "test -x scripts/test-auzix-installer.sh && "
                     "grep -F \"install_grub_bootloader\" scripts/add-auzix-live-tools.sh >/dev/null && "
+                    "grep -F \"/Programs/Enlightenment/current/Commands/enlightenment_start\" scripts/add-auzix-live-tools.sh >/dev/null && "
+                    "grep -F \"/Programs/Xorg/current/Commands/Xorg\" scripts/add-auzix-live-tools.sh >/dev/null && "
                     "grep -F \"auzix-strict-grub:\" Makefile >/dev/null && "
+                    "grep -F \"auzix-strict-host-xorg:\" Makefile >/dev/null && "
+                    "grep -F \"auzix-strict-host-e:\" Makefile >/dev/null && "
                     "grep -F \"auzix-install-disk\" installer/auzix-installer.lua >/dev/null && "
                     "echo auzix-vm134-source-ready'"
                 ),
@@ -776,8 +780,8 @@ WORKFLOW_DEFINITIONS = {
                 "name": "installer-root-build",
                 "transport": "ssh-manager",
                 "target": "manager",
-                "active": "Refreshing the staged strict root with live tools, Lua installer, package tools, and GRUB.",
-                "complete": "Staged strict root contains installer, finalizer, package tools, and GRUB.",
+                "active": "Refreshing the staged strict root with live tools, Lua installer, package tools, GRUB, and the X11 Enlightenment substrate.",
+                "complete": "Staged strict root contains installer, finalizer, package tools, GRUB, Xorg, and Enlightenment.",
                 "command": (
                     "bash -lc 'set -e; "
                     "scratch=/var/tmp/auzix-vm134-build; "
@@ -794,7 +798,12 @@ WORKFLOW_DEFINITIONS = {
                     "auzix/builder:local bash -lc "
                     "'\"'\"'apt-get update >/dev/null && "
                     "apt-get install -y --no-install-recommends "
-                    "grub2-common grub-pc-bin >/dev/null && "
+                    "grub2-common grub-pc-bin "
+                    "xinit xserver-xorg-core xserver-xorg-legacy "
+                    "xserver-xorg-input-libinput xserver-xorg-video-fbdev "
+                    "xserver-xorg-video-vesa enlightenment terminology "
+                    "lightdm lightdm-gtk-greeter dbus dbus-x11 udev acpid "
+                    "pulseaudio strace xterm >/dev/null && "
                     "make auzix-strict-root "
                     "auzix-strict-busybox "
                     "auzix-strict-access "
@@ -802,6 +811,17 @@ WORKFLOW_DEFINITIONS = {
                     "auzix-strict-package-tools "
                     "auzix-strict-installer "
                     "auzix-strict-installer-test "
+                    "auzix-strict-dbus "
+                    "auzix-strict-udev "
+                    "auzix-strict-acpid "
+                    "auzix-strict-pulseaudio "
+                    "auzix-strict-strace "
+                    "auzix-strict-host-xorg "
+                    "auzix-strict-host-e "
+                    "auzix-strict-host-terminology "
+                    "auzix-strict-host-xterm "
+                    "auzix-strict-lightdm "
+                    "auzix-strict-display-templates "
                     "auzix-strict-grub && "
                     "test -x out/auzix-strict/AuzixRoot/System/Tools/auzix-install-disk && "
                     "test -x out/auzix-strict/AuzixRoot/System/Tools/finalize-installed-root && "
@@ -813,12 +833,23 @@ WORKFLOW_DEFINITIONS = {
                     "test -s out/auzix-strict/AuzixRoot/System/Settings/installer/plans/default.json && "
                     "test -L out/auzix-strict/AuzixRoot/System/Compatibility/usr/sbin/grub-install && "
                     "test -L out/auzix-strict/AuzixRoot/System/Compatibility/usr/lib/grub/i386-pc && "
+                    "test -L out/auzix-strict/AuzixRoot/Programs/Xorg/current && "
+                    "xorg_current=$(readlink out/auzix-strict/AuzixRoot/Programs/Xorg/current) && "
+                    "test -x \"out/auzix-strict/AuzixRoot${xorg_current}/Commands/Xorg\" && "
+                    "test -x \"out/auzix-strict/AuzixRoot${xorg_current}/Commands/xinit\" && "
+                    "test -L out/auzix-strict/AuzixRoot/Programs/Enlightenment/current && "
+                    "e_current=$(readlink out/auzix-strict/AuzixRoot/Programs/Enlightenment/current) && "
+                    "test -x \"out/auzix-strict/AuzixRoot${e_current}/Commands/enlightenment_start\" && "
+                    "test -L out/auzix-strict/AuzixRoot/System/Compatibility/bin/enlightenment_start && "
+                    "test -L out/auzix-strict/AuzixRoot/System/Compatibility/bin/Xorg && "
                     "grub_current=$(readlink out/auzix-strict/AuzixRoot/Programs/GRUB/current) && "
                     "test -n \"$grub_current\" && "
                     "test -d \"out/auzix-strict/AuzixRoot${grub_current}/Resources/i386-pc\" && "
                     "find out/auzix-strict/AuzixRoot/System/PackageDB -maxdepth 1 "
                     "\\( -name \"AuzixInstaller-*.auzix.json\" -o -name \"GRUB-*.auzix.json\" "
-                    "-o -name \"AuzixPackageTools-*.auzix.json\" \\) -print | sort'\"'\"''"
+                    "-o -name \"AuzixPackageTools-*.auzix.json\" -o -name \"Xorg-*.auzix.json\" "
+                    "-o -name \"Enlightenment-*.auzix.json\" -o -name \"LightDM-*.auzix.json\" "
+                    "-o -name \"DBus-*.auzix.json\" -o -name \"Udev-*.auzix.json\" \\) -print | sort'\"'\"''"
                 ),
                 "timeout": 1800,
             },

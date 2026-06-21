@@ -94,14 +94,34 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     kinds = {stage["name"]: stage.get("kind", "remote-command") for stage in stages}
     assert "apt-get update" in commands
     assert "grub2-common grub-pc-bin" in commands
+    assert "xinit xserver-xorg-core xserver-xorg-legacy" in commands
+    assert "enlightenment terminology" in commands
+    assert "lightdm lightdm-gtk-greeter" in commands
     assert "auzix-strict-root" in commands
     assert "auzix-strict-busybox" in commands
     assert "auzix-strict-access" in commands
     assert "auzix-strict-live-tools" in commands
     assert "auzix-strict-installer-test" in commands
+    assert "auzix-strict-dbus" in commands
+    assert "auzix-strict-udev" in commands
+    assert "auzix-strict-acpid" in commands
+    assert "auzix-strict-pulseaudio" in commands
+    assert "auzix-strict-host-xorg" in commands
+    assert "auzix-strict-host-e" in commands
+    assert "auzix-strict-lightdm" in commands
     assert "auzix-strict-grub" in commands
+    assert "/Programs/Enlightenment/current/Commands/enlightenment_start" in commands
+    assert "/Programs/Xorg/current/Commands/Xorg" in commands
     assert 'grep -F "auzix:x:1000:1000:"' in commands
     assert "out/auzix-strict/AuzixRoot/Users/auzix" in commands
+    assert "out/auzix-strict/AuzixRoot/Programs/Xorg/current" in commands
+    assert "out/auzix-strict/AuzixRoot/Programs/Enlightenment/current" in commands
+    assert "xorg_current=$(readlink out/auzix-strict/AuzixRoot/Programs/Xorg/current)" in commands
+    assert 'AuzixRoot${xorg_current}/Commands/Xorg' in commands
+    assert "e_current=$(readlink out/auzix-strict/AuzixRoot/Programs/Enlightenment/current)" in commands
+    assert 'AuzixRoot${e_current}/Commands/enlightenment_start' in commands
+    assert "Xorg-*.auzix.json" in commands
+    assert "Enlightenment-*.auzix.json" in commands
     assert "auzix-strict-audit" not in commands
     assert "grub_current=$(readlink out/auzix-strict/AuzixRoot/Programs/GRUB/current)" in commands
     assert 'AuzixRoot${grub_current}/Resources/i386-pc' in commands
