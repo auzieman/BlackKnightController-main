@@ -109,11 +109,14 @@ def test_auzix_vm134_install_refresh_has_guarded_install_contract():
     assert "auzix-strict-host-xorg" in commands
     assert "auzix-strict-host-e" in commands
     assert "auzix-strict-lightdm" in commands
+    assert "auzix-strict-user-defaults" in commands
     assert "auzix-strict-grub" in commands
     assert "/Programs/Enlightenment/current/Commands/enlightenment_start" in commands
     assert "/Programs/Xorg/current/Commands/Xorg" in commands
     assert 'grep -F "auzix:x:1000:1000:"' in commands
     assert "out/auzix-strict/AuzixRoot/Users/auzix" in commands
+    assert "Users/auzix/.config/autostart/auzix-installer.desktop" in commands
+    assert "/System/Tools/launch-auzix-installer --autostart" in commands
     assert "out/auzix-strict/AuzixRoot/Programs/Xorg/current" in commands
     assert "out/auzix-strict/AuzixRoot/Programs/Enlightenment/current" in commands
     assert "xorg_current=$(readlink out/auzix-strict/AuzixRoot/Programs/Xorg/current)" in commands

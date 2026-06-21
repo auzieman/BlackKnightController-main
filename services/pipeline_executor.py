@@ -759,7 +759,7 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "AuziX source contracts for VM134 install refresh are present.",
                 "command": (
                     "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "grep -Fx 113fbc0 .auzix-commit >/dev/null && "
+                    "grep -Fx ebfd041 .auzix-commit >/dev/null && "
                     "test -x scripts/add-auzix-live-tools.sh && "
                     "test -x scripts/build-auzix-installer-package.sh && "
                     "test -x scripts/build-auzix-grub-package.sh && "
@@ -822,6 +822,7 @@ WORKFLOW_DEFINITIONS = {
                     "auzix-strict-host-xterm "
                     "auzix-strict-lightdm "
                     "auzix-strict-display-templates "
+                    "auzix-strict-user-defaults "
                     "auzix-strict-grub && "
                     "test -x out/auzix-strict/AuzixRoot/System/Tools/auzix-install-disk && "
                     "test -x out/auzix-strict/AuzixRoot/System/Tools/finalize-installed-root && "
@@ -831,6 +832,11 @@ WORKFLOW_DEFINITIONS = {
                     "test -d out/auzix-strict/AuzixRoot/Users/auzix && "
                     "test -s out/auzix-strict/AuzixRoot/System/Settings/installer/questions.json && "
                     "test -s out/auzix-strict/AuzixRoot/System/Settings/installer/plans/default.json && "
+                    "test -s out/auzix-strict/AuzixRoot/Users/auzix/.config/autostart/auzix-installer.desktop && "
+                    "grep -F \"/System/Tools/launch-auzix-installer --autostart\" "
+                    "out/auzix-strict/AuzixRoot/Users/auzix/.config/autostart/auzix-installer.desktop >/dev/null && "
+                    "test -L out/auzix-strict/AuzixRoot/System/Tools/launch-auzix-installer && "
+                    "test -s out/auzix-strict/AuzixRoot/System/Settings/display/defaults/user-defaults-note.txt && "
                     "test -L out/auzix-strict/AuzixRoot/System/Compatibility/usr/sbin/grub-install && "
                     "test -L out/auzix-strict/AuzixRoot/System/Compatibility/usr/lib/grub/i386-pc && "
                     "test -L out/auzix-strict/AuzixRoot/Programs/Xorg/current && "
