@@ -194,6 +194,13 @@ def _matches_search(pipeline: dict, query: str) -> bool:
 def _run_matches_search(run: dict, query: str) -> bool:
     if not query:
         return True
+    extra = run.get("extra", {}) or {}
+    pipeline = None
+    pipeline_id = str(extra.get("pipeline_id", "")).strip()
+    if pipeline_id:
+        pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        pipeline = next((item for item in demo_pipelines() if item["workflow"] == run.get("workflow")), None)
     haystack = " ".join(
         [
             str(run.get("repo", "")),
@@ -202,6 +209,11 @@ def _run_matches_search(run: dict, query: str) -> bool:
             str(run.get("commit", "")),
             str(run.get("notes", "")),
             str(run.get("status", "")),
+            str(pipeline.get("id", "") if pipeline else ""),
+            str(pipeline.get("name", "") if pipeline else ""),
+            str(pipeline.get("description", "") if pipeline else ""),
+            str(pipeline.get("notes", "") if pipeline else ""),
+            " ".join(str(tag) for tag in (pipeline.get("tags", []) if pipeline else [])),
         ]
     ).lower()
     return query in haystack

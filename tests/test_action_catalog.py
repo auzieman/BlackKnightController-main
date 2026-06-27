@@ -4,6 +4,7 @@ from services import pipeline_catalog, resource_graph
 from services.action_catalog import action_by_id, actions_for_kind, list_actions
 from services.pipeline_catalog import pipeline_by_id
 from services.pipeline_executor import workflow_stage_definitions
+from routes.pipelines import _run_matches_search
 
 
 def test_action_catalog_has_unique_ids():
@@ -489,6 +490,21 @@ def test_rx_demo_video_pipeline_set_loads_from_folders():
     assert registry["workflow"] == "demo-swarm-image-registry"
     assert "docker.stack.deploy" in registry["actions"]
     assert "k3s-can-pull" in registry["gates"]
+
+
+def test_pipeline_run_search_matches_catalog_name_for_linked_runs():
+    run = {
+        "repo": "lab-k3s",
+        "workflow": "demo-k3s-add-node",
+        "ref": "",
+        "commit": "",
+        "notes": "",
+        "status": "complete",
+        "extra": {"pipeline_id": "demo-k3s-add-node"},
+    }
+
+    assert _run_matches_search(run, "demo:")
+    assert _run_matches_search(run, "k3s add node")
 
 
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
