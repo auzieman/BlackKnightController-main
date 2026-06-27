@@ -1,0 +1,11 @@
+{
+  "id": "select-worker",
+  "kind": "reset-gate",
+  "summary": "Select the previously added demo worker from run metadata or by target name.",
+  "inputs": [
+    "parent add-node run metadata",
+    "target name, for example kube3.lab.auzietek.com",
+    "recorded Proxmox VMID when available"
+  ],
+  "expected": "BKC knows which k3s node and Proxmox VM should be reset before a later demo session."
+}

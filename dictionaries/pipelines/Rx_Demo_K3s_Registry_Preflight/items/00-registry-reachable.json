@@ -1,0 +1,8 @@
+{
+  "id": "registry-reachable",
+  "kind": "check",
+  "summary": "Confirm the demo registry endpoint is available before building images.",
+  "command": "curl -fsS \"http://${DEMO_REGISTRY%/rx-demo}/v2/_catalog\"",
+  "expected": "HTTP 200 with a registry v2 JSON payload."
+}
+

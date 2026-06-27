@@ -1,0 +1,7 @@
+{
+  "id": "k3s-ready",
+  "kind": "check",
+  "summary": "Verify every k3s node is Ready before applying the app.",
+  "command": "kubectl get nodes -o wide && kubectl wait --for=condition=Ready nodes --all --timeout=90s"
+}
+

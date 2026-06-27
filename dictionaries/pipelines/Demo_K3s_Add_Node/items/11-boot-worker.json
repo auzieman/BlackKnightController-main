@@ -1,0 +1,7 @@
+{
+  "id": "boot-worker",
+  "kind": "proxmox-operation",
+  "summary": "Start the cloned worker VM.",
+  "command": "Proxmox start <new-worker-vmid>",
+  "expected": "The cloned worker VM reaches running state."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "discover-ssh",
+  "kind": "validation",
+  "summary": "Watch the cloned worker appear on the network and confirm SSH takeover.",
+  "command": "Use Proxmox neighbor/ARP data, wake the subnet if needed, then SSH to the discovered worker IP.",
+  "expected": "BKC can reach the cloned worker over SSH before applying k3s changes."
+}

@@ -1,0 +1,44 @@
+{
+  "id": "demo-swarm-image-registry",
+  "name": "Demo: Swarm Image Registry",
+  "repo": "lab-swarm",
+  "workflow": "demo-swarm-image-registry",
+  "description": "Deploy and validate the shared registry:2 service on Docker Swarm so k3s can pull demo images from swarm infrastructure.",
+  "stages": [
+    "storage-ready",
+    "deploy-registry-stack",
+    "registry-health",
+    "k3s-dns-or-ip",
+    "k3s-containerd-trust",
+    "push-smoke-image",
+    "pull-smoke-image"
+  ],
+  "actions": [
+    "nfs.path.ensure",
+    "docker.stack.deploy",
+    "registry.v2.health",
+    "dns.resolve",
+    "k3s.containerd.registry_trust",
+    "docker.image.push",
+    "k3s.image.pull"
+  ],
+  "gates": [
+    "registry-runtime-path-ready",
+    "swarm-service-running",
+    "registry-health-ok",
+    "k3s-registry-name-resolves",
+    "k3s-can-pull"
+  ],
+  "notes": "Planned/demo lane. Preferred registry endpoint is swarm1.lab.auzietek.com:5001. If k3s node DNS is not ready, use the swarm manager IP endpoint consistently in registries.yaml and DEMO_REGISTRY.",
+  "editable": true,
+  "tags": [
+    "demo",
+    "video",
+    "swarm",
+    "registry",
+    "images",
+    "k3s",
+    "planned"
+  ]
+}
+

@@ -1,0 +1,7 @@
+{
+  "id": "visible-change-check",
+  "kind": "validation",
+  "summary": "Confirm the visible UI text changed after redeploy.",
+  "command": "curl -fsS \"$RX_UI_BASE/\" | grep -F 'BKC Redeploy'"
+}
+

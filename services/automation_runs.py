@@ -159,6 +159,43 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "scrape-validate",
             "dashboard-link",
         ]
+    if normalized == "demo-swarm-image-registry":
+        return [
+            "storage-ready",
+            "deploy-registry-stack",
+            "registry-health",
+            "k3s-dns-or-ip",
+            "k3s-containerd-trust",
+            "push-smoke-image",
+            "pull-smoke-image",
+        ]
+    if normalized == "rx-demo-k3s-registry-preflight":
+        return [
+            "registry-reachable",
+            "k3s-registry-trust",
+            "build-and-push",
+            "registry-catalog",
+        ]
+    if normalized == "demo-k3s-add-node":
+        if action_mode == "undeploy":
+            return [
+                "select-worker",
+                "delete-k3s-node",
+                "destroy-worker-vm",
+                "verify-reset",
+            ]
+        return [
+            "select-target",
+            "clone-worker",
+            "boot-worker",
+            "discover-ssh",
+            "base-os-prep",
+            "capture-join-token",
+            "install-k3s-agent",
+            "verify-node-ready",
+            "extend-telemetry",
+            "register-inventory",
+        ]
     if normalized == "rx-demo-k3s-app-refresh":
         return [
             "verify-k3s",

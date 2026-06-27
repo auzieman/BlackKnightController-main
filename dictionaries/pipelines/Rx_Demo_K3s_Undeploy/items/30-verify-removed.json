@@ -1,0 +1,7 @@
+{
+  "id": "verify-removed",
+  "kind": "validation",
+  "summary": "Confirm the rx-demo namespace is absent.",
+  "command": "! kubectl get namespace rx-demo"
+}
+

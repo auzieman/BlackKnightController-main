@@ -1,0 +1,15 @@
+{
+  "id": "build-and-push",
+  "kind": "command",
+  "summary": "Build all rx-demo images and push them to the demo registry with a unique tag.",
+  "working_directory": "/home/auzieman/Projects/rx-demo",
+  "command": "DEMO_TAG=$(git rev-parse --short HEAD) && PUSH=1 REGISTRY=\"$DEMO_REGISTRY\" TAG=\"$DEMO_TAG\" tools/build-and-push.sh",
+  "produces": [
+    "$DEMO_REGISTRY/api-gateway:$DEMO_TAG",
+    "$DEMO_REGISTRY/legacy-sync-worker:$DEMO_TAG",
+    "$DEMO_REGISTRY/read-model-projection:$DEMO_TAG",
+    "$DEMO_REGISTRY/rx-ui:$DEMO_TAG",
+    "$DEMO_REGISTRY/loadgen:$DEMO_TAG"
+  ]
+}
+

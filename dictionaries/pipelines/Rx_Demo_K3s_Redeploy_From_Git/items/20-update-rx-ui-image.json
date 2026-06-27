@@ -1,0 +1,7 @@
+{
+  "id": "update-rx-ui-image",
+  "kind": "command",
+  "summary": "Point the rx-ui Deployment at the newly pushed commit-tagged image.",
+  "command": "DEMO_TAG=$(git rev-parse --short HEAD) && kubectl -n rx-demo set image deploy/rx-ui rx-ui=\"$DEMO_REGISTRY/rx-ui:$DEMO_TAG\""
+}
+

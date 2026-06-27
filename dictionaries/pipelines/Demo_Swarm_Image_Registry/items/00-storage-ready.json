@@ -1,0 +1,7 @@
+{
+  "id": "storage-ready",
+  "kind": "check",
+  "summary": "Confirm registry storage exists on the shared NFS-backed runtime path.",
+  "command": "ssh root@ns1 'test -d /srv/nfs/swarm/shared/registry && ls -ld /srv/nfs/swarm/shared/registry'"
+}
+

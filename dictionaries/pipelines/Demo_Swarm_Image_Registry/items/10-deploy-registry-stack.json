@@ -1,0 +1,8 @@
+{
+  "id": "deploy-registry-stack",
+  "kind": "command",
+  "summary": "Deploy the registry:2 stack on the swarm manager.",
+  "working_directory": "/srv/ansible",
+  "command": "ANSIBLE_CONFIG=/srv/ansible/ansible.cfg /opt/ansible-venv/bin/ansible-playbook -i inventory/lab.yml registry-stack.yml"
+}
+

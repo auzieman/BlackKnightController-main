@@ -214,10 +214,10 @@
                                 Commit
                                 <input type="text" name="commit" placeholder="optional commit sha">
                             </label>
-                            {% if selected_pipeline.workflow == 'fedora-cosmic-postinstall' %}
+                            {% if selected_pipeline.workflow in ['fedora-cosmic-postinstall', 'demo-k3s-add-node'] %}
                                 <label>
                                     Target host
-                                    <input type="text" name="target_host" placeholder="192.168.1.129">
+                                    <input type="text" name="target_host" placeholder="{{ '192.168.1.129' if selected_pipeline.workflow == 'fedora-cosmic-postinstall' else '192.168.1.x' }}">
                                 </label>
                                 <label>
                                     Target VMID
@@ -225,7 +225,7 @@
                                 </label>
                                 <label class="wide">
                                     Target name
-                                    <input type="text" name="target_name" placeholder="fedora-template-118">
+                                    <input type="text" name="target_name" placeholder="{{ 'fedora-template-118' if selected_pipeline.workflow == 'fedora-cosmic-postinstall' else 'kube3' }}">
                                 </label>
                             {% endif %}
                             <label class="wide">
@@ -259,7 +259,8 @@
     <section class="section-header">
         <div>
             <p class="eyebrow">Recent automation runs</p>
-            <h3>Run ledger</h3>
+            <h3>Pipeline ledger</h3>
+            <p class="section-copy">Showing the latest run per pipeline. {{ raw_run_count }} matching run records remain available from each run detail.</p>
         </div>
     </section>
 
@@ -276,6 +277,13 @@
                 <p class="metric-copy">{{ run.notes or 'no notes' }}</p>
                 <div class="pipeline-run-meta">
                     <span class="status-pill muted">Run {{ run.id[:8] }}</span>
+                    <span class="status-pill muted">{{ run.attempt_count }} attempt{% if run.attempt_count != 1 %}s{% endif %}</span>
+                    {% if run.previous_attempt_count %}
+                        <span class="status-pill muted">{{ run.previous_attempt_count }} earlier</span>
+                    {% endif %}
+                    {% if run.failed_attempt_count %}
+                        <span class="status-pill muted">{{ run.failed_attempt_count }} failed</span>
+                    {% endif %}
                     <span class="status-pill muted">{{ run.ref or 'ref unset' }}</span>
                     {% if run.commit %}
                         <span class="status-pill muted">{{ run.commit[:12] }}</span>

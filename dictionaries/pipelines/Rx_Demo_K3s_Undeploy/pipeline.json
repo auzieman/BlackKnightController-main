@@ -1,0 +1,36 @@
+{
+  "id": "rx-demo-k3s-undeploy",
+  "name": "Demo: Rx Demo K3s Undeploy",
+  "repo": "rx-demo",
+  "workflow": "rx-demo-k3s-undeploy",
+  "description": "Remove the rx-demo namespace from k3s and verify the app workload is gone while leaving the registry and shared observability stack intact.",
+  "stages": [
+    "capture-state",
+    "delete-overlay",
+    "delete-namespace",
+    "verify-removed",
+    "registry-retained"
+  ],
+  "actions": [
+    "kubectl.get",
+    "kubectl.delete",
+    "kubectl.wait_absent",
+    "registry.v2.catalog"
+  ],
+  "gates": [
+    "no-shared-observability-delete",
+    "namespace-removed",
+    "registry-retained"
+  ],
+  "notes": "Use after recording or as a visible cleanup pipeline. Keep observability and registry services running for later takes unless explicitly cleaning the whole lab.",
+  "editable": true,
+  "tags": [
+    "rx-demo",
+    "demo",
+    "video",
+    "k3s",
+    "undeploy",
+    "cleanup",
+    "planned"
+  ]
+}

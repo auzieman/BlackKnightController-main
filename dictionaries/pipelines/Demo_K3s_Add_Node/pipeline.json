@@ -1,0 +1,61 @@
+{
+  "id": "demo-k3s-add-node",
+  "name": "Demo: K3s Add Node",
+  "repo": "lab-k3s",
+  "workflow": "demo-k3s-add-node",
+  "description": "Clone a Fedora 44 worker from Proxmox, boot it, discover SSH, join it to the existing k3s cluster, apply the local registry mirror, and support a reset run for the next demo session.",
+  "stages": [
+    "select-target",
+    "clone-worker",
+    "boot-worker",
+    "discover-ssh",
+    "base-os-prep",
+    "capture-join-token",
+    "install-k3s-agent",
+    "verify-node-ready",
+    "extend-telemetry",
+    "register-inventory"
+  ],
+  "reset_stages": [
+    "select-worker",
+    "delete-k3s-node",
+    "destroy-worker-vm",
+    "verify-reset"
+  ],
+  "actions": [
+    "proxmox.template.select",
+    "proxmox.vm.clone",
+    "proxmox.vm.start",
+    "ssh.host.discover",
+    "ssh.fedora.k3s_prereqs",
+    "k3s.token.capture",
+    "k3s.agent.install",
+    "k3s.nodes.ready",
+    "k3s.telemetry.extend",
+    "inventory.resource.register",
+    "k3s.node.delete",
+    "proxmox.vm.destroy"
+  ],
+  "gates": [
+    "fedora-44-source-selected",
+    "worker-vm-cloned",
+    "worker-vm-running",
+    "ssh-key-installed",
+    "k3s-server-reachable",
+    "join-token-captured",
+    "node-ready",
+    "telemetry-target-added"
+  ],
+  "notes": "Runnable demo lane. Leave Target host blank to clone a new Fedora 44 worker from Proxmox; use Target name for the worker name, for example kube3.lab.auzietek.com. Use Undeploy as the demo reset action before a later session. Do not expose join tokens in the video.",
+  "editable": true,
+  "tags": [
+    "demo",
+    "video",
+    "k3s",
+    "cluster",
+    "add-node",
+    "ssh",
+    "proxmox",
+    "reset"
+  ]
+}

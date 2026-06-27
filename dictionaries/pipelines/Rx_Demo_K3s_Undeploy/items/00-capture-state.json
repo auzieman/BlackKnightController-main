@@ -1,0 +1,7 @@
+{
+  "id": "capture-state",
+  "kind": "evidence",
+  "summary": "Capture workload state before cleanup so the run preserves what was removed.",
+  "command": "kubectl -n rx-demo get all,pvc,secret,configmap -o wide || true"
+}
+

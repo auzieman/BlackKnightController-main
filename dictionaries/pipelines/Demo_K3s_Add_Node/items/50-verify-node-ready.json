@@ -1,0 +1,8 @@
+{
+  "id": "verify-node-ready",
+  "kind": "validation",
+  "summary": "Verify the k3s server sees the new node as Ready.",
+  "command": "ssh <k3s-server> 'k3s kubectl get nodes -o wide; k3s kubectl wait --for=condition=Ready node/<new-node-name> --timeout=180s'",
+  "expected": "The new node appears in kubectl output and reaches Ready."
+}
+

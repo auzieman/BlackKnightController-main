@@ -1,0 +1,41 @@
+{
+  "id": "rx-demo-k3s-redeploy-from-git",
+  "name": "Demo: Rx Demo K3s Redeploy From Git",
+  "repo": "rx-demo",
+  "workflow": "rx-demo-redeploy-from-git-event",
+  "description": "Record a Git-triggered rx-demo change, build/push commit-tagged images, update the k3s deployment, and validate the visible UI change.",
+  "stages": [
+    "git-event",
+    "build-and-push",
+    "update-rx-ui-image",
+    "rollout-rx-ui",
+    "visible-change-check",
+    "telemetry-still-flowing"
+  ],
+  "actions": [
+    "git.event.record",
+    "docker.buildx.push",
+    "kubectl.set_image",
+    "kubectl.rollout_status",
+    "http.content_check",
+    "prometheus.metrics.check"
+  ],
+  "gates": [
+    "commit-hash-present",
+    "unique-image-tag",
+    "rx-ui-rollout-complete",
+    "visible-ui-change"
+  ],
+  "notes": "This is the weekend demo event-trigger lane. It is intentionally broader than ArgoCD: BKC records the operational trigger, deployment action, and validation evidence.",
+  "editable": true,
+  "tags": [
+    "rx-demo",
+    "demo",
+    "video",
+    "git",
+    "redeploy",
+    "k3s",
+    "registry",
+    "planned"
+  ]
+}

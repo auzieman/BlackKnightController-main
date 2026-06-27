@@ -1,0 +1,6 @@
+{
+  "id": "registry-retained",
+  "kind": "validation",
+  "summary": "Confirm the image registry is still available for another take.",
+  "command": "curl -fsS \"http://${DEMO_REGISTRY%/rx-demo}/v2/_catalog\""
+}

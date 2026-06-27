@@ -1,0 +1,9 @@
+{
+  "id": "k3s-dns-or-ip",
+  "kind": "decision",
+  "summary": "Confirm whether k3s nodes can resolve swarm1.lab.auzietek.com, or choose the IP endpoint fallback.",
+  "preferred": "swarm1.lab.auzietek.com:5001",
+  "fallback": "192.168.1.15:5001",
+  "command": "ssh <k3s-node> 'getent hosts swarm1.lab.auzietek.com || true'"
+}
+

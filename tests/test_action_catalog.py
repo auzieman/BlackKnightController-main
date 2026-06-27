@@ -441,6 +441,56 @@ def test_office_package_smoke_builds_tests_and_publishes_two_packages():
     assert "publish-auzix-package-repo.sh" in commands
 
 
+def test_rx_demo_video_pipeline_set_loads_from_folders():
+    expected = {
+        "demo-k3s-add-node": 14,
+        "demo-swarm-image-registry": 7,
+        "rx-demo-k3s-registry-preflight": 4,
+        "rx-demo-k3s-deploy": 8,
+        "rx-demo-k3s-redeploy-from-git": 6,
+        "rx-demo-k3s-undeploy": 5,
+    }
+
+    for pipeline_id, item_count in expected.items():
+        pipeline = pipeline_by_id(pipeline_id)
+        assert pipeline is not None
+        assert pipeline["repo"] in {"rx-demo", "lab-k3s", "lab-swarm"}
+        assert pipeline["source_path"].endswith("pipeline.json")
+        assert len(pipeline.get("items", [])) == item_count
+
+    deploy = pipeline_by_id("rx-demo-k3s-deploy")
+    assert deploy is not None
+    assert "compose-parity-smoke" in deploy["gates"]
+    assert "kubectl.set_image" in deploy["actions"]
+
+    redeploy = pipeline_by_id("rx-demo-k3s-redeploy-from-git")
+    assert redeploy is not None
+    assert redeploy["workflow"] == "rx-demo-redeploy-from-git-event"
+    assert "git.event.record" in redeploy["actions"]
+
+    add_node = pipeline_by_id("demo-k3s-add-node")
+    assert add_node is not None
+    assert add_node["workflow"] == "demo-k3s-add-node"
+    assert "proxmox.vm.clone" in add_node["actions"]
+    assert "k3s.agent.install" in add_node["actions"]
+    assert "worker-vm-cloned" in add_node["gates"]
+    assert "node-ready" in add_node["gates"]
+    assert add_node["reset_stages"] == [
+        "select-worker",
+        "delete-k3s-node",
+        "destroy-worker-vm",
+        "verify-reset",
+    ]
+    reset_stages = workflow_stage_definitions("demo-k3s-add-node", action_mode="undeploy")
+    assert [stage["name"] for stage in reset_stages] == add_node["reset_stages"]
+
+    registry = pipeline_by_id("demo-swarm-image-registry")
+    assert registry is not None
+    assert registry["workflow"] == "demo-swarm-image-registry"
+    assert "docker.stack.deploy" in registry["actions"]
+    assert "k3s-can-pull" in registry["gates"]
+
+
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):
     monkeypatch.setattr(resource_graph, "load_rules", lambda: {"globals": {}, "groups": {}})
     monkeypatch.setattr(

@@ -70,6 +70,12 @@ LAB_STORAGE_MIN_ROOT_BYTES = 50_000_000_000
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
+DEMO_REGISTRY_HOST = "swarm1.lab.auzietek.com"
+DEMO_REGISTRY_PORT = "5001"
+DEMO_REGISTRY = f"{DEMO_REGISTRY_HOST}:{DEMO_REGISTRY_PORT}"
+DEMO_REGISTRY_URL = f"http://{DEMO_REGISTRY}"
+DEMO_REGISTRY_SMOKE_IMAGE = f"{DEMO_REGISTRY}/rx-demo/busybox:smoke"
+DEMO_K3S_SOURCE_VMID = 131
 AUZIX_VM130_HOST = "192.168.1.163"
 AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
 AUZIX_VM134_ID = 134
@@ -373,6 +379,133 @@ WORKFLOW_DEFINITIONS = {
             },
         ],
         "complete_message": "K3s Fedora cluster pipeline completed.",
+    },
+    "demo-swarm-image-registry": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "storage-ready",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Verifying registry storage on shared swarm storage.",
+                "complete": "Registry storage path is ready.",
+                "command": "bash -lc 'set -euo pipefail; mkdir -p /mnt/swarm/shared/registry; test -d /mnt/swarm/shared/registry; echo registry-storage-ready'",
+                "timeout": 60,
+            },
+            {
+                "name": "deploy-registry-stack",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Deploying the local image registry stack on Docker Swarm.",
+                "complete": "Swarm registry service is deployed.",
+                "command": "bash -lc 'set -euo pipefail; /usr/local/bin/registry-deploy; docker service ls --filter name=registry_registry'",
+                "timeout": 300,
+            },
+            {
+                "name": "registry-health",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Checking the registry HTTP API.",
+                "complete": "Registry /v2/ endpoint is healthy.",
+                "command": "bash -lc 'set -euo pipefail; curl -fsS http://127.0.0.1:5001/v2/; curl -fsS http://127.0.0.1:5001/v2/_catalog'",
+                "timeout": 60,
+            },
+            {
+                "name": "k3s-dns-or-ip",
+                "transport": "internal",
+                "kind": "demo-registry-k3s-dns",
+                "active": "Verifying k3s nodes resolve the swarm registry name.",
+                "complete": "K3s nodes resolve swarm1.lab.auzietek.com.",
+                "timeout": 120,
+            },
+            {
+                "name": "k3s-containerd-trust",
+                "transport": "internal",
+                "kind": "demo-registry-k3s-trust",
+                "active": "Configuring k3s containerd registry mirror on existing nodes.",
+                "complete": "Existing k3s nodes trust the local registry mirror.",
+                "timeout": 300,
+            },
+            {
+                "name": "push-smoke-image",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Pushing a smoke image through the local registry.",
+                "complete": "Smoke image is present in the registry.",
+                "command": "bash -lc 'set -euo pipefail; docker pull busybox:latest >/dev/null; docker tag busybox:latest 127.0.0.1:5001/rx-demo/busybox:smoke; docker push 127.0.0.1:5001/rx-demo/busybox:smoke; curl -fsS http://127.0.0.1:5001/v2/_catalog'",
+                "timeout": 300,
+            },
+            {
+                "name": "pull-smoke-image",
+                "transport": "internal",
+                "kind": "demo-registry-k3s-pull",
+                "active": "Pulling the smoke image from k3s containerd.",
+                "complete": "Existing k3s nodes pulled the smoke image.",
+                "timeout": 300,
+            },
+        ],
+        "complete_message": "Demo swarm image registry pipeline completed.",
+    },
+    "demo-k3s-add-node": {
+        "supports_undeploy": True,
+        "stage_plan": [
+            {"name": "select-target", "transport": "internal", "kind": "demo-k3s-add-node-select", "active": "Selecting the requested worker target or Fedora 44 Proxmox clone source.", "complete": "Worker target selected.", "timeout": 120},
+            {"name": "clone-worker", "transport": "internal", "kind": "demo-k3s-add-node-clone", "active": "Cloning a Fedora 44 worker VM from Proxmox when no existing target host was supplied.", "complete": "Worker VM clone is ready.", "timeout": 3600},
+            {"name": "boot-worker", "transport": "internal", "kind": "demo-k3s-add-node-boot", "active": "Starting the worker VM in Proxmox.", "complete": "Worker VM is running.", "timeout": 300},
+            {"name": "discover-ssh", "transport": "internal", "kind": "demo-k3s-add-node-discover", "active": "Watching the cloned worker come online through Proxmox neighbor discovery before SSH takeover.", "complete": "Worker SSH is reachable.", "timeout": 900},
+            {"name": "base-os-prep", "transport": "internal", "kind": "demo-k3s-add-node-base", "active": "Applying k3s worker OS prerequisites.", "complete": "Target OS prerequisites are ready.", "timeout": 1800},
+            {"name": "capture-join-token", "transport": "internal", "kind": "demo-k3s-add-node-token", "active": "Capturing the kube1 k3s join token.", "complete": "Join token captured.", "timeout": 120},
+            {"name": "install-k3s-agent", "transport": "internal", "kind": "demo-k3s-add-node-agent", "active": "Installing k3s-agent on the target worker.", "complete": "Target worker joined the k3s cluster.", "timeout": 1200},
+            {"name": "verify-node-ready", "transport": "internal", "kind": "demo-k3s-add-node-verify", "active": "Waiting for the new worker to report Ready.", "complete": "New worker reports Ready.", "timeout": 600},
+            {"name": "extend-telemetry", "transport": "internal", "kind": "demo-k3s-add-node-registry", "active": "Applying registry mirror settings to the new worker.", "complete": "New worker registry mirror is configured.", "timeout": 300},
+            {"name": "register-inventory", "transport": "internal", "kind": "demo-k3s-add-node-register", "active": "Recording the new worker in BKC run metadata.", "complete": "New worker recorded in run metadata.", "timeout": 60},
+        ],
+        "undeploy_stage_plan": [
+            {"name": "select-worker", "transport": "internal", "kind": "demo-k3s-add-node-reset-select", "active": "Selecting the demo worker to reset.", "complete": "Demo worker reset target selected.", "timeout": 60},
+            {"name": "delete-k3s-node", "transport": "internal", "kind": "demo-k3s-add-node-reset-k3s", "active": "Draining and deleting the demo worker from k3s.", "complete": "Demo worker removed from k3s.", "timeout": 600},
+            {"name": "destroy-worker-vm", "transport": "internal", "kind": "demo-k3s-add-node-reset-vm", "active": "Stopping and destroying the cloned Proxmox worker VM.", "complete": "Demo worker VM destroyed or confirmed absent.", "timeout": 600},
+            {"name": "verify-reset", "transport": "internal", "kind": "demo-k3s-add-node-reset-verify", "active": "Verifying the demo worker is absent from k3s and Proxmox.", "complete": "Demo worker reset verified.", "timeout": 180},
+        ],
+        "complete_message": "Demo k3s add-node pipeline completed.",
+    },
+    "rx-demo-k3s-registry-preflight": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "registry-reachable",
+                "transport": "ssh-manager",
+                "target": "manager",
+                "active": "Verifying the local registry API is reachable before publishing rx-demo images.",
+                "complete": "Registry API is reachable.",
+                "command": "bash -lc 'set -euo pipefail; curl -fsS http://127.0.0.1:5001/v2/; curl -fsS http://127.0.0.1:5001/v2/_catalog'",
+                "timeout": 60,
+            },
+            {
+                "name": "k3s-registry-trust",
+                "transport": "internal",
+                "kind": "demo-registry-k3s-trust",
+                "active": "Verifying k3s containerd trusts the local registry mirror.",
+                "complete": "K3s registry mirror trust is configured.",
+                "timeout": 300,
+            },
+            {
+                "name": "build-and-push",
+                "transport": "internal",
+                "kind": "rx-demo-registry-preflight-build-push",
+                "active": "Building and pushing an rx-demo preflight image tag.",
+                "complete": "Rx-demo preflight image pushed to the local registry.",
+                "timeout": 420,
+            },
+            {
+                "name": "registry-catalog",
+                "transport": "internal",
+                "kind": "rx-demo-registry-preflight-catalog",
+                "active": "Checking the registry catalog and tag list for the rx-demo preflight image.",
+                "complete": "Registry catalog includes the rx-demo preflight image tag.",
+                "timeout": 60,
+            },
+        ],
+        "complete_message": "Rx-demo k3s registry preflight pipeline completed.",
     },
     "fedora-workstation-spin": {
         "supports_undeploy": False,
@@ -1939,6 +2072,9 @@ def workflow_stage_definitions(workflow: str, action_mode: str = "deploy") -> li
     config = WORKFLOW_DEFINITIONS.get(normalized, {})
     if not config:
         return []
+
+    if mode == "undeploy" and config.get("supports_undeploy") and config.get("undeploy_stage_plan"):
+        return [dict(stage) for stage in config["undeploy_stage_plan"]]
 
     if config.get("stage_plan"):
         return [dict(stage) for stage in config["stage_plan"]]
@@ -4037,6 +4173,537 @@ def _run_lab_storage_verify(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
 
 
+def _k3s_live_command(host: str, command: str, *, timeout: int = 120) -> str:
+    return run_remote_command(host=host, user="root", command=command, timeout=timeout)
+
+
+def _run_demo_registry_k3s_dns(run_id: str, stage_name: str) -> None:
+    results = {}
+    for node in K3S_LIVE_NODES:
+        host = str(node["host"])
+        results[host] = _k3s_live_command(host, f"getent hosts {shlex.quote(DEMO_REGISTRY_HOST)}", timeout=60)
+    _set_stage(run_id, stage_name, "complete", "K3s nodes resolve swarm1.lab.auzietek.com.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _registry_yaml() -> str:
+    return (
+        "mirrors:\n"
+        f"  \"{DEMO_REGISTRY}\":\n"
+        "    endpoint:\n"
+        f"      - \"{DEMO_REGISTRY_URL}\"\n"
+    )
+
+
+def _apply_k3s_registry_mirror(host: str, *, timeout: int = 180) -> str:
+    content = _registry_yaml()
+    command = (
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "Path('/etc/rancher/k3s').mkdir(parents=True, exist_ok=True)\n"
+        f"Path('/etc/rancher/k3s/registries.yaml').write_text({content!r})\n"
+        "PY\n"
+        "if systemctl is-active --quiet k3s; then systemctl restart k3s; "
+        "elif systemctl is-active --quiet k3s-agent; then systemctl restart k3s-agent; "
+        "else echo k3s-service-not-active; exit 1; fi; "
+        "echo registry-mirror-ready"
+    )
+    return _k3s_live_command(host, command, timeout=timeout)
+
+
+def _run_demo_registry_k3s_trust(run_id: str, stage_name: str) -> None:
+    results = {}
+    for node in K3S_LIVE_NODES:
+        host = str(node["host"])
+        results[host] = _apply_k3s_registry_mirror(host, timeout=240)
+    _set_stage(run_id, stage_name, "complete", "Existing k3s nodes trust the local registry mirror.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _run_demo_registry_k3s_pull(run_id: str, stage_name: str) -> None:
+    results = {}
+    command = f"k3s ctr images pull --plain-http {shlex.quote(DEMO_REGISTRY_SMOKE_IMAGE)}"
+    for node in K3S_LIVE_NODES:
+        host = str(node["host"])
+        results[host] = _k3s_live_command(host, command, timeout=240)[-800:]
+    _set_stage(run_id, stage_name, "complete", "Existing k3s nodes pulled the smoke image.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True))
+
+
+def _run_rx_demo_registry_preflight_build_push(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    tag = run_id.split("-", 1)[0]
+    local_image = f"127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo/preflight:{tag}"
+    registry_image = f"{DEMO_REGISTRY}/rx-demo/preflight:{tag}"
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}; "
+        "digest=$(find src k8s -type f -not -path \"*/bin/*\" -not -path \"*/obj/*\" -print0 2>/dev/null "
+        "| sort -z | xargs -0 sha256sum 2>/dev/null | sha256sum | awk \"{print \\$1}\"); "
+        "work=$(mktemp -d); "
+        "trap \"rm -rf \\\"$work\\\"\" EXIT; "
+        "cat >\"$work/Dockerfile\" <<EOF\n"
+        "FROM busybox:latest\n"
+        "ARG RX_DEMO_SOURCE_DIGEST\n"
+        "LABEL org.opencontainers.image.title=rx-demo-preflight\n"
+        "LABEL com.auzietek.rx-demo.source-digest=\\$RX_DEMO_SOURCE_DIGEST\n"
+        "CMD [\"sh\", \"-c\", \"echo rx-demo-preflight\"]\n"
+        "EOF\n"
+        f"docker build --build-arg RX_DEMO_SOURCE_DIGEST=\"$digest\" -t {shlex.quote(local_image)} \"$work\" >/dev/null; "
+        f"docker push {shlex.quote(local_image)}; "
+        "printf \"image=%s\\nsource_digest=%s\\n\" "
+        f"{shlex.quote(registry_image)} \"$digest\"'"
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=command,
+        timeout=420,
+    )
+    source_digest = ""
+    for line in output.splitlines():
+        if line.startswith("source_digest="):
+            source_digest = line.split("=", 1)[1].strip()
+    _store_run_extra(
+        run_id,
+        {
+            "rx_demo_preflight_image": registry_image,
+            "rx_demo_preflight_tag": tag,
+            "rx_demo_source_digest": source_digest,
+        },
+    )
+    _set_stage(run_id, stage_name, "complete", "Rx-demo preflight image pushed to the local registry.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else registry_image)
+
+
+def _run_rx_demo_registry_preflight_catalog(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    tag = str(extra.get("rx_demo_preflight_tag") or run_id.split("-", 1)[0]).strip()
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "catalog=$(curl -fsS http://127.0.0.1:5001/v2/_catalog); "
+        "tags=$(curl -fsS http://127.0.0.1:5001/v2/rx-demo/preflight/tags/list); "
+        f"printf \"%s\" \"$tags\" | grep -F {shlex.quote(tag)} >/dev/null; "
+        "printf \"catalog=%s\\ntags=%s\\n\" \"$catalog\" \"$tags\"'"
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=command,
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "Registry catalog includes the rx-demo preflight image tag.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"rx-demo/preflight:{tag}")
+
+
+def _demo_add_node_target(run_id: str) -> dict:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    target = dict(extra.get("demo_k3s_new_worker") or {})
+    if target:
+        return target
+    target_host = str(extra.get("target_host", "")).strip()
+    if target_host in {str(node["host"]) for node in K3S_LIVE_NODES}:
+        raise PipelineExecutionError(f"{target_host} is already part of the known k3s cluster.")
+    target_name = str(extra.get("target_name", "")).strip() or target_host or "kube3.lab.auzietek.com"
+    short = target_name.split(".", 1)[0] if target_name else target_host
+    target = {"host": target_host, "name": target_name, "short": short, "role": "agent"}
+    _store_run_extra(run_id, {"demo_k3s_new_worker": target})
+    return target
+
+
+def _demo_k3s_source_vmid(run_id: str) -> int:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    raw = str(extra.get("source_vmid") or extra.get("template_vmid") or "").strip()
+    if raw:
+        try:
+            return int(raw)
+        except ValueError as exc:
+            raise PipelineExecutionError(f"Invalid source VMID for k3s worker clone: {raw!r}") from exc
+    return DEMO_K3S_SOURCE_VMID
+
+
+def _select_demo_k3s_source_template(run_id: str) -> dict:
+    wanted_vmid = _demo_k3s_source_vmid(run_id)
+    client = ProxmoxClient(load_proxmox_config())
+    for node in client.nodes():
+        node_name = str(node.get("node", "")).strip()
+        if not node_name:
+            continue
+        for vm in client.list_qemu(node_name):
+            try:
+                vmid = int(vm.get("vmid") or 0)
+            except (TypeError, ValueError):
+                vmid = 0
+            if vmid == wanted_vmid:
+                record = dict(vm)
+                record["node"] = record.get("node", node_name)
+                return record
+    snapshot = load_proxmox_snapshot() or {}
+    for vm in snapshot.get("virtual_machines", []):
+        try:
+            vmid = int(vm.get("vmid") or 0)
+        except (TypeError, ValueError):
+            vmid = 0
+        if vmid == wanted_vmid:
+            return dict(vm)
+    raise PipelineExecutionError(f"Fedora 44 Proxmox source VMID {wanted_vmid} was not found in inventory.")
+
+
+def _run_demo_k3s_add_node_select(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    template = _select_demo_k3s_source_template(run_id)
+    proxmox_target = _select_proxmox_target(ProxmoxClient(load_proxmox_config()))
+    plan = _k3s_plan()
+    plan["nodes"] = [
+        {
+            "name": target["name"],
+            "short": target["short"],
+            "role": "agent",
+        }
+    ]
+    _store_run_extra(
+        run_id,
+        {
+            "demo_k3s_new_worker": target,
+            "k3s_template": template,
+            "k3s_target": proxmox_target,
+            "k3s_plan": plan,
+        },
+    )
+    source = f"{template.get('name')} (vmid {template.get('vmid')})"
+    _set_stage(run_id, stage_name, "complete", f"Selected {target['short']} worker from Fedora source {source}.")
+    append_event(run_id, "info", stage_name, json.dumps({"target": target, "source": template}, sort_keys=True))
+
+
+def _run_demo_k3s_add_node_clone(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    if str(target.get("host") or "").strip():
+        _set_stage(run_id, stage_name, "complete", "Existing worker host was supplied; clone step skipped.")
+        append_event(run_id, "info", stage_name, json.dumps({"existing_host": target}, sort_keys=True))
+        return
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    plan = dict(extra.get("k3s_plan") or _k3s_plan())
+    clone_node = {
+        "name": str(target["name"]),
+        "short": str(target["short"]),
+        "role": "agent",
+        "cloudinit": {"ci_user": "root", "ipconfig0": "ip=dhcp"},
+    }
+    _store_run_extra(run_id, {"k3s_clone_plan": [clone_node]})
+    _run_k3s_proxmox_clone(run_id, stage_name)
+
+
+def _run_demo_k3s_add_node_boot(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    if str(target.get("host") or "").strip():
+        _set_stage(run_id, stage_name, "complete", "Existing worker host was supplied; boot step skipped.")
+        append_event(run_id, "info", stage_name, json.dumps({"existing_host": target}, sort_keys=True))
+        return
+    _run_k3s_proxmox_start(run_id, stage_name)
+
+
+def _run_demo_k3s_add_node_discover(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    if str(target.get("host") or "").strip():
+        _set_stage(run_id, stage_name, "complete", "Existing worker host was supplied; SSH discovery skipped.")
+        append_event(run_id, "info", stage_name, json.dumps({"existing_host": target}, sort_keys=True))
+        return
+    _run_k3s_discover_ssh(run_id, stage_name)
+    nodes = _k3s_nodes(run_id)
+    if nodes:
+        node = nodes[0]
+        updated_target = {**target, "host": str(node.get("ip") or "").strip()}
+        _store_run_extra(run_id, {"demo_k3s_new_worker": updated_target})
+
+
+def _run_demo_k3s_add_node_ssh(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    command = (
+        "set -e; hostname; "
+        "if systemctl is-active --quiet k3s 2>/dev/null || systemctl is-active --quiet k3s-agent 2>/dev/null; then "
+        "echo already-k3s-node; exit 2; fi; "
+        "echo ssh-ready"
+    )
+    output = _k3s_live_command(str(target["host"]), command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Target SSH preflight passed.")
+    append_event(run_id, "info", stage_name, output[-800:] if output else "ssh-ready")
+
+
+def _run_demo_k3s_add_node_base(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    public_key = str(key_info.get("public_key") or "").strip()
+    key_install = ""
+    if public_key:
+        quoted_key = shlex.quote(public_key)
+        key_install = (
+            "mkdir -p /root/.ssh; chmod 700 /root/.ssh; "
+            f"grep -qxF {quoted_key} /root/.ssh/authorized_keys 2>/dev/null || "
+            f"printf '%s\\n' {quoted_key} >> /root/.ssh/authorized_keys; "
+            "chmod 600 /root/.ssh/authorized_keys; "
+        )
+    command = (
+        "set -euo pipefail; "
+        f"hostnamectl set-hostname {shlex.quote(str(target['name']))} || true; "
+        f"{key_install}"
+        "dnf -y install curl jq tar iptables-nft container-selinux qemu-guest-agent; "
+        "systemctl enable --now qemu-guest-agent || true; "
+        "swapoff -a || true; "
+        "sed -ri.bkc-k3s \"/\\sswap\\s/s/^/#/\" /etc/fstab || true; "
+        "modprobe br_netfilter || true; modprobe overlay || true; "
+        "printf \"overlay\\nbr_netfilter\\n\" >/etc/modules-load.d/k3s.conf; "
+        "printf \"net.bridge.bridge-nf-call-iptables = 1\\nnet.ipv4.ip_forward = 1\\nnet.bridge.bridge-nf-call-ip6tables = 1\\n\" >/etc/sysctl.d/90-k3s.conf; "
+        "sysctl --system >/dev/null; "
+        "if command -v firewall-cmd >/dev/null 2>&1; then "
+        "firewall-cmd --permanent --add-port=10250/tcp || true; "
+        "firewall-cmd --permanent --add-port=8472/udp || true; "
+        "firewall-cmd --reload || true; "
+        "fi; "
+        "echo k3s-worker-base-ready"
+    )
+    output = _k3s_live_command(str(target["host"]), command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", "Target OS prerequisites are ready.")
+    append_event(run_id, "info", stage_name, output[-1000:] if output else "k3s-worker-base-ready")
+
+
+def _run_demo_k3s_add_node_token(run_id: str, stage_name: str) -> None:
+    server_host = str(K3S_LIVE_NODES[0]["host"])
+    token = _k3s_live_command(server_host, "cat /var/lib/rancher/k3s/server/node-token", timeout=120).strip()
+    if not token:
+        raise PipelineExecutionError("K3s server did not return a join token.")
+    _store_run_extra(run_id, {"k3s_api_url": f"https://{server_host}:6443", "k3s_join_token": token})
+    _set_stage(run_id, stage_name, "complete", "Join token captured.")
+    append_event(run_id, "info", stage_name, "Join token captured from kube1.")
+
+
+def _run_demo_k3s_add_node_agent(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    token = str(extra.get("k3s_join_token", "")).strip()
+    server_url = str(extra.get("k3s_api_url") or f"https://{K3S_LIVE_NODES[0]['host']}:6443")
+    if not token:
+        raise PipelineExecutionError("K3s join token is missing.")
+    server_host = str(K3S_LIVE_NODES[0]["host"])
+    k3s_version = _k3s_live_command(
+        server_host,
+        "k3s --version | awk 'NR==1{print $3}'",
+        timeout=120,
+    ).strip()
+    if not k3s_version:
+        raise PipelineExecutionError("K3s server did not return its install version.")
+    content = _registry_yaml()
+    command = (
+        "set -euo pipefail; "
+        "mkdir -p /etc/rancher/k3s; "
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        f"Path('/etc/rancher/k3s/registries.yaml').write_text({content!r})\n"
+        "PY\n"
+        "curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh; "
+        "chmod +x /tmp/install-k3s.sh; "
+        f"INSTALL_K3S_VERSION={shlex.quote(k3s_version)} "
+        f"K3S_URL={shlex.quote(server_url)} K3S_TOKEN={shlex.quote(token)} "
+        "/tmp/install-k3s.sh agent "
+        f"--node-name {shlex.quote(str(target['short']))}; "
+        "systemctl is-active --quiet k3s-agent; "
+        "echo k3s-agent-ready"
+    )
+    output = _k3s_live_command(str(target["host"]), command, timeout=1200)
+    _store_run_extra(run_id, {"k3s_join_token": "", "k3s_join_token_used": True, "k3s_install_version": k3s_version})
+    _set_stage(run_id, stage_name, "complete", "Target worker joined the k3s cluster.")
+    append_event(run_id, "info", stage_name, output[-1000:] if output else "k3s-agent-ready")
+
+
+def _run_demo_k3s_add_node_verify(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    node_name = str(target["short"])
+    quoted_node = shlex.quote(node_name)
+    quoted_node_ref = shlex.quote(f"node/{node_name}")
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        "for _ in $(seq 1 90); do "
+        f"k3s kubectl get node {quoted_node} >/dev/null 2>&1 && break; "
+        "sleep 5; "
+        "done; "
+        f"k3s kubectl wait --for=condition=Ready {quoted_node_ref} --timeout=180s; "
+        "k3s kubectl get nodes -o wide'"
+    )
+    output = _k3s_live_command(str(K3S_LIVE_NODES[0]["host"]), command, timeout=600)
+    _set_stage(run_id, stage_name, "complete", "New worker reports Ready.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "node-ready")
+
+
+def _run_demo_k3s_add_node_registry(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    _apply_k3s_registry_mirror(str(target["host"]), timeout=240)
+    output = _k3s_live_command(
+        str(target["host"]),
+        f"k3s ctr images pull --plain-http {shlex.quote(DEMO_REGISTRY_SMOKE_IMAGE)}",
+        timeout=240,
+    )
+    _set_stage(run_id, stage_name, "complete", "New worker registry mirror is configured.")
+    append_event(run_id, "info", stage_name, output[-1000:] if output else "registry-smoke-pulled")
+
+
+def _run_demo_k3s_add_node_register(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_target(run_id)
+    nodes = []
+    try:
+        nodes = _k3s_nodes(run_id)
+    except PipelineExecutionError:
+        nodes = []
+    node_record = next((node for node in nodes if str(node.get("short") or "") == str(target.get("short") or "")), None)
+    registered = {**target}
+    if node_record:
+        registered.update(
+            {
+                "host": str(target.get("host") or node_record.get("ip") or "").strip(),
+                "ip": str(node_record.get("ip") or target.get("host") or "").strip(),
+                "vmid": node_record.get("vmid"),
+                "proxmox_node": node_record.get("proxmox_node"),
+                "mac": node_record.get("mac"),
+            }
+        )
+    _store_run_extra(run_id, {"demo_k3s_added_worker": registered})
+    summary = (
+        f"Registered {registered.get('name') or registered.get('short')} "
+        f"at {registered.get('host') or registered.get('ip') or 'unknown-ip'}"
+    )
+    if registered.get("vmid"):
+        summary += f" (VMID {registered['vmid']})"
+    _set_stage(run_id, stage_name, "complete", summary + ".")
+    append_event(run_id, "info", stage_name, json.dumps({"added_worker": registered}, sort_keys=True))
+
+
+def _demo_add_node_reset_target(run_id: str) -> dict:
+    run = get_run(run_id) or {}
+    extra = run.get("extra", {}) or {}
+    target = dict(extra.get("demo_k3s_added_worker") or extra.get("demo_k3s_new_worker") or {})
+    nodes = [dict(node) for node in extra.get("k3s_nodes") or []]
+    if nodes:
+        node = nodes[0]
+        target = {
+            **target,
+            "name": target.get("name") or node.get("name"),
+            "short": target.get("short") or node.get("short"),
+            "host": target.get("host") or node.get("ip") or node.get("name"),
+            "ip": target.get("ip") or node.get("ip"),
+            "vmid": target.get("vmid") or node.get("vmid"),
+            "proxmox_node": target.get("proxmox_node") or node.get("proxmox_node"),
+            "mac": target.get("mac") or node.get("mac"),
+        }
+    if not target:
+        target_name = str(extra.get("target_name", "")).strip() or "kube3.lab.auzietek.com"
+        target = {"name": target_name, "short": target_name.split(".", 1)[0], "role": "agent"}
+    if not str(target.get("short") or "").strip():
+        name = str(target.get("name") or "").strip()
+        target["short"] = name.split(".", 1)[0] if name else ""
+    if not str(target.get("name") or "").strip() and str(target.get("short") or "").strip():
+        target["name"] = f"{target['short']}.lab.auzietek.com"
+    return target
+
+
+def _find_demo_worker_vm(client: ProxmoxClient, target: dict) -> dict:
+    vmid = int(target.get("vmid") or 0)
+    proxmox_node = str(target.get("proxmox_node") or "").strip()
+    if vmid and proxmox_node:
+        return {"vmid": vmid, "node": proxmox_node, "name": target.get("name") or target.get("short")}
+    names = {str(target.get("name") or "").strip(), str(target.get("short") or "").strip()}
+    names = {name for name in names if name}
+    for node in client.nodes():
+        node_name = str(node.get("node", "")).strip()
+        if not node_name:
+            continue
+        for vm in client.list_qemu(node_name):
+            if str(vm.get("name") or "").strip() in names:
+                return {**dict(vm), "node": node_name}
+    return {}
+
+
+def _run_demo_k3s_add_node_reset_select(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_reset_target(run_id)
+    client = ProxmoxClient(load_proxmox_config())
+    vm = _find_demo_worker_vm(client, target)
+    if vm:
+        target.update({"vmid": vm.get("vmid"), "proxmox_node": vm.get("node")})
+    _store_run_extra(run_id, {"demo_k3s_reset_target": target})
+    _set_stage(run_id, stage_name, "complete", "Demo worker reset target selected.")
+    append_event(run_id, "info", stage_name, json.dumps({"reset_target": target}, sort_keys=True))
+
+
+def _run_demo_k3s_add_node_reset_k3s(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_reset_target(run_id)
+    node_name = str(target.get("short") or target.get("name") or "").split(".", 1)[0]
+    if not node_name:
+        raise PipelineExecutionError("Demo worker node name is missing.")
+    quoted_node = shlex.quote(node_name)
+    command = (
+        "bash -lc 'set -euo pipefail; "
+        f"if ! k3s kubectl get node {quoted_node} >/dev/null 2>&1; then echo node-already-absent; exit 0; fi; "
+        f"k3s kubectl cordon {quoted_node} || true; "
+        f"k3s kubectl drain {quoted_node} --ignore-daemonsets --delete-emptydir-data --force --timeout=180s || true; "
+        f"k3s kubectl delete node {quoted_node}; "
+        f"if k3s kubectl get node {quoted_node} >/dev/null 2>&1; then exit 1; fi; "
+        "echo k3s-node-removed'"
+    )
+    output = _k3s_live_command(str(K3S_LIVE_NODES[0]["host"]), command, timeout=600)
+    _set_stage(run_id, stage_name, "complete", f"Removed {node_name} from k3s or confirmed it was absent.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "k3s-node-removed")
+
+
+def _run_demo_k3s_add_node_reset_vm(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_reset_target(run_id)
+    client = ProxmoxClient(load_proxmox_config())
+    vm = _find_demo_worker_vm(client, target)
+    if not vm:
+        _set_stage(run_id, stage_name, "complete", "Demo worker VM is already absent.")
+        append_event(run_id, "info", stage_name, json.dumps({"reset_target": target, "vm": "absent"}, sort_keys=True))
+        return
+    proxmox_node = str(vm.get("node") or "").strip()
+    vmid = int(vm.get("vmid") or 0)
+    if not proxmox_node or not vmid:
+        raise PipelineExecutionError(f"Demo worker VM metadata is incomplete: {vm!r}")
+    status = client.vm_status(proxmox_node, vmid)
+    if str(status.get("status") or "").strip().lower() == "running":
+        upid = client.stop_vm(proxmox_node, vmid, timeout=60)
+        task = client.wait_for_task(proxmox_node, str(upid), timeout=180)
+        exit_status = str(task.get("exitstatus", ""))
+        if exit_status and exit_status != "OK":
+            raise PipelineExecutionError(f"Proxmox stop failed for VMID {vmid}: {exit_status}")
+        client.wait_for_vm_status(proxmox_node, vmid, "stopped", timeout=120)
+    upid = client.destroy_vm(proxmox_node, vmid, purge=True)
+    task = client.wait_for_task(proxmox_node, str(upid), timeout=300)
+    exit_status = str(task.get("exitstatus", ""))
+    if exit_status and exit_status != "OK":
+        raise PipelineExecutionError(f"Proxmox destroy failed for VMID {vmid}: {exit_status}")
+    _set_stage(run_id, stage_name, "complete", f"Destroyed demo worker VMID {vmid}.")
+    append_event(run_id, "info", stage_name, json.dumps({"destroyed": {"node": proxmox_node, "vmid": vmid}}, sort_keys=True))
+
+
+def _run_demo_k3s_add_node_reset_verify(run_id: str, stage_name: str) -> None:
+    target = _demo_add_node_reset_target(run_id)
+    node_name = str(target.get("short") or target.get("name") or "").split(".", 1)[0]
+    quoted_node = shlex.quote(node_name)
+    kubectl = _k3s_live_command(
+        str(K3S_LIVE_NODES[0]["host"]),
+        f"bash -lc 'if k3s kubectl get node {quoted_node} >/dev/null 2>&1; then exit 1; fi; echo k3s-node-absent'",
+        timeout=120,
+    )
+    client = ProxmoxClient(load_proxmox_config())
+    vm = _find_demo_worker_vm(client, target)
+    if vm:
+        raise PipelineExecutionError(f"Demo worker VM still exists: {vm}")
+    _set_stage(run_id, stage_name, "complete", "Demo worker reset verified.")
+    append_event(run_id, "info", stage_name, kubectl[-800:] if kubectl else "reset-verified")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -4072,6 +4739,86 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "lab-storage-verify":
             _run_lab_storage_verify(run_id, stage_name)
+            continue
+
+        if kind == "demo-registry-k3s-dns":
+            _run_demo_registry_k3s_dns(run_id, stage_name)
+            continue
+
+        if kind == "demo-registry-k3s-trust":
+            _run_demo_registry_k3s_trust(run_id, stage_name)
+            continue
+
+        if kind == "demo-registry-k3s-pull":
+            _run_demo_registry_k3s_pull(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-registry-preflight-build-push":
+            _run_rx_demo_registry_preflight_build_push(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-registry-preflight-catalog":
+            _run_rx_demo_registry_preflight_catalog(run_id, stage_name, settings)
+            continue
+
+        if kind == "demo-k3s-add-node-select":
+            _run_demo_k3s_add_node_select(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-clone":
+            _run_demo_k3s_add_node_clone(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-boot":
+            _run_demo_k3s_add_node_boot(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-discover":
+            _run_demo_k3s_add_node_discover(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-ssh":
+            _run_demo_k3s_add_node_ssh(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-base":
+            _run_demo_k3s_add_node_base(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-token":
+            _run_demo_k3s_add_node_token(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-agent":
+            _run_demo_k3s_add_node_agent(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-verify":
+            _run_demo_k3s_add_node_verify(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-registry":
+            _run_demo_k3s_add_node_registry(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-register":
+            _run_demo_k3s_add_node_register(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-reset-select":
+            _run_demo_k3s_add_node_reset_select(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-reset-k3s":
+            _run_demo_k3s_add_node_reset_k3s(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-reset-vm":
+            _run_demo_k3s_add_node_reset_vm(run_id, stage_name)
+            continue
+
+        if kind == "demo-k3s-add-node-reset-verify":
+            _run_demo_k3s_add_node_reset_verify(run_id, stage_name)
             continue
 
         if kind == "fedora-build-kit":

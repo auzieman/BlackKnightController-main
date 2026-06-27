@@ -1,0 +1,12 @@
+{
+  "id": "register-inventory",
+  "kind": "inventory-update",
+  "summary": "Record the new k3s node in BKC inventory/resource graph.",
+  "produces": [
+    "host resource",
+    "k3s node resource",
+    "cluster membership relationship",
+    "telemetry scrape target relationship"
+  ],
+  "expected": "BKC can show the added node as part of the k3s cluster before the rx-demo deployment pipeline starts."
+}

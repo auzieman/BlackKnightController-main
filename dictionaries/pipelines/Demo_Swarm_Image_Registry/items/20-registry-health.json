@@ -1,0 +1,7 @@
+{
+  "id": "registry-health",
+  "kind": "validation",
+  "summary": "Verify the registry v2 API is reachable from the workstation and swarm manager.",
+  "command": "curl -fsS http://swarm1.lab.auzietek.com:5001/v2/ && ssh root@swarm1.lab.auzietek.com 'curl -fsS http://127.0.0.1:5001/v2/'"
+}
+

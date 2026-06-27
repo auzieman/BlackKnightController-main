@@ -1,0 +1,36 @@
+{
+  "id": "rx-demo-k3s-registry-preflight",
+  "name": "Demo: Rx Demo K3s Registry Preflight",
+  "repo": "rx-demo",
+  "workflow": "rx-demo-k3s-registry-preflight",
+  "description": "Validate the rx-demo image distribution path after the shared registry is online: registry reachability, k3s registry trust, app-scoped image build/push, and registry catalog validation.",
+  "stages": [
+    "registry-reachable",
+    "k3s-registry-trust",
+    "build-and-push",
+    "registry-catalog"
+  ],
+  "actions": [
+    "registry.v2.health",
+    "k3s.containerd.registry_trust",
+    "docker.buildx.push",
+    "registry.v2.catalog"
+  ],
+  "gates": [
+    "registry-host-reachable",
+    "k3s-nodes-configured",
+    "unique-image-tag",
+    "all-app-images-pushed"
+  ],
+  "notes": "Runnable demo lane for the video. Use this after Demo: Swarm Image Registry to prove rx-demo can publish an app-scoped image tag into the local registry.",
+  "editable": true,
+  "tags": [
+    "rx-demo",
+    "demo",
+    "video",
+    "k3s",
+    "registry",
+    "images",
+    "preflight"
+  ]
+}

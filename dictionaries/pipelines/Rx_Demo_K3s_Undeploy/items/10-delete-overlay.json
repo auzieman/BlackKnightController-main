@@ -1,0 +1,8 @@
+{
+  "id": "delete-overlay",
+  "kind": "command",
+  "summary": "Delete resources managed by the lab overlay.",
+  "working_directory": "/home/auzieman/Projects/rx-demo",
+  "command": "kubectl delete -k k8s/overlays/lab --ignore-not-found=true"
+}
+

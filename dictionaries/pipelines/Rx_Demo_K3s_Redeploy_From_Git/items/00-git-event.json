@@ -1,0 +1,14 @@
+{
+  "id": "git-event",
+  "kind": "event",
+  "summary": "Record repo, branch, commit, and notes from the BKC automation trigger request.",
+  "api": "POST /api/v1/automation/trigger",
+  "required_payload": [
+    "repo",
+    "workflow",
+    "ref",
+    "commit",
+    "notes"
+  ]
+}
+

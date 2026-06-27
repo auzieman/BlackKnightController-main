@@ -1,0 +1,7 @@
+{
+  "id": "rollout-rx-ui",
+  "kind": "validation",
+  "summary": "Wait for the UI rollout to complete.",
+  "command": "kubectl -n rx-demo rollout status deploy/rx-ui --timeout=180s && kubectl -n rx-demo get pods -l app.kubernetes.io/name=rx-ui -o wide"
+}
+

@@ -1,0 +1,8 @@
+{
+  "id": "clone-worker",
+  "kind": "proxmox-operation",
+  "summary": "Clone a single Fedora 44 worker VM from the known Proxmox source VMID 131.",
+  "source_vmid": 131,
+  "command": "Proxmox clone VMID 131 to a new worker VM, apply cloud-init, and install the BKC SSH key.",
+  "expected": "A new Fedora worker VM exists with cloud-init and SSH takeover settings."
+}

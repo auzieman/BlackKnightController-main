@@ -1,0 +1,7 @@
+{
+  "id": "smoke-api",
+  "kind": "validation",
+  "summary": "Exercise the same prescription workflow used by the Docker Compose validation.",
+  "command": "RX_ID=\"RX-K3S-$(date +%s)\"; curl -fsS \"$RX_API_BASE/prescriptions/${RX_ID}\"; curl -fsS -X POST \"$RX_API_BASE/prescriptions/${RX_ID}/approve\" -H 'Content-Type: application/json' -d '{\"approvedBy\":\"demo\",\"notes\":\"k3s-validation\"}'; sleep 3; curl -fsS \"$RX_API_BASE/prescriptions/${RX_ID}\""
+}
+

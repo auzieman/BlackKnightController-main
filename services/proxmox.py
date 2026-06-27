@@ -233,6 +233,22 @@ class ProxmoxClient:
         except Exception as exc:
             raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
 
+    def stop_vm(self, node: str, vmid: int, timeout: int = 60) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}/status/stop"
+        self._trace("POST", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).status.stop.post(timeout=timeout)
+        except Exception as exc:
+            raise ProxmoxAPIError(f"POST {path} failed: {exc}") from exc
+
+    def destroy_vm(self, node: str, vmid: int, purge: bool = True) -> dict:
+        path = f"/nodes/{node}/qemu/{vmid}"
+        self._trace("DELETE", path)
+        try:
+            return self.client.nodes(node).qemu(vmid).delete(purge=1 if purge else 0)
+        except Exception as exc:
+            raise ProxmoxAPIError(f"DELETE {path} failed: {exc}") from exc
+
     def vm_status(self, node: str, vmid: int) -> dict:
         path = f"/nodes/{node}/qemu/{vmid}/status/current"
         self._trace("GET", path)

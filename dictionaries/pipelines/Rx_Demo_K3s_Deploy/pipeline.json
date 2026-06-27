@@ -1,0 +1,50 @@
+{
+  "id": "rx-demo-k3s-deploy",
+  "name": "Demo: Rx Demo K3s Deploy",
+  "repo": "rx-demo",
+  "workflow": "rx-demo-k3s-deploy",
+  "description": "Apply the rx-demo lab overlay to k3s, pin workloads to the registry image tag, wait for rollout, and prove the Kubernetes path matches the Docker Compose app outcome.",
+  "stages": [
+    "k3s-ready",
+    "runtime-secrets",
+    "apply-overlay",
+    "pin-images",
+    "rollout",
+    "smoke-api",
+    "smoke-ui",
+    "telemetry-check"
+  ],
+  "actions": [
+    "k3s.nodes.ready",
+    "kubernetes.secret.ensure",
+    "kubectl.apply",
+    "kubectl.set_image",
+    "kubectl.rollout_status",
+    "http.smoke",
+    "prometheus.metrics.check"
+  ],
+  "gates": [
+    "rx-demo-secrets-present",
+    "registry-images-pushed",
+    "nodeports-routed",
+    "compose-parity-smoke"
+  ],
+  "notes": "Planned/demo lane for the registry-based deployment. The older rx-demo-k3s-app-refresh executor remains the current BKC runnable bridge for the earlier rx-ui image import path.",
+  "editable": true,
+  "links": [
+    {
+      "label": "rx-demo rehearsal",
+      "url": "docs/bkc-demo-video-rehearsal.md"
+    }
+  ],
+  "tags": [
+    "rx-demo",
+    "demo",
+    "video",
+    "k3s",
+    "deploy",
+    "kubectl",
+    "registry",
+    "planned"
+  ]
+}

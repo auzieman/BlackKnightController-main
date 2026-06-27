@@ -1,0 +1,13 @@
+{
+  "id": "extend-telemetry",
+  "kind": "follow-up",
+  "summary": "Extend host/container telemetry coverage to the new node.",
+  "related_pipeline": "k3s-host-telemetry",
+  "checks": [
+    "Telegraf DaemonSet schedules on the new node",
+    "cAdvisor DaemonSet schedules on the new node",
+    "Prometheus scrape target is added or discovered",
+    "Grafana dashboard shows the new node"
+  ]
+}
+

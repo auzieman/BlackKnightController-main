@@ -1,0 +1,7 @@
+{
+  "id": "smoke-ui",
+  "kind": "validation",
+  "summary": "Confirm the rx-ui route is reachable through the Kubernetes service path.",
+  "command": "curl -fsS \"$RX_UI_BASE/healthz\" && curl -fsS \"$RX_UI_BASE/\" | grep -F 'Prescription Demo UI'"
+}
+

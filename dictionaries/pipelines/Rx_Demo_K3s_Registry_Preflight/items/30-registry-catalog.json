@@ -1,0 +1,7 @@
+{
+  "id": "registry-catalog",
+  "kind": "validation",
+  "summary": "Verify the expected rx-demo repositories are visible in the registry catalog.",
+  "command": "curl -fsS \"http://${DEMO_REGISTRY%/rx-demo}/v2/_catalog\" | jq -e '.repositories | all([\"rx-demo/api-gateway\",\"rx-demo/legacy-sync-worker\",\"rx-demo/read-model-projection\",\"rx-demo/rx-ui\",\"rx-demo/loadgen\"][]; index(.))'"
+}
+

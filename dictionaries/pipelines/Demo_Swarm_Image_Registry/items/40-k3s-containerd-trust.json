@@ -1,0 +1,8 @@
+{
+  "id": "k3s-containerd-trust",
+  "kind": "command",
+  "summary": "Configure k3s/containerd to trust the HTTP registry endpoint on every k3s node.",
+  "path": "/etc/rancher/k3s/registries.yaml",
+  "command": "ssh <k3s-node> 'sudo install -d -m 0755 /etc/rancher/k3s && sudo tee /etc/rancher/k3s/registries.yaml >/dev/null <<\"YAML\"\nmirrors:\n  \"swarm1.lab.auzietek.com:5001\":\n    endpoint:\n      - \"http://swarm1.lab.auzietek.com:5001\"\nYAML\nsudo systemctl restart k3s || sudo systemctl restart k3s-agent'"
+}
+

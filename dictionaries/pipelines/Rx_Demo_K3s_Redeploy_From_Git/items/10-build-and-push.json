@@ -1,0 +1,8 @@
+{
+  "id": "build-and-push",
+  "kind": "command",
+  "summary": "Build and push images using the commit hash as the image tag.",
+  "working_directory": "/home/auzieman/Projects/rx-demo",
+  "command": "DEMO_TAG=$(git rev-parse --short HEAD) && PUSH=1 REGISTRY=\"$DEMO_REGISTRY\" TAG=\"$DEMO_TAG\" tools/build-and-push.sh"
+}
+

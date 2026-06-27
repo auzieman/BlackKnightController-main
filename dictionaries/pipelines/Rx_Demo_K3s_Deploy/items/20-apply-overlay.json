@@ -1,0 +1,8 @@
+{
+  "id": "apply-overlay",
+  "kind": "command",
+  "summary": "Apply the lab overlay that creates namespace, dependencies, OTel collector, app deployments, services, and loadgen job.",
+  "working_directory": "/home/auzieman/Projects/rx-demo",
+  "command": "kubectl apply -k k8s/overlays/lab"
+}
+

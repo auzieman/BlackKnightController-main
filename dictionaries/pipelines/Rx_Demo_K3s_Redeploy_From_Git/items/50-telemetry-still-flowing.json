@@ -1,0 +1,7 @@
+{
+  "id": "telemetry-still-flowing",
+  "kind": "validation",
+  "summary": "Confirm telemetry still flows after the UI rollout.",
+  "command": "curl -fsS \"$RX_OTEL_METRICS/metrics\" | grep -E 'rx_component_health|rx_' | head"
+}
+

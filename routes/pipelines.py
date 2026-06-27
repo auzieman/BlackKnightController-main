@@ -40,7 +40,23 @@ PIPELINE_TAGS = (
     "content",
     "hypervisor",
     "telemetry",
+    "demo",
+    "rx-demo",
+    "k3s",
+    "registry",
+    "cluster",
+    "ssh",
+    "add-node",
 )
+
+
+def _available_pipeline_tags(pipelines: list[dict], runs: list[dict]) -> list[str]:
+    tags = set(PIPELINE_TAGS)
+    for pipeline in pipelines:
+        tags.update(_pipeline_tags(pipeline, supported=workflow_is_supported(str(pipeline.get("workflow", "")))))
+    for run in runs:
+        tags.update(_run_tags(run))
+    return sorted(tag for tag in tags if tag)
 
 
 def _run_timestamp(run: dict) -> datetime:
@@ -113,6 +129,14 @@ def _run_external_links(run: dict) -> list[dict]:
     if not pipeline:
         pipeline = next((item for item in demo_pipelines() if item["workflow"] == run.get("workflow")), None)
     return list(pipeline.get("links", [])) if pipeline else []
+
+
+def _run_group_key(run: dict) -> str:
+    extra = run.get("extra", {}) or {}
+    pipeline_id = str(extra.get("pipeline_id", "")).strip()
+    if pipeline_id:
+        return f"pipeline:{pipeline_id}"
+    return f"workflow:{str(run.get('workflow', '')).strip()}"
 
 
 def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
@@ -621,7 +645,7 @@ def pipelines():
         resource_class = str(pipeline.get("resource_class", "")).strip().lower()
         if resource_class:
             extra["resource_class"] = resource_class
-        if str(pipeline.get("workflow", "")).strip().lower() == "fedora-cosmic-postinstall":
+        if str(pipeline.get("workflow", "")).strip().lower() in {"fedora-cosmic-postinstall", "demo-k3s-add-node"}:
             target_host = request.form.get("target_host", "").strip()
             target_name = request.form.get("target_name", "").strip()
             target_vmid = request.form.get("target_vmid", "").strip()
@@ -668,9 +692,11 @@ def pipelines():
         )
         return redirect(url_for("pipelines.pipelines"))
 
-    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in demo_pipelines()}
+    all_pipelines = demo_pipelines()
+    tenant_runs = [run for run in load_runs() if run.get("tenant_slug") == tenant_slug]
+    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in all_pipelines}
     visible_pipelines = []
-    for item in demo_pipelines():
+    for item in all_pipelines:
         supported = supported_workflows.get(item["workflow"], False)
         tags = _pipeline_tags(item, supported=supported)
         if selected_tag and selected_tag not in tags:
@@ -682,9 +708,7 @@ def pipelines():
         visible_pipelines.append(enriched)
 
     visible_runs = []
-    for run in sorted(load_runs(), key=_run_timestamp, reverse=True):
-        if run.get("tenant_slug") != tenant_slug:
-            continue
+    for run in sorted(tenant_runs, key=_run_timestamp, reverse=True):
         run_tags = _run_tags(run)
         if selected_tag and selected_tag not in run_tags:
             continue
@@ -694,6 +718,24 @@ def pipelines():
         enriched["stage_summary"] = _stage_summary(run)
         enriched["tags"] = run_tags
         visible_runs.append(enriched)
+
+    run_groups: dict[str, list[dict]] = {}
+    for run in visible_runs:
+        run_groups.setdefault(_run_group_key(run), []).append(run)
+    ledger_runs = []
+    seen_run_groups = set()
+    for run in visible_runs:
+        group_key = _run_group_key(run)
+        if group_key in seen_run_groups:
+            continue
+        seen_run_groups.add(group_key)
+        attempts = run_groups.get(group_key, [run])
+        enriched = dict(run)
+        enriched["attempt_count"] = len(attempts)
+        enriched["previous_attempt_count"] = max(0, len(attempts) - 1)
+        enriched["failed_attempt_count"] = sum(1 for item in attempts if str(item.get("status", "")).lower() == "failed")
+        enriched["run_group_key"] = group_key
+        ledger_runs.append(enriched)
 
     latest_runs_by_workflow: dict[str, dict] = {}
     for run in visible_runs:
@@ -715,12 +757,13 @@ def pipelines():
         pipelines=visible_pipelines,
         selected_pipeline=selected_pipeline,
         selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),
-        runs=visible_runs[:12],
+        runs=ledger_runs[:12],
+        raw_run_count=len(visible_runs),
         latest_runs_by_workflow=latest_runs_by_workflow,
         supported_workflows=supported_workflows,
         search_query=search_query,
         selected_tag=selected_tag,
-        available_tags=PIPELINE_TAGS,
+        available_tags=_available_pipeline_tags(all_pipelines, tenant_runs),
         candidates=[item for item in _candidate_catalog() if _candidate_matches(item, search_query)],
     )
 

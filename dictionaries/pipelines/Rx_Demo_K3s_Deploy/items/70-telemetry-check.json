@@ -1,0 +1,7 @@
+{
+  "id": "telemetry-check",
+  "kind": "validation",
+  "summary": "Confirm the collector exposes rx-demo metrics for Prometheus/Grafana.",
+  "command": "curl -fsS \"$RX_OTEL_METRICS/metrics\" | grep -E 'rx_|otelcol_' | head"
+}
+
