@@ -4586,7 +4586,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             f"git_work={shlex.quote(git_work)}",
             "if ! test -d \"$git_work/.git\"; then",
             "  rm -rf \"$git_work\"",
-            "  $git_cmd clone git@github.com:auzieman/rx-demo.git \"$git_work\"",
+            "  $git_cmd clone https://github.com/auzieman/rx-demo.git \"$git_work\"",
             "fi",
             "cd \"$git_work\"",
             "test -z \"$($git_cmd status --porcelain)\"",
