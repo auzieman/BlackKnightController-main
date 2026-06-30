@@ -4435,13 +4435,33 @@ node_name="$(k3s kubectl -n rx-demo get endpoints rx-ui -o jsonpath='{.subsets[0
 node_ip="$(k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
 base="http://${node_ip}:${node_port}"
 rx_id="RX-BKC-K3S-UI"
-curl -fsS "$base/" | grep -F "Prescription Demo UI" >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d "{\"rxId\":\"${rx_id}\"}" "$base/lookup" | grep -F '"operation":"lookup"' >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d "{\"rxId\":\"${rx_id}\",\"approvedBy\":\"bkc.pipeline\",\"notes\":\"BKC k3s demo smoke\"}" "$base/approve" | grep -F '"operation":"approve"' >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d "{\"rxId\":\"${rx_id}\",\"refillCount\":1}" "$base/refill" | grep -F '"operation":"refill"' >/dev/null
+retry_get_contains() {
+  url="$1"
+  text="$2"
+  for _ in $(seq 1 30); do
+    if curl -fsS "$url" | grep -F "$text" >/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  curl -fsS "$url" | grep -F "$text" >/dev/null
+}
+retry_post_contains() {
+  url="$1"
+  body="$2"
+  text="$3"
+  for _ in $(seq 1 30); do
+    if curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null
+}
+retry_get_contains "$base/" "Prescription Demo UI"
+retry_post_contains "$base/lookup" "{\"rxId\":\"${rx_id}\"}" '"operation":"lookup"'
+retry_post_contains "$base/approve" "{\"rxId\":\"${rx_id}\",\"approvedBy\":\"bkc.pipeline\",\"notes\":\"BKC k3s demo smoke\"}" '"operation":"approve"'
+retry_post_contains "$base/refill" "{\"rxId\":\"${rx_id}\",\"refillCount\":1}" '"operation":"refill"'
 printf 'rx-ui-nodeport-ok %s\n' "$base"
 """
     output = run_remote_command(
