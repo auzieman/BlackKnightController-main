@@ -4802,6 +4802,29 @@ api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_ser
 rx_id="RX-BKC-REDEPLOY"
 k3s kubectl -n rx-demo rollout restart deploy/rabbitmq
 k3s kubectl -n rx-demo rollout status deploy/rabbitmq --timeout=180s
+retry_get_contains() {
+  url="$1"
+  text="$2"
+  for _ in $(seq 1 40); do
+    if curl -fsS "$url" | grep -F "$text" >/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  curl -fsS "$url" | grep -F "$text" >/dev/null
+}
+retry_post_contains() {
+  url="$1"
+  body="$2"
+  text="$3"
+  for _ in $(seq 1 40); do
+    if curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null
+}
 for _ in $(seq 1 30); do
   if curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null; then
     break
@@ -4810,14 +4833,10 @@ for _ in $(seq 1 30); do
 done
 curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null
 curl -fsS "$api_base/healthz"
-curl -fsS "$api_base/readyz"
-curl -fsS "$api_base/prescriptions/${rx_id}" | grep -F "$rx_id" >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"approvedBy":"bkc.pipeline","notes":"BKC redeploy visible activity"}' \
-  "$api_base/prescriptions/${rx_id}/approve" | grep -F 'ApproveQueued' >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"refillCount":1}' \
-  "$api_base/prescriptions/${rx_id}/refill" | grep -F 'RefillQueued' >/dev/null
+retry_get_contains "$api_base/readyz" '"rabbitmq":"ok"'
+retry_get_contains "$api_base/prescriptions/${rx_id}" "$rx_id"
+retry_post_contains "$api_base/prescriptions/${rx_id}/approve" '{"approvedBy":"bkc.pipeline","notes":"BKC redeploy visible activity"}' 'ApproveQueued'
+retry_post_contains "$api_base/prescriptions/${rx_id}/refill" '{"refillCount":1}' 'RefillQueued'
 printf 'rx-redeploy-visible-activity-ok ui=%s api=%s rx_id=%s\n' "$ui_base" "$api_base" "$rx_id"
 """
     output = run_remote_command(
