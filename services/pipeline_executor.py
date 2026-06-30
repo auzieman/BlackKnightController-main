@@ -4616,8 +4616,11 @@ printf 'tempo=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability tempo)" "
         command=f"bash -lc {shlex.quote(script)}",
         timeout=120,
     )
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    image_tag = str(extra.get("rx_demo_redeploy_tag") or RX_DEMO_K3S_DEMO_TAG).strip()
     links = {
-        "image_tag": RX_DEMO_K3S_DEMO_TAG,
+        "image_tag": image_tag,
     }
     for line in output.splitlines():
         if "=" not in line:
