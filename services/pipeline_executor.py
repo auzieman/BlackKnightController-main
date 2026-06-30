@@ -4800,6 +4800,8 @@ node_port_for_service() {
 ui_base="http://$(node_ip_for_endpoint rx-demo rx-ui):$(node_port_for_service rx-demo rx-ui http)"
 api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_service rx-demo api-gateway http)"
 rx_id="RX-BKC-REDEPLOY"
+k3s kubectl -n rx-demo rollout restart deploy/rabbitmq
+k3s kubectl -n rx-demo rollout status deploy/rabbitmq --timeout=180s
 for _ in $(seq 1 30); do
   if curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null; then
     break
