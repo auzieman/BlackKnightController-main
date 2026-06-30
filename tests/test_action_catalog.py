@@ -447,7 +447,7 @@ def test_rx_demo_video_pipeline_set_loads_from_folders():
         "demo-k3s-add-node": 14,
         "demo-swarm-image-registry": 7,
         "rx-demo-k3s-registry-preflight": 4,
-        "rx-demo-k3s-deploy": 8,
+        "rx-demo-k3s-deploy": 10,
         "rx-demo-k3s-redeploy-from-git": 6,
         "rx-demo-k3s-undeploy": 5,
     }
@@ -462,7 +462,7 @@ def test_rx_demo_video_pipeline_set_loads_from_folders():
     deploy = pipeline_by_id("rx-demo-k3s-deploy")
     assert deploy is not None
     assert "compose-parity-smoke" in deploy["gates"]
-    assert "kubectl.set_image" in deploy["actions"]
+    assert "kubectl.apply" in deploy["actions"]
 
     redeploy = pipeline_by_id("rx-demo-k3s-redeploy-from-git")
     assert redeploy is not None

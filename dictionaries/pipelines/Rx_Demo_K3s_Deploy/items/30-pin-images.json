@@ -1,7 +1,0 @@
-{
-  "id": "pin-images",
-  "kind": "command",
-  "summary": "Pin Kubernetes workloads to the image tag that was pushed to the demo registry.",
-  "command": "kubectl -n rx-demo set image deploy/api-gateway api-gateway=\"$DEMO_REGISTRY/api-gateway:$DEMO_TAG\" && kubectl -n rx-demo set image deploy/legacy-sync-worker worker=\"$DEMO_REGISTRY/legacy-sync-worker:$DEMO_TAG\" && kubectl -n rx-demo set image deploy/read-model-projection worker=\"$DEMO_REGISTRY/read-model-projection:$DEMO_TAG\" && kubectl -n rx-demo set image deploy/rx-ui rx-ui=\"$DEMO_REGISTRY/rx-ui:$DEMO_TAG\""
-}
-

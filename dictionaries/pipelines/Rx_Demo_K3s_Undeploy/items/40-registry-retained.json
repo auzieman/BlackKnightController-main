@@ -2,5 +2,5 @@
   "id": "registry-retained",
   "kind": "validation",
   "summary": "Confirm the image registry is still available for another take.",
-  "command": "curl -fsS \"http://${DEMO_REGISTRY%/rx-demo}/v2/_catalog\""
+  "command": "curl -fsS http://127.0.0.1:5001/v2/_catalog"
 }

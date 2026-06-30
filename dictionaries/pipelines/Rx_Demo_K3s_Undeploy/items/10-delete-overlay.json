@@ -1,8 +1,7 @@
 {
   "id": "delete-overlay",
   "kind": "command",
-  "summary": "Delete resources managed by the lab overlay.",
+  "summary": "Delete demo-owned Grafana, Prometheus, Loki, and Tempo resources while preserving host telemetry.",
   "working_directory": "/home/auzieman/Projects/rx-demo",
-  "command": "kubectl delete -k k8s/overlays/lab --ignore-not-found=true"
+  "command": "k3s kubectl -n rx-observability delete deploy,svc grafana loki prometheus tempo --ignore-not-found=true"
 }
-

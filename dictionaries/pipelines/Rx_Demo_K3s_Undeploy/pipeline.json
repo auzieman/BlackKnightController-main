@@ -3,7 +3,7 @@
   "name": "Demo: Rx Demo K3s Undeploy",
   "repo": "rx-demo",
   "workflow": "rx-demo-k3s-undeploy",
-  "description": "Remove the rx-demo namespace from k3s and verify the app workload is gone while leaving the registry and shared observability stack intact.",
+  "description": "Remove rx-demo demo workloads from k3s, clear the demo Grafana/Prometheus/Loki/Tempo stack, and verify the registry plus host telemetry remain ready for another take.",
   "stages": [
     "capture-state",
     "delete-overlay",
@@ -18,11 +18,11 @@
     "registry.v2.catalog"
   ],
   "gates": [
-    "no-shared-observability-delete",
+    "host-telemetry-retained",
     "namespace-removed",
     "registry-retained"
   ],
-  "notes": "Use after recording or as a visible cleanup pipeline. Keep observability and registry services running for later takes unless explicitly cleaning the whole lab.",
+  "notes": "Use before or after recording as a visible cleanup pipeline. It removes the rx-demo app namespace and demo observability deployments while preserving the local registry and k3s host telemetry DaemonSets.",
   "editable": true,
   "tags": [
     "rx-demo",
@@ -30,7 +30,6 @@
     "video",
     "k3s",
     "undeploy",
-    "cleanup",
-    "planned"
+    "cleanup"
   ]
 }

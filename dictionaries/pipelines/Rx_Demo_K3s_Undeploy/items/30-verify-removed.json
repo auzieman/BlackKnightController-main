@@ -1,7 +1,6 @@
 {
   "id": "verify-removed",
   "kind": "validation",
-  "summary": "Confirm the rx-demo namespace is absent.",
-  "command": "! kubectl get namespace rx-demo"
+  "summary": "Confirm the rx-demo namespace and demo observability deployments are absent while host telemetry remains.",
+  "command": "! k3s kubectl get namespace rx-demo && k3s kubectl -n rx-observability get daemonset telegraf-k3s-host cadvisor-k3s -o name"
 }
-

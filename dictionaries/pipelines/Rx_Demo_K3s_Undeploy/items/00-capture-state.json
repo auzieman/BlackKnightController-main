@@ -1,7 +1,6 @@
 {
   "id": "capture-state",
   "kind": "evidence",
-  "summary": "Capture workload state before cleanup so the run preserves what was removed.",
-  "command": "kubectl -n rx-demo get all,pvc,secret,configmap -o wide || true"
+  "summary": "Capture rx-demo and demo observability state before cleanup so the run preserves what was removed.",
+  "command": "k3s kubectl -n rx-demo get all,pvc,secret,configmap -o wide || true; k3s kubectl -n rx-observability get deploy,svc,configmap,daemonset -o wide || true"
 }
-

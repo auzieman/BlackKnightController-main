@@ -1,0 +1,14 @@
+{
+  "id": "access-links",
+  "kind": "operator-handoff",
+  "summary": "Record the demo URLs for the Web UI recording.",
+  "links": [
+    "rx-ui: http://192.168.1.14:30080",
+    "api: http://192.168.1.14:30081",
+    "grafana: http://192.168.1.14:30300",
+    "prometheus: http://192.168.1.14:30090",
+    "loki: http://192.168.1.14:30100",
+    "tempo: http://192.168.1.14:30200"
+  ],
+  "expected": "The recording can switch between BKC, rx-ui, and Grafana without extra terminal discovery."
+}

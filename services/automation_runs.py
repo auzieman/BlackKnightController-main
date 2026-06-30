@@ -176,6 +176,27 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "build-and-push",
             "registry-catalog",
         ]
+    if normalized == "rx-demo-k3s-deploy":
+        return [
+            "k3s-ready",
+            "runtime-secrets",
+            "registry-images",
+            "apply-k3s-demo-overlay",
+            "rollout-app",
+            "rollout-observability",
+            "smoke-api",
+            "smoke-ui",
+            "telemetry-check",
+            "access-links",
+        ]
+    if normalized == "rx-demo-k3s-undeploy":
+        return [
+            "capture-state",
+            "delete-overlay",
+            "delete-namespace",
+            "verify-removed",
+            "registry-retained",
+        ]
     if normalized == "demo-k3s-add-node":
         if action_mode == "undeploy":
             return [

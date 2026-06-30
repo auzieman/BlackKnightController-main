@@ -2,6 +2,5 @@
   "id": "delete-namespace",
   "kind": "command",
   "summary": "Remove the rx-demo namespace if any dependent resources remain.",
-  "command": "kubectl delete namespace rx-demo --ignore-not-found=true --timeout=180s"
+  "command": "k3s kubectl delete namespace rx-demo --ignore-not-found=true --timeout=240s"
 }
-

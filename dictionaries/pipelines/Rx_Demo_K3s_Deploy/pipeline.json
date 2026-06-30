@@ -3,22 +3,23 @@
   "name": "Demo: Rx Demo K3s Deploy",
   "repo": "rx-demo",
   "workflow": "rx-demo-k3s-deploy",
-  "description": "Apply the rx-demo lab overlay to k3s, pin workloads to the registry image tag, wait for rollout, and prove the Kubernetes path matches the Docker Compose app outcome.",
+  "description": "Apply the rx-demo k3s-demo overlay, deploy the app plus in-cluster Grafana/Prometheus/Loki/Tempo instrumentation, wait for rollout, and prove the Kubernetes path matches the Docker Compose app outcome.",
   "stages": [
     "k3s-ready",
     "runtime-secrets",
-    "apply-overlay",
-    "pin-images",
-    "rollout",
+    "registry-images",
+    "apply-k3s-demo-overlay",
+    "rollout-app",
+    "rollout-observability",
     "smoke-api",
     "smoke-ui",
-    "telemetry-check"
+    "telemetry-check",
+    "access-links"
   ],
   "actions": [
     "k3s.nodes.ready",
     "kubernetes.secret.ensure",
     "kubectl.apply",
-    "kubectl.set_image",
     "kubectl.rollout_status",
     "http.smoke",
     "prometheus.metrics.check"
@@ -27,9 +28,10 @@
     "rx-demo-secrets-present",
     "registry-images-pushed",
     "nodeports-routed",
+    "grafana-routed",
     "compose-parity-smoke"
   ],
-  "notes": "Planned/demo lane for the registry-based deployment. The older rx-demo-k3s-app-refresh executor remains the current BKC runnable bridge for the earlier rx-ui image import path.",
+  "notes": "Demo lane for the registry-based k3s deployment. Current recording path uses k8s/overlays/k3s-demo with image tag 097889a and NodePorts rx-ui=30080, api=30081, grafana=30300, prometheus=30090, loki=30100, tempo=30200.",
   "editable": true,
   "links": [
     {
@@ -45,6 +47,7 @@
     "deploy",
     "kubectl",
     "registry",
-    "planned"
+    "instrumentation",
+    "grafana"
   ]
 }

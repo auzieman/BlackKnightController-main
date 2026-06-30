@@ -1,7 +1,0 @@
-{
-  "id": "rollout",
-  "kind": "validation",
-  "summary": "Wait for every rx-demo workload to become available.",
-  "command": "kubectl -n rx-demo rollout status deploy/api-gateway --timeout=180s && kubectl -n rx-demo rollout status deploy/legacy-sync-worker --timeout=180s && kubectl -n rx-demo rollout status deploy/read-model-projection --timeout=180s && kubectl -n rx-demo rollout status deploy/rx-ui --timeout=180s && kubectl -n rx-demo get pods -o wide"
-}
-
