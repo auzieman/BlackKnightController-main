@@ -3,30 +3,41 @@
   "name": "Demo: Rx Demo K3s Redeploy From Git",
   "repo": "rx-demo",
   "workflow": "rx-demo-redeploy-from-git-event",
-  "description": "Record a Git-triggered rx-demo change, build/push commit-tagged images, update the k3s deployment, and validate the visible UI change.",
+  "description": "Record a Git-triggered rx-demo change, sync source, build/push commit-tagged images, update k3s, and validate CloudEvents audit records through Loki/Grafana.",
   "stages": [
     "git-event",
+    "sync-source-from-git",
     "build-and-push",
-    "update-rx-ui-image",
-    "rollout-rx-ui",
+    "update-images",
+    "rollout-app",
+    "cloudinit-node-check",
     "visible-change-check",
-    "telemetry-still-flowing"
+    "telemetry-still-flowing",
+    "loki-cloudevents-check",
+    "grafana-loki-check",
+    "access-links"
   ],
   "actions": [
     "git.event.record",
+    "git.checkout",
     "docker.buildx.push",
     "kubectl.set_image",
     "kubectl.rollout_status",
+    "k3s.node.provenance",
     "http.content_check",
-    "prometheus.metrics.check"
+    "prometheus.metrics.check",
+    "loki.stream.verify",
+    "grafana.datasource.check"
   ],
   "gates": [
     "commit-hash-present",
     "unique-image-tag",
-    "rx-ui-rollout-complete",
-    "visible-ui-change"
+    "rx-demo-rollout-complete",
+    "visible-ui-change",
+    "cloudevents-audit-in-loki",
+    "grafana-loki-ready"
   ],
-  "notes": "This is the weekend demo event-trigger lane. It is intentionally broader than ArgoCD: BKC records the operational trigger, deployment action, and validation evidence.",
+  "notes": "This is the weekend demo event-trigger lane. It is intentionally broader than ArgoCD: BKC records the operational trigger, deployment action, node/cloud-init evidence, and validation evidence in Loki/Grafana.",
   "editable": true,
   "tags": [
     "rx-demo",
@@ -36,6 +47,9 @@
     "redeploy",
     "k3s",
     "registry",
-    "planned"
+    "cloudevents",
+    "loki",
+    "grafana",
+    "runnable"
   ]
 }

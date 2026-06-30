@@ -1,0 +1,9 @@
+{
+  "id": "sync-source-from-git",
+  "kind": "command",
+  "summary": "Update the shared rx-demo working copy from the requested Git ref or commit.",
+  "transport": "ssh-manager",
+  "working_directory": "/mnt/swarm/shared/rx-demo",
+  "command": "git fetch --prune origin && git checkout <ref-or-commit> && git rev-parse --short HEAD",
+  "expected": "The shared source checkout is clean and reports the commit tag used for image builds."
+}

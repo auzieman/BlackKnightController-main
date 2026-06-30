@@ -1,0 +1,8 @@
+{
+  "id": "cloudinit-node-check",
+  "kind": "validation",
+  "summary": "Capture k3s node readiness and cloud-init provenance evidence through BKC SSH.",
+  "transport": "bkc-ssh",
+  "command": "kubectl get nodes -o wide; ssh each node and capture hostnamectl plus cloud-init status",
+  "expected": "Run history includes node IPs, hostnames, machine-id prefixes, and cloud-init status output where available."
+}

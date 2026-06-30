@@ -661,6 +661,110 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "Rx-demo k3s cleanup pipeline completed.",
     },
+    "rx-demo-redeploy-from-git-event": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "git-event",
+                "transport": "internal",
+                "kind": "rx-demo-k3s-git-event",
+                "action": "git.event.record",
+                "active": "Recording the Git trigger inputs for the rx-demo redeploy.",
+                "complete": "Git trigger inputs recorded.",
+                "timeout": 30,
+            },
+            {
+                "name": "sync-source-from-git",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-sync-source-from-git",
+                "action": "git.checkout",
+                "active": "Updating the shared rx-demo working copy from Git.",
+                "complete": "Shared rx-demo source is on the requested Git revision.",
+                "timeout": 300,
+            },
+            {
+                "name": "build-and-push",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-redeploy-build-push",
+                "action": "docker.image.build_push",
+                "active": "Building and pushing commit-tagged rx-demo images.",
+                "complete": "Commit-tagged rx-demo images are present in the local registry.",
+                "timeout": 2400,
+            },
+            {
+                "name": "update-images",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-redeploy-update-images",
+                "action": "kubectl.set_image",
+                "active": "Pointing k3s deployments at the commit-tagged images.",
+                "complete": "K3s deployments reference the commit-tagged images.",
+                "timeout": 240,
+            },
+            {
+                "name": "rollout-app",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-rollout-app",
+                "action": "kubectl.rollout_status",
+                "active": "Waiting for the redeployed rx-demo workloads.",
+                "complete": "Redeployed rx-demo workloads are ready.",
+                "timeout": 900,
+            },
+            {
+                "name": "cloudinit-node-check",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-cloudinit-node-check",
+                "action": "k3s.node.provenance",
+                "active": "Capturing k3s node and cloud-init provenance evidence.",
+                "complete": "K3s node and cloud-init evidence captured.",
+                "timeout": 180,
+            },
+            {
+                "name": "visible-change-check",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-smoke-ui-full",
+                "action": "http.content_check",
+                "active": "Generating UI/API activity after the redeploy.",
+                "complete": "Post-redeploy UI/API smoke activity completed.",
+                "timeout": 180,
+            },
+            {
+                "name": "telemetry-still-flowing",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-telemetry-check",
+                "action": "prometheus.metrics.check",
+                "active": "Checking telemetry endpoints after the redeploy.",
+                "complete": "Telemetry endpoints responded after the redeploy.",
+                "timeout": 180,
+            },
+            {
+                "name": "loki-cloudevents-check",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-loki-cloudevents-check",
+                "action": "loki.stream.verify",
+                "active": "Querying Loki for CloudEvents audit records.",
+                "complete": "Loki returned CloudEvents audit records.",
+                "timeout": 300,
+            },
+            {
+                "name": "grafana-loki-check",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-grafana-loki-check",
+                "action": "grafana.datasource.check",
+                "active": "Checking Grafana and publishing the Loki Explore query.",
+                "complete": "Grafana is reachable and the Loki query is ready for the demo.",
+                "timeout": 120,
+            },
+            {
+                "name": "access-links",
+                "transport": "internal",
+                "kind": "rx-demo-k3s-access-links",
+                "active": "Publishing demo access links.",
+                "complete": "Demo access links published.",
+                "timeout": 30,
+            },
+        ],
+        "complete_message": "Rx-demo k3s Git redeploy pipeline completed.",
+    },
     "fedora-workstation-spin": {
         "supports_undeploy": False,
         "stage_plan": [
@@ -2200,6 +2304,7 @@ WORKFLOW_DEFINITIONS = {
 
 # Backward-compatible alias while older runs and drafts still reference the cloud-import name.
 WORKFLOW_DEFINITIONS["fedora-cloud-import"] = WORKFLOW_DEFINITIONS["fedora-template-deploy"]
+WORKFLOW_DEFINITIONS["rx-demo-k3s-redeploy-from-git"] = WORKFLOW_DEFINITIONS["rx-demo-redeploy-from-git-event"]
 
 
 def workflow_is_supported(workflow: str) -> bool:
@@ -4430,6 +4535,228 @@ printf 'tempo=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability tempo)" "
     append_event(run_id, "info", stage_name, json.dumps(links, sort_keys=True))
 
 
+def _rx_demo_redeploy_run_context(run_id: str) -> dict[str, str]:
+    run = get_run(run_id) or {}
+    ref = str(run.get("ref") or "").strip()
+    commit = str(run.get("commit") or "").strip()
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    payload = extra.get("request_payload") if isinstance(extra.get("request_payload"), dict) else {}
+    return {
+        "ref": ref or str(payload.get("ref") or "").strip(),
+        "commit": commit or str(payload.get("commit") or "").strip(),
+        "notes": str(run.get("notes") or payload.get("notes") or "").strip(),
+    }
+
+
+def _run_rx_demo_k3s_git_event(run_id: str, stage_name: str) -> None:
+    context = _rx_demo_redeploy_run_context(run_id)
+    _set_stage(run_id, stage_name, "complete", "Git trigger inputs recorded.")
+    append_event(run_id, "info", stage_name, json.dumps(context, sort_keys=True))
+
+
+def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    context = _rx_demo_redeploy_run_context(run_id)
+    ref = context["ref"]
+    commit = context["commit"]
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "git status --short",
+            "test -z \"$(git status --porcelain)\"",
+            "git fetch --prune origin",
+            f"commit={shlex.quote(commit)}",
+            f"ref={shlex.quote(ref)}",
+            "if test -n \"$commit\"; then",
+            "  git checkout --detach \"$commit\"",
+            "else",
+            "  branch=\"${ref#refs/heads/}\"",
+            "  test -n \"$branch\" || branch=\"$(git branch --show-current)\"",
+            "  test -n \"$branch\"",
+            "  git checkout \"$branch\"",
+            "  git pull --ff-only origin \"$branch\"",
+            "fi",
+            "tag=\"$(git rev-parse --short HEAD)\"",
+            "printf 'rx-demo-git-ready ref=%s commit=%s tag=%s\\n' \"$ref\" \"$(git rev-parse HEAD)\" \"$tag\"",
+        ]
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=300,
+    )
+    tag = ""
+    for line in output.splitlines():
+        if " tag=" in line:
+            tag = line.rsplit(" tag=", 1)[-1].strip()
+    if not re.fullmatch(r"[0-9a-f]{7,12}", tag):
+        raise PipelineExecutionError("Unable to determine rx-demo redeploy image tag from Git checkout.")
+    _store_run_extra(run_id, {"rx_demo_redeploy_tag": tag})
+    _set_stage(run_id, stage_name, "complete", "Shared rx-demo source is on the requested Git revision.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else f"rx-demo-git-ready tag={tag}")
+
+
+def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "tag=\"$(git rev-parse --short HEAD)\"",
+            "test -x tools/build-and-push.sh",
+            f"TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
+            "for repo in rx-ui api-gateway legacy-sync-worker read-model-projection loadgen; do",
+            f"  curl -fsS http://127.0.0.1:{DEMO_REGISTRY_PORT}/v2/rx-demo/$repo/tags/list | grep -F \"$tag\" >/dev/null",
+            "  printf 'registry-image-ready rx-demo/%s:%s\\n' \"$repo\" \"$tag\"",
+            "done",
+        ]
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=2400,
+    )
+    _set_stage(run_id, stage_name, "complete", "Commit-tagged rx-demo images are present in the local registry.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "rx-demo-redeploy-images-ready")
+
+
+def _run_rx_demo_k3s_redeploy_update_images(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "tag=\"$(git rev-parse --short HEAD)\"",
+            f"registry={shlex.quote(DEMO_REGISTRY)}/rx-demo",
+            "k3s kubectl -n rx-demo set image deploy/api-gateway api-gateway=\"$registry/api-gateway:$tag\"",
+            "k3s kubectl -n rx-demo set image deploy/rx-ui rx-ui=\"$registry/rx-ui:$tag\"",
+            "k3s kubectl -n rx-demo set image deploy/legacy-sync-worker worker=\"$registry/legacy-sync-worker:$tag\"",
+            "k3s kubectl -n rx-demo set image deploy/read-model-projection worker=\"$registry/read-model-projection:$tag\"",
+            "if k3s kubectl -n rx-demo get deploy/loadgen >/dev/null 2>&1; then",
+            "  k3s kubectl -n rx-demo set image deploy/loadgen loadgen=\"$registry/loadgen:$tag\"",
+            "fi",
+            "k3s kubectl -n rx-demo get deploy -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image",
+        ]
+    )
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=240,
+    )
+    _set_stage(run_id, stage_name, "complete", "K3s deployments reference the commit-tagged images.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "rx-demo-images-updated")
+
+
+def _run_rx_demo_k3s_cloudinit_node_check(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = r"""
+set -euo pipefail
+k3s kubectl get nodes -o wide
+for node in $(k3s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+  ip="$(k3s kubectl get node "$node" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
+  printf 'node=%s ip=%s\n' "$node" "$ip"
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 "root@$ip" \
+    'set -e; hostnamectl --static 2>/dev/null || hostname; test -d /var/lib/cloud && printf "cloud-init-dir=present\n" || printf "cloud-init-dir=missing\n"; cloud-init status --long 2>/dev/null || true; test -f /etc/machine-id && cut -c1-12 /etc/machine-id'
+done
+"""
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=180,
+    )
+    _set_stage(run_id, stage_name, "complete", "K3s node and cloud-init evidence captured.")
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "cloudinit-node-evidence")
+
+
+def _run_rx_demo_k3s_loki_cloudevents_check(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = r"""
+set -euo pipefail
+node_ip_for_endpoint() {
+  ns="$1"
+  svc="$2"
+  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
+  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+}
+node_port_for_service() {
+  ns="$1"
+  svc="$2"
+  port_name="$3"
+  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
+}
+api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_service rx-demo api-gateway http)"
+loki_base="http://$(node_ip_for_endpoint rx-observability loki):$(node_port_for_service rx-observability loki http)"
+rx_id="RX-BKC-CLOUDEVENTS"
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"approvedBy":"bkc.pipeline","notes":"CloudEvents Loki demo"}' \
+  "$api_base/prescriptions/${rx_id}/approve" | grep -F 'ApproveQueued' >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"refillCount":2}' \
+  "$api_base/prescriptions/${rx_id}/refill" | grep -F 'RefillQueued' >/dev/null
+query='{service_name=~"rx/.+"} |= "CloudEvent audit" |= "RX-BKC-CLOUDEVENTS"'
+for _ in $(seq 1 30); do
+  body="$(curl -fsS --get "$loki_base/loki/api/v1/query_range" \
+    --data-urlencode "query=$query" \
+    --data-urlencode "limit=20" \
+    --data-urlencode "start=$(date -u -d '15 minutes ago' +%s)000000000" \
+    --data-urlencode "end=$(date -u +%s)000000000")"
+  if printf '%s' "$body" | grep -F 'CloudEvent audit' | grep -F 'RX-BKC-CLOUDEVENTS' >/dev/null; then
+    printf 'loki-cloudevents-ok api=%s loki=%s query=%s\n' "$api_base" "$loki_base" "$query"
+    printf '%s' "$body" | grep -o 'CloudEvent audit[^"]*' | head -5
+    exit 0
+  fi
+  sleep 5
+done
+printf '%s\n' "$body"
+exit 1
+"""
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=300,
+    )
+    _set_stage(run_id, stage_name, "complete", "Loki returned CloudEvents audit records.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "loki-cloudevents-ok")
+
+
+def _run_rx_demo_k3s_grafana_loki_check(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = r"""
+set -euo pipefail
+node_ip_for_endpoint() {
+  ns="$1"
+  svc="$2"
+  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
+  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+}
+node_port_for_service() {
+  ns="$1"
+  svc="$2"
+  port_name="$3"
+  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
+}
+grafana_base="http://$(node_ip_for_endpoint rx-observability grafana):$(node_port_for_service rx-observability grafana http)"
+loki_base="http://$(node_ip_for_endpoint rx-observability loki):$(node_port_for_service rx-observability loki http)"
+curl -fsS "$grafana_base/api/health" | grep -F '"database"' >/dev/null
+curl -fsS "$loki_base/ready"
+printf 'grafana-loki-ready grafana=%s loki=%s explore_query=%s\n' "$grafana_base" "$loki_base" '{service_name=~"rx/.+"} |= "CloudEvent audit"'
+"""
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=120,
+    )
+    _set_stage(run_id, stage_name, "complete", "Grafana is reachable and the Loki query is ready for the demo.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "grafana-loki-ready")
+
+
 def _run_rx_demo_k3s_undeploy_capture(run_id: str, stage_name: str) -> None:
     server = _k3s_live_node("server")
     script = r"""
@@ -5550,6 +5877,34 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "rx-demo-k3s-access-links":
             _run_rx_demo_k3s_access_links(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-git-event":
+            _run_rx_demo_k3s_git_event(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-sync-source-from-git":
+            _run_rx_demo_k3s_sync_source_from_git(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-redeploy-build-push":
+            _run_rx_demo_k3s_redeploy_build_push(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-redeploy-update-images":
+            _run_rx_demo_k3s_redeploy_update_images(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-cloudinit-node-check":
+            _run_rx_demo_k3s_cloudinit_node_check(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-loki-cloudevents-check":
+            _run_rx_demo_k3s_loki_cloudevents_check(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-grafana-loki-check":
+            _run_rx_demo_k3s_grafana_loki_check(run_id, stage_name)
             continue
 
         if kind == "rx-demo-k3s-undeploy-capture":

@@ -197,6 +197,20 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "verify-removed",
             "registry-retained",
         ]
+    if normalized == "rx-demo-redeploy-from-git-event" or normalized == "rx-demo-k3s-redeploy-from-git":
+        return [
+            "git-event",
+            "sync-source-from-git",
+            "build-and-push",
+            "update-images",
+            "rollout-app",
+            "cloudinit-node-check",
+            "visible-change-check",
+            "telemetry-still-flowing",
+            "loki-cloudevents-check",
+            "grafana-loki-check",
+            "access-links",
+        ]
     if normalized == "demo-k3s-add-node":
         if action_mode == "undeploy":
             return [

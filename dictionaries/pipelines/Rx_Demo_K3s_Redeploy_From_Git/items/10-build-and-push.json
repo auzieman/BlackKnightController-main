@@ -1,8 +1,9 @@
 {
   "id": "build-and-push",
   "kind": "command",
-  "summary": "Build and push images using the commit hash as the image tag.",
-  "working_directory": "/home/auzieman/Projects/rx-demo",
-  "command": "DEMO_TAG=$(git rev-parse --short HEAD) && PUSH=1 REGISTRY=\"$DEMO_REGISTRY\" TAG=\"$DEMO_TAG\" tools/build-and-push.sh"
+  "summary": "Build and push rx-demo images using the checked-out Git commit as the image tag.",
+  "transport": "ssh-manager",
+  "working_directory": "/mnt/swarm/shared/rx-demo",
+  "command": "DEMO_TAG=$(git rev-parse --short HEAD) && PUSH=1 REGISTRY=127.0.0.1:5001/rx-demo TAG=\"$DEMO_TAG\" tools/build-and-push.sh",
+  "expected": "Registry tag lists include rx-ui, api-gateway, legacy-sync-worker, read-model-projection, and loadgen for the commit tag."
 }
-

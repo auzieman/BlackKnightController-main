@@ -1,0 +1,8 @@
+{
+  "id": "update-images",
+  "kind": "command",
+  "summary": "Point k3s application deployments at the newly pushed commit-tagged images.",
+  "transport": "bkc-ssh",
+  "command": "kubectl -n rx-demo set image deploy/api-gateway deploy/rx-ui deploy/legacy-sync-worker deploy/read-model-projection",
+  "expected": "api-gateway, rx-ui, legacy-sync-worker, read-model-projection, and loadgen reference the same commit tag."
+}

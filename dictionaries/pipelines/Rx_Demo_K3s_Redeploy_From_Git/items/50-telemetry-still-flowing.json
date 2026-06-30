@@ -1,7 +1,8 @@
 {
   "id": "telemetry-still-flowing",
   "kind": "validation",
-  "summary": "Confirm telemetry still flows after the UI rollout.",
-  "command": "curl -fsS \"$RX_OTEL_METRICS/metrics\" | grep -E 'rx_component_health|rx_' | head"
+  "summary": "Confirm telemetry still flows after the redeploy.",
+  "transport": "bkc-ssh",
+  "command": "curl OTel metrics, Prometheus readiness, and Grafana health through discovered NodePort endpoints",
+  "expected": "Run history includes rx/otel metrics and Grafana/Prometheus endpoint URLs."
 }
-
