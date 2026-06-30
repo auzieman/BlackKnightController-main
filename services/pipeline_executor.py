@@ -4695,7 +4695,8 @@ for node in $(k3s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.nam
   ip="$(k3s kubectl get node "$node" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
   printf 'node=%s ip=%s\n' "$node" "$ip"
   ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 "root@$ip" \
-    'set -e; hostnamectl --static 2>/dev/null || hostname; test -d /var/lib/cloud && printf "cloud-init-dir=present\n" || printf "cloud-init-dir=missing\n"; cloud-init status --long 2>/dev/null || true; test -f /etc/machine-id && cut -c1-12 /etc/machine-id'
+    'set -e; hostnamectl --static 2>/dev/null || hostname; test -d /var/lib/cloud && printf "cloud-init-dir=present\n" || printf "cloud-init-dir=missing\n"; cloud-init status --long 2>/dev/null || true; test -f /etc/machine-id && cut -c1-12 /etc/machine-id' \
+    || printf 'node-ssh-unavailable=%s\n' "$node"
 done
 """
     output = run_remote_command(
