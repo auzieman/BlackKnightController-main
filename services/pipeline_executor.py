@@ -4558,19 +4558,31 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
     context = _rx_demo_redeploy_run_context(run_id)
     ref = context["ref"]
     commit = context["commit"]
+    git_work = "/mnt/swarm/shared/.rx-demo-git-work"
     script = "\n".join(
         [
             "set -euo pipefail",
-            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
             "if ! command -v git >/dev/null 2>&1; then",
             "  if command -v dnf >/dev/null 2>&1; then dnf -y install git;",
             "  elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y git;",
             "  elif command -v apk >/dev/null 2>&1; then apk add --no-cache git;",
             "  else echo 'git package manager not found' >&2; exit 1; fi",
             "fi",
+            "if ! command -v rsync >/dev/null 2>&1; then",
+            "  if command -v dnf >/dev/null 2>&1; then dnf -y install rsync;",
+            "  elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y rsync;",
+            "  elif command -v apk >/dev/null 2>&1; then apk add --no-cache rsync;",
+            "  else echo 'rsync package manager not found' >&2; exit 1; fi",
+            "fi",
             "git_cmd='git'",
             "if id auzieman >/dev/null 2>&1 && command -v runuser >/dev/null 2>&1; then git_cmd='runuser -u auzieman -- git'; fi",
-            "$git_cmd status --short",
+            f"live_dir={shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            f"git_work={shlex.quote(git_work)}",
+            "if ! test -d \"$git_work/.git\"; then",
+            "  rm -rf \"$git_work\"",
+            "  $git_cmd clone git@github.com:auzieman/rx-demo.git \"$git_work\"",
+            "fi",
+            "cd \"$git_work\"",
             "test -z \"$($git_cmd status --porcelain)\"",
             "$git_cmd fetch --prune origin",
             f"commit={shlex.quote(commit)}",
@@ -4585,7 +4597,13 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             "  $git_cmd pull --ff-only origin \"$branch\"",
             "fi",
             "tag=\"$($git_cmd rev-parse --short HEAD)\"",
-            "printf 'rx-demo-git-ready ref=%s commit=%s tag=%s\\n' \"$ref\" \"$($git_cmd rev-parse HEAD)\" \"$tag\"",
+            "full_commit=\"$($git_cmd rev-parse HEAD)\"",
+            "mkdir -p \"$live_dir\"",
+            "rsync -a --delete --exclude='.git/' \"$git_work\"/ \"$live_dir\"/",
+            "cd \"$live_dir\"",
+            "test -f rx-demo.sln",
+            "test -x tools/build-and-push.sh",
+            "printf 'rx-demo-git-ready ref=%s commit=%s tag=%s\\n' \"$ref\" \"$full_commit\" \"$tag\"",
         ]
     )
     output = run_remote_command(
