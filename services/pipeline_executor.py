@@ -4558,7 +4558,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
     context = _rx_demo_redeploy_run_context(run_id)
     ref = context["ref"]
     commit = context["commit"]
-    git_work = "/mnt/swarm/shared/.rx-demo-git-work"
+    git_work = f"{RX_DEMO_SHARED_SOURCE}/.bkc-git-work"
     script = "\n".join(
         [
             "set -euo pipefail",
@@ -4599,7 +4599,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             "tag=\"$($git_cmd rev-parse --short HEAD)\"",
             "full_commit=\"$($git_cmd rev-parse HEAD)\"",
             "mkdir -p \"$live_dir\"",
-            "rsync -a --delete --exclude='.git/' \"$git_work\"/ \"$live_dir\"/",
+            "rsync -a --delete --exclude='.git/' --exclude='.bkc-git-work/' \"$git_work\"/ \"$live_dir\"/",
             "cd \"$live_dir\"",
             "test -f rx-demo.sln",
             "test -x tools/build-and-push.sh",
