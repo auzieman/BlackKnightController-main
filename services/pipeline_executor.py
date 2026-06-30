@@ -721,7 +721,7 @@ WORKFLOW_DEFINITIONS = {
             {
                 "name": "visible-change-check",
                 "transport": "bkc-ssh",
-                "kind": "rx-demo-k3s-smoke-ui-full",
+                "kind": "rx-demo-k3s-redeploy-visible-activity",
                 "action": "http.content_check",
                 "active": "Generating UI/API activity after the redeploy.",
                 "complete": "Post-redeploy UI/API smoke activity completed.",
@@ -4781,6 +4781,53 @@ exit 1
     append_event(run_id, "info", stage_name, output[-2400:] if output else "loki-cloudevents-ok")
 
 
+def _run_rx_demo_k3s_redeploy_visible_activity(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = r"""
+set -euo pipefail
+node_ip_for_endpoint() {
+  ns="$1"
+  svc="$2"
+  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
+  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+}
+node_port_for_service() {
+  ns="$1"
+  svc="$2"
+  port_name="$3"
+  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
+}
+ui_base="http://$(node_ip_for_endpoint rx-demo rx-ui):$(node_port_for_service rx-demo rx-ui http)"
+api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_service rx-demo api-gateway http)"
+rx_id="RX-BKC-REDEPLOY"
+for _ in $(seq 1 30); do
+  if curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null; then
+    break
+  fi
+  sleep 3
+done
+curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null
+curl -fsS "$api_base/healthz"
+curl -fsS "$api_base/readyz"
+curl -fsS "$api_base/prescriptions/${rx_id}" | grep -F "$rx_id" >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"approvedBy":"bkc.pipeline","notes":"BKC redeploy visible activity"}' \
+  "$api_base/prescriptions/${rx_id}/approve" | grep -F 'ApproveQueued' >/dev/null
+curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"refillCount":1}' \
+  "$api_base/prescriptions/${rx_id}/refill" | grep -F 'RefillQueued' >/dev/null
+printf 'rx-redeploy-visible-activity-ok ui=%s api=%s rx_id=%s\n' "$ui_base" "$api_base" "$rx_id"
+"""
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=180,
+    )
+    _set_stage(run_id, stage_name, "complete", "Post-redeploy UI/API smoke activity completed.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-redeploy-visible-activity-ok")
+
+
 def _run_rx_demo_k3s_grafana_loki_check(run_id: str, stage_name: str) -> None:
     server = _k3s_live_node("server")
     script = r"""
@@ -5957,6 +6004,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "rx-demo-k3s-loki-cloudevents-check":
             _run_rx_demo_k3s_loki_cloudevents_check(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-redeploy-visible-activity":
+            _run_rx_demo_k3s_redeploy_visible_activity(run_id, stage_name)
             continue
 
         if kind == "rx-demo-k3s-grafana-loki-check":
