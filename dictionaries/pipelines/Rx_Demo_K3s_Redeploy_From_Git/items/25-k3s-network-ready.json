@@ -1,0 +1,8 @@
+{
+  "id": "k3s-network-ready",
+  "kind": "validation",
+  "summary": "Verify k3s pod networking and firewalld allowances before waiting on app readiness.",
+  "transport": "bkc-ssh",
+  "command": "firewall-cmd allow cni0/flannel.1 and k3s/flannel ports on discovered k3s nodes",
+  "expected": "All k3s nodes allow flannel VXLAN traffic and expose current rx-demo service endpoints."
+}

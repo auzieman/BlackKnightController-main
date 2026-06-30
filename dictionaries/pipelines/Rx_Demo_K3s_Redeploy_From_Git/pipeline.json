@@ -9,6 +9,7 @@
     "sync-source-from-git",
     "build-and-push",
     "update-images",
+    "k3s-network-ready",
     "rollout-app",
     "cloudinit-node-check",
     "visible-change-check",
@@ -22,6 +23,7 @@
     "git.checkout",
     "docker.buildx.push",
     "kubectl.set_image",
+    "k3s.firewall.flannel",
     "kubectl.rollout_status",
     "k3s.node.provenance",
     "http.content_check",
@@ -32,6 +34,7 @@
   "gates": [
     "commit-hash-present",
     "unique-image-tag",
+    "k3s-pod-network-ready",
     "rx-demo-rollout-complete",
     "visible-ui-change",
     "cloudevents-audit-in-loki",

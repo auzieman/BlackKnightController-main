@@ -203,6 +203,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "sync-source-from-git",
             "build-and-push",
             "update-images",
+            "k3s-network-ready",
             "rollout-app",
             "cloudinit-node-check",
             "visible-change-check",

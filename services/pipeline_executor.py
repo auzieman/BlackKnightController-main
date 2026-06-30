@@ -701,6 +701,15 @@ WORKFLOW_DEFINITIONS = {
                 "timeout": 240,
             },
             {
+                "name": "k3s-network-ready",
+                "transport": "bkc-ssh",
+                "kind": "rx-demo-k3s-network-ready",
+                "action": "k3s.firewall.flannel",
+                "active": "Verifying k3s pod networking and firewalld allowances.",
+                "complete": "K3s pod networking prerequisites are ready.",
+                "timeout": 300,
+            },
+            {
                 "name": "rollout-app",
                 "transport": "bkc-ssh",
                 "kind": "rx-demo-k3s-rollout-app",
@@ -4352,11 +4361,14 @@ def _run_rx_demo_k3s_apply_demo_overlay(run_id: str, stage_name: str) -> None:
 
 def _run_rx_demo_k3s_rollout_app(run_id: str, stage_name: str) -> None:
     server = _k3s_live_node("server")
-    deployments = "api-gateway legacy-sync-worker otel-collector rabbitmq read-model-projection redis rx-ui"
+    deployments = "api-gateway legacy-sync-worker loadgen otel-collector rabbitmq read-model-projection redis rx-ui"
     script = "\n".join(
         [
             "set -euo pipefail",
             "k3s kubectl -n rx-demo get pods -o wide",
+            f"for deploy in {deployments}; do",
+            "  k3s kubectl -n rx-demo rollout restart deploy/$deploy",
+            "done",
             f"for deploy in {deployments}; do",
             "  k3s kubectl -n rx-demo rollout status deploy/$deploy --timeout=300s",
             "done",
@@ -4373,6 +4385,69 @@ def _run_rx_demo_k3s_rollout_app(run_id: str, stage_name: str) -> None:
     )
     _set_stage(run_id, stage_name, "complete", "Rx-demo application workloads are ready.")
     append_event(run_id, "info", stage_name, output[-3000:] if output else "rx-demo-rollout-ready")
+
+
+def _run_rx_demo_k3s_network_ready(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    _set_stage(run_id, stage_name, "active", "Verifying k3s pod networking and firewalld allowances.")
+    discover = "\n".join(
+        [
+            "set -euo pipefail",
+            "k3s kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'",
+        ]
+    )
+    node_output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(discover)}",
+        timeout=60,
+    )
+    node_hosts = [line.strip() for line in node_output.splitlines() if line.strip()]
+    if not node_hosts:
+        raise PipelineExecutionError("No k3s node InternalIP addresses were discovered.")
+
+    repair_script = "\n".join(
+        [
+            "set -euo pipefail",
+            "if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then",
+            "  firewall-cmd --permanent --zone=trusted --add-interface=cni0 || true",
+            "  firewall-cmd --permanent --zone=trusted --add-interface=flannel.1 || true",
+            "  firewall-cmd --permanent --add-port=8472/udp || true",
+            "  firewall-cmd --permanent --add-port=6443/tcp || true",
+            "  firewall-cmd --permanent --add-port=10250/tcp || true",
+            "  firewall-cmd --reload",
+            "  echo trusted=$(firewall-cmd --zone=trusted --list-interfaces)",
+            "  echo ports=$(firewall-cmd --list-ports)",
+            "else",
+            "  echo firewalld-not-active",
+            "fi",
+        ]
+    )
+    outputs = []
+    for host in node_hosts:
+        output = run_remote_command(
+            host=host,
+            user="root",
+            command=f"bash -lc {shlex.quote(repair_script)}",
+            timeout=120,
+        )
+        outputs.append(f"=== {host} ===\n{output}")
+
+    verify_script = "\n".join(
+        [
+            "set -euo pipefail",
+            "k3s kubectl get nodes -o wide",
+            "k3s kubectl -n rx-demo get endpoints rabbitmq otel-collector api-gateway rx-ui -o wide || true",
+        ]
+    )
+    verify = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(verify_script)}",
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "K3s pod networking prerequisites are ready.")
+    append_event(run_id, "info", stage_name, ("\n".join(outputs) + "\n" + verify)[-3600:])
 
 
 def _run_rx_demo_k3s_rollout_observability(run_id: str, stage_name: str) -> None:
@@ -6017,6 +6092,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "rx-demo-k3s-redeploy-update-images":
             _run_rx_demo_k3s_redeploy_update_images(run_id, stage_name)
+            continue
+
+        if kind == "rx-demo-k3s-network-ready":
+            _run_rx_demo_k3s_network_ready(run_id, stage_name)
             continue
 
         if kind == "rx-demo-k3s-cloudinit-node-check":

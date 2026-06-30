@@ -3,6 +3,6 @@
   "kind": "validation",
   "summary": "Wait for the full rx-demo application rollout to complete.",
   "transport": "bkc-ssh",
-  "command": "kubectl -n rx-demo rollout status deploy/api-gateway deploy/rx-ui deploy/legacy-sync-worker deploy/read-model-projection",
+  "command": "kubectl -n rx-demo rollout restart/status deploy/api-gateway deploy/rx-ui deploy/legacy-sync-worker deploy/read-model-projection deploy/loadgen",
   "expected": "All rx-demo app workloads are ready after the image update."
 }

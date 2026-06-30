@@ -448,7 +448,7 @@ def test_rx_demo_video_pipeline_set_loads_from_folders():
         "demo-swarm-image-registry": 7,
         "rx-demo-k3s-registry-preflight": 4,
         "rx-demo-k3s-deploy": 10,
-        "rx-demo-k3s-redeploy-from-git": 11,
+        "rx-demo-k3s-redeploy-from-git": 12,
         "rx-demo-k3s-undeploy": 5,
     }
 
