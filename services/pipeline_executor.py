@@ -4609,6 +4609,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             "cd \"$live_dir\"",
             "test -f rx-demo.sln",
             "test -x tools/build-and-push.sh",
+            "printf '%s\\n' \"$tag\" > .bkc-source-tag",
             "printf 'rx-demo-git-ready ref=%s commit=%s tag=%s\\n' \"$ref\" \"$full_commit\" \"$tag\"",
         ]
     )
@@ -4635,7 +4636,8 @@ def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings:
         [
             "set -euo pipefail",
             f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
-            "tag=\"$(git rev-parse --short HEAD)\"",
+            "tag=\"$(cat .bkc-source-tag)\"",
+            "test -n \"$tag\"",
             "test -x tools/build-and-push.sh",
             f"TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
             "for repo in rx-ui api-gateway legacy-sync-worker read-model-projection loadgen; do",
@@ -4661,7 +4663,8 @@ def _run_rx_demo_k3s_redeploy_update_images(run_id: str, stage_name: str) -> Non
         [
             "set -euo pipefail",
             f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
-            "tag=\"$(git rev-parse --short HEAD)\"",
+            "tag=\"$(cat .bkc-source-tag)\"",
+            "test -n \"$tag\"",
             f"registry={shlex.quote(DEMO_REGISTRY)}/rx-demo",
             "k3s kubectl -n rx-demo set image deploy/api-gateway api-gateway=\"$registry/api-gateway:$tag\"",
             "k3s kubectl -n rx-demo set image deploy/rx-ui rx-ui=\"$registry/rx-ui:$tag\"",
