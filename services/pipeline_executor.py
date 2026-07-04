@@ -4283,7 +4283,7 @@ def _run_rx_demo_k3s_ready(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, (output[-1600:] if output else "k3s-ready") + "\ntransport=kubernetes-api")
 
 
-def _run_rx_demo_k3s_secrets(run_id: str, stage_name: str) -> None:
+def _ensure_rx_demo_runtime_secrets() -> str:
     namespace = kubectl_text(["get", "namespace", "rx-demo"], timeout=60, check=False)
     outputs = []
     if "not found" in namespace.lower():
@@ -4312,7 +4312,11 @@ def _run_rx_demo_k3s_secrets(run_id: str, stage_name: str) -> None:
         handle.flush()
         outputs.append(kubectl_text(["apply", "-f", handle.name], timeout=60))
     outputs.append(kubectl_text(["-n", "rx-demo", "get", "secret", "rx-demo-secrets", "-o", "name"], timeout=60))
-    output = "\n".join(outputs)
+    return "\n".join(outputs)
+
+
+def _run_rx_demo_k3s_secrets(run_id: str, stage_name: str) -> None:
+    output = _ensure_rx_demo_runtime_secrets()
     _set_stage(run_id, stage_name, "complete", "Rx-demo runtime secrets are present.")
     append_event(run_id, "info", stage_name, (output[-1200:] if output else "rx-demo-secrets-present") + "\ntransport=kubernetes-api")
 
@@ -4707,6 +4711,7 @@ def _ensure_rx_demo_overlay_present_for_redeploy() -> str:
     if "not found" not in namespace.lower() and "not found" not in api_deploy.lower():
         return "rx-demo-overlay-present"
 
+    secret_output = _ensure_rx_demo_runtime_secrets()
     server = _k3s_live_node("server")
     script = "\n".join(
         [
@@ -4725,7 +4730,13 @@ def _ensure_rx_demo_overlay_present_for_redeploy() -> str:
         command=f"bash -lc {shlex.quote(script)}",
         timeout=300,
     )
-    return "rx-demo-overlay-created-for-redeploy\n" + (output[-1800:] if output else "k3s-demo-overlay-applied")
+    return "\n".join(
+        [
+            "rx-demo-overlay-created-for-redeploy",
+            secret_output[-800:] if secret_output else "rx-demo-secrets-present",
+            output[-1800:] if output else "k3s-demo-overlay-applied",
+        ]
+    )
 
 
 def _run_rx_demo_k3s_redeploy_update_images(run_id: str, stage_name: str) -> None:
@@ -4822,8 +4833,8 @@ def _run_rx_demo_k3s_redeploy_visible_activity(run_id: str, stage_name: str) -> 
     ui_base = _k8s_nodeport_base("rx-demo", "rx-ui", "http")
     api_base = _k8s_nodeport_base("rx-demo", "api-gateway", "http")
     rx_id = "RX-BKC-REDEPLOY"
-    kubectl_text(["-n", "rx-demo", "rollout", "restart", "deploy/rabbitmq"], timeout=120)
-    kubectl_text(["-n", "rx-demo", "rollout", "status", "deploy/rabbitmq", "--timeout=180s"], timeout=240)
+    kubectl_text(["-n", "rx-demo", "rollout", "restart", "deployment", "rabbitmq"], timeout=120)
+    kubectl_text(["-n", "rx-demo", "rollout", "status", "deployment", "rabbitmq", "--timeout=180s"], timeout=240)
     _retry_http_contains(f"{ui_base}/", "Prescription Demo UI", attempts=30, delay=3)
     _http_text(f"{api_base}/healthz")
     _retry_http_contains(f"{api_base}/readyz", '"rabbitmq":"ok"', attempts=40, delay=3)
