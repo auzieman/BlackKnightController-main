@@ -4612,7 +4612,7 @@ def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings:
             "tag=\"$(cat .bkc-source-tag)\"",
             "test -n \"$tag\"",
             "test -x tools/build-and-push.sh",
-            f"DOCKER_BUILDKIT=0 TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
+            f"TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
             "for repo in rx-ui api-gateway legacy-sync-worker read-model-projection loadgen; do",
             f"  curl -fsS http://127.0.0.1:{DEMO_REGISTRY_PORT}/v2/rx-demo/$repo/tags/list | grep -F \"$tag\" >/dev/null",
             "  printf 'registry-image-ready rx-demo/%s:%s\\n' \"$repo\" \"$tag\"",
