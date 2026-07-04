@@ -5,4 +5,3 @@
   "command": "ssh <k3s-server> 'sudo cat /var/lib/rancher/k3s/server/node-token' > /tmp/k3s-node-token",
   "safety": "Do not show token contents on camera. Prefer BKC secret storage or an ephemeral file with restrictive permissions."
 }
-

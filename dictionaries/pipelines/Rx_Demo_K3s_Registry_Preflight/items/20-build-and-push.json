@@ -12,4 +12,3 @@
     "$DEMO_REGISTRY/loadgen:$DEMO_TAG"
   ]
 }
-

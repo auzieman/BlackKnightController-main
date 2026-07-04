@@ -8,4 +8,3 @@ local Docker Compose outcome:
 - One synthetic prescription can be looked up, approved, and read back.
 - Core workloads are ready.
 - OTel collector metrics are exposed for Prometheus/Grafana.
-

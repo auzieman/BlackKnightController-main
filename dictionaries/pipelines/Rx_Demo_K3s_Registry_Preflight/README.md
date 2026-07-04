@@ -10,4 +10,3 @@ This is the "what happens before Kubernetes can pull the app" lane:
 4. Verify the registry catalog exposes the pushed repositories.
 
 Harbor is the production-style answer. `registry:2` is the small demo answer.
-

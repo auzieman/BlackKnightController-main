@@ -5,4 +5,3 @@
   "path": "/etc/rancher/k3s/registries.yaml",
   "command": "ssh <k3s-node> 'sudo test -s /etc/rancher/k3s/registries.yaml && sudo grep -F \"<registry-host>:5000\" /etc/rancher/k3s/registries.yaml'"
 }
-
