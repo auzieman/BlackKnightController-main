@@ -15,6 +15,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DB_PATH = BASE_DIR / "dictionaries" / "bkc.db"
+_INIT_SIGNATURE: tuple[Path, int, int] | None = None
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
@@ -98,6 +99,15 @@ def _migrate_api_keys_columns(conn: sqlite3.Connection) -> None:
 
 
 def init_db() -> None:
+    global _INIT_SIGNATURE
+    db_path = DB_PATH.resolve()
+    try:
+        stat = db_path.stat()
+        signature = (db_path, stat.st_mtime_ns, stat.st_size)
+        if _INIT_SIGNATURE == signature:
+            return
+    except FileNotFoundError:
+        pass
     with get_connection() as conn:
         conn.executescript(SCHEMA)
         _migrate_api_keys_columns(conn)
@@ -109,6 +119,8 @@ def init_db() -> None:
                 ("Home", "default", now),
             )
         conn.commit()
+    stat = db_path.stat()
+    _INIT_SIGNATURE = (db_path, stat.st_mtime_ns, stat.st_size)
 
 
 def count_users(conn: sqlite3.Connection | None = None) -> int:

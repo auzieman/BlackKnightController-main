@@ -25,6 +25,7 @@ csrf = CSRFProtect()
 
 _ce_initialized = False
 _bootstrap_logged = False
+_db_initialized = False
 
 
 def _secret_key(app: Flask) -> str:
@@ -47,12 +48,15 @@ def _secret_key(app: Flask) -> str:
 
 
 def _ensure_db() -> None:
-    global _bootstrap_logged
+    global _bootstrap_logged, _db_initialized
+    if _db_initialized:
+        return
     bkc_db.init_db()
     msg = bkc_db.bootstrap_admin_if_configured()
     if msg and not _bootstrap_logged:
         logger.warning("%s", msg)
         _bootstrap_logged = True
+    _db_initialized = True
 
 
 def _bind_tenant_for_ui() -> None:
@@ -135,7 +139,6 @@ def init_ce_app(app: Flask) -> None:
 
     @app.before_request
     def ce_require_login_and_tenant():
-        _ensure_db()
         ep = request.endpoint
         if ep in (None, "auth.login"):
             return None
@@ -148,6 +151,7 @@ def init_ce_app(app: Flask) -> None:
         if ep == "health_public.ready":
             return None
 
+        _ensure_db()
         if not current_user.is_authenticated:
             return redirect(url_for("auth.login", next=request.url))
         _bind_tenant_for_ui()
