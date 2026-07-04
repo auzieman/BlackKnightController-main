@@ -5689,10 +5689,21 @@ def _run_demo_k3s_add_node_reset_verify(run_id: str, stage_name: str) -> None:
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    skip_completed_stages = bool(extra.get("skip_completed_stages"))
+    completed_stage_names = {
+        str(stage.get("name", ""))
+        for stage in run.get("stages", [])
+        if str(stage.get("status", "")).strip().lower() == "complete"
+    }
     mark_run_active(run_id, f"Running {workflow} pipeline stages.")
 
     for stage in stage_plan:
         stage_name = str(stage["name"])
+        if skip_completed_stages and stage_name in completed_stage_names:
+            append_event(run_id, "info", stage_name, "Skipping previously completed stage for review-phase resume.")
+            continue
         kind = str(stage.get("kind", "remote-command"))
         _set_stage(run_id, stage_name, "active", str(stage.get("active", f"Running {stage_name}.")))
 
