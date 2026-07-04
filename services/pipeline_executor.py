@@ -74,6 +74,7 @@ LAB_STORAGE_K3S_HOST_LIST = LAB_STORAGE_K3S_HOSTS.split()
 LAB_STORAGE_ALL_HOST_LIST = LAB_STORAGE_ALL_HOSTS.split()
 LAB_STORAGE_MIN_ROOT_BYTES = 50_000_000_000
 RX_DEMO_SHARED_SOURCE = "/mnt/swarm/shared/rx-demo"
+RX_DEMO_REDEPLOY_SOURCE = "/tmp/bkc-rx-demo-git-work"
 RX_DEMO_RX_UI_IMAGE = "rx-demo/rx-ui:latest"
 RX_DEMO_RX_UI_TAR = "/mnt/swarm/shared/rx-demo-rx-ui-latest.tar"
 RX_DEMO_K3S_DEMO_TAG = "097889a"
@@ -4531,7 +4532,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
     context = _rx_demo_redeploy_run_context(run_id)
     ref = context["ref"]
     commit = context["commit"]
-    git_work = f"{RX_DEMO_SHARED_SOURCE}/.bkc-git-work"
+    git_work = RX_DEMO_REDEPLOY_SOURCE
     script = "\n".join(
         [
             "set -euo pipefail",
@@ -4555,7 +4556,6 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             "  chown auzieman:auzieman /home/auzieman/.ssh/known_hosts",
             "  chmod 0600 /home/auzieman/.ssh/known_hosts",
             "fi",
-            f"live_dir={shlex.quote(RX_DEMO_SHARED_SOURCE)}",
             f"git_work={shlex.quote(git_work)}",
             "if id auzieman >/dev/null 2>&1 && test -e \"$git_work\"; then",
             "  chown -R auzieman:auzieman \"$git_work\"",
@@ -4580,9 +4580,6 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
             "fi",
             "tag=\"$($git_cmd rev-parse --short HEAD)\"",
             "full_commit=\"$($git_cmd rev-parse HEAD)\"",
-            "mkdir -p \"$live_dir\"",
-            "rsync -a --delete --exclude='.git/' --exclude='.bkc-git-work/' \"$git_work\"/ \"$live_dir\"/",
-            "cd \"$live_dir\"",
             "test -f rx-demo.sln",
             "test -x tools/build-and-push.sh",
             "printf '%s\\n' \"$tag\" > .bkc-source-tag",
@@ -4603,7 +4600,7 @@ def _run_rx_demo_k3s_sync_source_from_git(run_id: str, stage_name: str, settings
     if not re.fullmatch(r"[0-9a-f]{7,12}", tag):
         raise PipelineExecutionError("Unable to determine rx-demo redeploy image tag from Git checkout.")
     _store_run_extra(run_id, {"rx_demo_redeploy_tag": tag})
-    _set_stage(run_id, stage_name, "complete", "Shared rx-demo source is on the requested Git revision.")
+    _set_stage(run_id, stage_name, "complete", "Local rx-demo redeploy source is on the requested Git revision.")
     append_event(run_id, "info", stage_name, output[-1600:] if output else f"rx-demo-git-ready tag={tag}")
 
 
@@ -4611,11 +4608,11 @@ def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings:
     script = "\n".join(
         [
             "set -euo pipefail",
-            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            f"cd {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}",
             "tag=\"$(cat .bkc-source-tag)\"",
             "test -n \"$tag\"",
             "test -x tools/build-and-push.sh",
-            f"TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
+            f"DOCKER_BUILDKIT=0 TAG=\"$tag\" REGISTRY=127.0.0.1:{DEMO_REGISTRY_PORT}/rx-demo PUSH=1 tools/build-and-push.sh",
             "for repo in rx-ui api-gateway legacy-sync-worker read-model-projection loadgen; do",
             f"  curl -fsS http://127.0.0.1:{DEMO_REGISTRY_PORT}/v2/rx-demo/$repo/tags/list | grep -F \"$tag\" >/dev/null",
             "  printf 'registry-image-ready rx-demo/%s:%s\\n' \"$repo\" \"$tag\"",
