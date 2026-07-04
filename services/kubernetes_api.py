@@ -67,6 +67,8 @@ def kubectl_text(args: list[str], *, timeout: int = 30, check: bool = True) -> s
         raise KubernetesScanError(f"Kubeconfig not found: {kubeconfig}")
 
     completed = _kubectl(args, kubeconfig, context, timeout=timeout, check=check)
+    if completed.returncode == 0:
+        return completed.stdout.strip() or completed.stderr.strip()
     output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
     if not check and completed.returncode != 0:
         return output or f"kubectl exited {completed.returncode}"
