@@ -4,6 +4,33 @@ This file captures the practical direction after the recent lab sprint: Fedora c
 
 The goal is to spend limited implementation time on changes that reduce future friction.
 
+## Recent Demo Lessons
+
+The rx-demo/k3s/Grafana track gave us several product-level lessons that should
+shape the next BKC work:
+
+- Keep the pipeline as the primary activity path. Direct shell work is useful
+  for repair, but successful diagnostics should become BKC SSH or API actions.
+- Show the same execution path in the UI that we use during rehearsal. Hidden
+  direct steps make run history look fragmented and reduce confidence.
+- Treat source state and runtime state as separate products. Git-tracked
+  recipes, mounted dictionaries, NFS working copies, credentials, and run
+  history all need clear ownership.
+- Add preflight gates for target readiness. Node readiness, disk space, image
+  registry reachability, DNS, shared paths, and API credentials should fail
+  early with plain language.
+- Validate the actual data path behind dashboards. The Loki issue was not just
+  a query problem; Promtail was writing to Swarm Loki while Grafana queried the
+  k3s Loki.
+- Keep demo observability bounded. Lower load, short retention, narrow dashboard
+  defaults, and copyable transaction filters made the CloudEvents view usable.
+- Capture useful recovery moves as reusable actions, such as purge/recreate
+  Loki, recycle Promtail, verify labels, generate a known transaction, and query
+  the same Loki endpoint Grafana uses.
+
+These should become visible product behaviors: preflight status, clear run
+history, reusable troubleshooting actions, and resource-specific next steps.
+
 ## Priority 1: Action Catalog
 
 Create `services/action_catalog.py` and a small file-backed catalog for reusable actions.
@@ -22,10 +49,33 @@ Initial actions should come from work that already succeeded in the lab:
 - `prometheus.scrape_job.ensure`
 - `prometheus.targets.verify`
 - `loki.stream.verify`
+- `loki.purge_ephemeral`
+- `loki.query.verify`
+- `promtail.endpoint.verify`
+- `promtail.recycle`
 - `docker.service.force_update`
 - `repo.git.status`
+- `vcenter.probe`
+- `vcenter.inventory.discover`
 
 The first implementation can be conservative: metadata plus Python handlers for known action kinds. It does not need a full visual designer.
+
+## Priority 1A: First External Module Candidate
+
+Use a vCenter simulator-backed connector as the first
+`BlackKnightController-modules` proving ground. The module can target `vcsim`
+from the VMware `govmomi` project before a real vCenter environment exists.
+
+Initial module goals:
+
+- launch or verify a `vcsim` endpoint
+- store a vCenter-style integration profile
+- probe login/session health
+- discover datacenter, cluster, host, datastore, network, folder, and VM objects
+- emit normalized resource graph facts
+- run one harmless VM power-state action against the simulator
+
+The detailed plan lives in `docs/vcenter-simulator-module-plan.md`.
 
 ## Priority 2: Convert K3s Housekeeping To Actions
 

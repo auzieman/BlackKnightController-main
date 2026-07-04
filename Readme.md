@@ -10,6 +10,11 @@ who already use SSH, Ansible, Docker, `kubectl`, and hypervisor APIs, and want a
 cleaner place to see what exists, run the next safe action, and turn repeated
 repairs into reusable workflows.
 
+## Introduction Video
+
+Watch the first-cut introduction to BKC and the rx-demo pipeline work:
+[Black Knight Controller introduction](https://youtu.be/fv6sJv2nJPM).
+
 ![BKC overview and pipeline run example](docs/images/Screenshot1.png)
 
 ## What It Helps With
