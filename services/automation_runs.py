@@ -64,10 +64,184 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     action_mode = str((extra or {}).get("action_mode", "")).strip().lower()
     if normalized == "tabor-build":
         return ["repo-sync", "builder-prepare", "image-build", "artifact-publish"]
+    if normalized == "auzix-vm130-deploy":
+        return ["source-verify", "runtime-deploy", "network-validate"]
+    if normalized == "auzix-vm134-install-refresh":
+        return [
+            "source-verify",
+            "installer-root-build",
+            "iso-build",
+            "iso-publish",
+            "vm-target-verify",
+            "install-handoff",
+        ]
+    if normalized == "auzix-vm135-fresh-install-target":
+        return [
+            "artifact-verify",
+            "iso-publish",
+            "vm135-recreate",
+            "vm135-start",
+            "install-handoff",
+        ]
+    if normalized == "auzix-core-root-validation":
+        return ["source-verify", "builder-prepare", "core-validation", "prompt-report"]
+    if normalized == "auzix-installer-foundation":
+        return ["source-verify", "installer-build", "contract-test", "artifact-report"]
+    if normalized == "auzix-installer-package-bot":
+        return [
+            "source-verify",
+            "queue-contract",
+            "package-build",
+            "artifact-report",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
+    if normalized == "auzix-trixie-package-intake":
+        return [
+            "source-verify",
+            "builder-prepare",
+            "package-intake",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
+    if normalized == "auzix-office-package-smoke":
+        return [
+            "source-verify",
+            "builder-prepare",
+            "package-build",
+            "package-test",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ]
+    if normalized == "lab-cluster-storage":
+        return ["storage-preflight", "swarm-grow", "k3s-grow", "storage-verify"]
     if normalized == "fedora-workstation-spin":
         return ["repo-sync", "manifest-resolve", "image-compose", "artifact-publish"]
     if normalized in {"fedora-cloud-import", "fedora-template-deploy"}:
         return ["source-select", "proxmox-import", "instance-configure", "boot", "ssh-validate"]
+    if normalized == "fedora-cosmic-postinstall":
+        return [
+            "target-select",
+            "wait-ssh",
+            "package-plan",
+            "desktop-install",
+            "graphical-enable",
+            "reboot",
+            "gui-validate",
+            "register-resource",
+        ]
+    if normalized == "k3s-fedora-cluster":
+        return [
+            "source-select",
+            "clone-plan",
+            "proxmox-clone",
+            "boot",
+            "discover-ssh",
+            "base-os-bootstrap",
+            "install-k3s-server",
+            "capture-k3s-token",
+            "install-k3s-agent",
+            "verify-cluster",
+            "register-resources",
+        ]
+    if normalized == "k3s-host-telemetry":
+        return [
+            "verify-k3s",
+            "nfs-projects",
+            "apply-host-telemetry",
+            "apply-loki-logs",
+            "loadgen-steady",
+            "open-firewall",
+            "prometheus-targets",
+            "scrape-validate",
+            "dashboard-link",
+        ]
+    if normalized == "demo-swarm-image-registry":
+        return [
+            "storage-ready",
+            "deploy-registry-stack",
+            "registry-health",
+            "k3s-dns-or-ip",
+            "k3s-containerd-trust",
+            "push-smoke-image",
+            "pull-smoke-image",
+        ]
+    if normalized == "rx-demo-k3s-registry-preflight":
+        return [
+            "registry-reachable",
+            "k3s-registry-trust",
+            "build-and-push",
+            "registry-catalog",
+        ]
+    if normalized == "rx-demo-k3s-deploy":
+        return [
+            "k3s-ready",
+            "runtime-secrets",
+            "registry-images",
+            "apply-k3s-demo-overlay",
+            "rollout-app",
+            "rollout-observability",
+            "smoke-api",
+            "smoke-ui",
+            "telemetry-check",
+            "access-links",
+        ]
+    if normalized == "rx-demo-k3s-undeploy":
+        return [
+            "capture-state",
+            "delete-overlay",
+            "delete-namespace",
+            "verify-removed",
+            "registry-retained",
+        ]
+    if normalized == "rx-demo-redeploy-from-git-event" or normalized == "rx-demo-k3s-redeploy-from-git":
+        return [
+            "git-event",
+            "sync-source-from-git",
+            "build-and-push",
+            "update-images",
+            "k3s-network-ready",
+            "rollout-app",
+            "cloudinit-node-check",
+            "visible-change-check",
+            "telemetry-still-flowing",
+            "loki-cloudevents-check",
+            "grafana-loki-check",
+            "access-links",
+        ]
+    if normalized == "demo-k3s-add-node":
+        if action_mode == "undeploy":
+            return [
+                "select-worker",
+                "delete-k3s-node",
+                "destroy-worker-vm",
+                "verify-reset",
+            ]
+        return [
+            "select-target",
+            "clone-worker",
+            "boot-worker",
+            "discover-ssh",
+            "base-os-prep",
+            "capture-join-token",
+            "install-k3s-agent",
+            "verify-node-ready",
+            "extend-telemetry",
+            "register-inventory",
+        ]
+    if normalized == "rx-demo-k3s-app-refresh":
+        return [
+            "verify-k3s",
+            "source-check",
+            "build-rx-ui-image",
+            "import-rx-ui-image",
+            "apply-lab-overlay",
+            "smoke-ui-routes",
+            "dashboard-link",
+        ]
     if normalized == "wordpress-appliance-import":
         return ["source-select", "proxmox-clone", "boot", "ssh-validate"]
     if normalized == "blackknight-sync":
@@ -85,10 +259,15 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     if normalized == "lab-demo":
         return [
             "repo-sync",
-            "image-build",
-            "monitoring-deploy",
-            "microblog-publish",
-            "hypervisor-handoff",
+            "builder-ready",
+            "strict-root-scaffold",
+            "sample-payload-build",
+            "busybox-package-build",
+            "strict-root-audit",
+            "strict-container-build",
+            "legacy-prune-test",
+            "artifact-publish",
+            "dashboard-link",
         ]
     return [
         "repo-sync",

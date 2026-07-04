@@ -1,0 +1,6 @@
+{
+  "id": "push-smoke-image",
+  "kind": "validation",
+  "summary": "Push a small image through the registry before using it for rx-demo.",
+  "command": "ssh root@swarm1.lab.auzietek.com 'docker pull busybox:latest && docker tag busybox:latest 127.0.0.1:5001/rx-demo/busybox:smoke && docker push 127.0.0.1:5001/rx-demo/busybox:smoke'"
+}

@@ -1,0 +1,82 @@
+{
+  "run_id": "example-rx-demo-k3s-redeploy-001",
+  "pipeline_id": "rx-demo-k3s-redeploy-from-git",
+  "status": "succeeded",
+  "source": {
+    "repo": "rx-demo",
+    "ref": "feature/deploy-dashboard-flow",
+    "commit": "01326da",
+    "image_tag": "01326da"
+  },
+  "targets": {
+    "cluster": "k3s-demo",
+    "namespace": "rx-demo",
+    "observability_namespace": "rx-observability",
+    "registry": "registry.example.local:5001/rx-demo"
+  },
+  "facts": {
+    "ready_nodes": 2,
+    "rollout_status": "complete",
+    "promtail_endpoint": "http://loki.rx-observability.svc.cluster.local:3100/loki/api/v1/push",
+    "transaction_id": "RX-BKC-LOKI-K3S-EXAMPLE",
+    "loki_entries": 7,
+    "grafana_health": "ok"
+  },
+  "artifacts": {
+    "loki_query": "{service_name=~\"rx/.+\"} |= \"CloudEvent audit\" |= \"RX-BKC-LOKI-K3S-EXAMPLE\"",
+    "access_links": [
+      {
+        "label": "rx-ui",
+        "url": "http://k3s-node.example.local:30080"
+      },
+      {
+        "label": "api-gateway",
+        "url": "http://k3s-node.example.local:30081"
+      },
+      {
+        "label": "grafana",
+        "url": "http://k3s-node.example.local:30300"
+      },
+      {
+        "label": "loki",
+        "url": "http://k3s-node.example.local:30100"
+      }
+    ]
+  },
+  "resource_graph": {
+    "resources": [
+      {
+        "id": "repo:rx-demo",
+        "kind": "repository",
+        "name": "rx-demo"
+      },
+      {
+        "id": "cluster:k3s-demo",
+        "kind": "kubernetes-cluster",
+        "name": "k3s-demo"
+      },
+      {
+        "id": "service:rx-observability/loki",
+        "kind": "service",
+        "name": "loki"
+      },
+      {
+        "id": "service:rx-observability/grafana",
+        "kind": "service",
+        "name": "grafana"
+      }
+    ],
+    "relationships": [
+      {
+        "source_id": "repo:rx-demo",
+        "type": "deployed_to",
+        "target_id": "cluster:k3s-demo"
+      },
+      {
+        "source_id": "service:rx-observability/grafana",
+        "type": "queries",
+        "target_id": "service:rx-observability/loki"
+      }
+    ]
+  }
+}

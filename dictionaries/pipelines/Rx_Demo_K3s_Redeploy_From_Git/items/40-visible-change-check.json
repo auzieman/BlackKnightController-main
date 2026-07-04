@@ -1,0 +1,8 @@
+{
+  "id": "visible-change-check",
+  "kind": "validation",
+  "summary": "Confirm the UI is served and generate API activity after redeploy.",
+  "transport": "bkc-ssh",
+  "command": "curl the rx-ui root through the discovered NodePort, then call api-gateway read/approve/refill routes",
+  "expected": "Run history includes the active rx-ui and api-gateway NodePort URLs."
+}

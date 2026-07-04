@@ -1,0 +1,7 @@
+{
+  "id": "delete-k3s-node",
+  "kind": "reset-operation",
+  "summary": "Cordon, drain, and delete the demo worker from k3s.",
+  "command": "ssh <k3s-server> 'k3s kubectl cordon <node>; k3s kubectl drain <node> --ignore-daemonsets --delete-emptydir-data --force --timeout=180s; k3s kubectl delete node <node>'",
+  "expected": "The demo worker is absent from kubectl node output."
+}

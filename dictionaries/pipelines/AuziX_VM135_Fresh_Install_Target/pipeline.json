@@ -1,0 +1,51 @@
+{
+  "id": "auzix-vm135-fresh-install-target",
+  "name": "AuziX VM135 Fresh Install Target",
+  "repo": "AuziX",
+  "workflow": "auzix-vm135-fresh-install-target",
+  "description": "Create a disposable VM135 install target from the latest AuziX ISO artifact without mutating VM134.",
+  "resource_class": "slow",
+  "stages": [
+    "artifact-verify",
+    "iso-publish",
+    "vm135-recreate",
+    "vm135-start",
+    "install-handoff"
+  ],
+  "actions": [
+    "artifact.report.verify",
+    "proxmox.iso.publish",
+    "proxmox.vm.install_target.recreate",
+    "proxmox.vm.start"
+  ],
+  "gates": [
+    "vm135-source-artifact",
+    "vm135-boot-media",
+    "vm135-target-disk"
+  ],
+  "notes": "Cattle-not-pets lane for AuziX installer validation. It starts from the completed ISO artifact and recreates VM135 as the fresh Proxmox target.",
+  "editable": true,
+  "links": [
+    {
+      "label": "AuziX Repository",
+      "url": "http://192.168.1.10/auzix/repo/"
+    },
+    {
+      "label": "Proxmox",
+      "url": "https://192.168.1.9:8006"
+    },
+    {
+      "label": "Pipeline Runs",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-vm135-fresh-install-target"
+    }
+  ],
+  "tags": [
+    "auzix",
+    "vm135",
+    "installer",
+    "proxmox",
+    "iso",
+    "fresh-target",
+    "slow-worker"
+  ]
+}

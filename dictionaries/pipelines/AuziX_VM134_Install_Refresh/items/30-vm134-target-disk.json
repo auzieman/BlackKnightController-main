@@ -1,0 +1,9 @@
+{
+  "id": "vm134-target-disk",
+  "kind": "gate",
+  "summary": "VM134 must have a larger disk before any install handoff is allowed.",
+  "proxmox_node": "pve",
+  "vmid": 134,
+  "minimum_gib": 32,
+  "disk": "scsi0"
+}

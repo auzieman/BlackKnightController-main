@@ -1,0 +1,7 @@
+{
+  "id": "access-links",
+  "kind": "artifact",
+  "summary": "Publish dynamic rx-demo, Grafana, Prometheus, Loki, Tempo, and OTel NodePort links.",
+  "transport": "internal",
+  "expected": "Run metadata contains endpoint-specific links based on current service endpoints."
+}

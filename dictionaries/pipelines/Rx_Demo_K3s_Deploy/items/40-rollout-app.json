@@ -1,0 +1,7 @@
+{
+  "id": "rollout-app",
+  "kind": "validation",
+  "summary": "Wait for rx-demo app workloads to become available.",
+  "command": "k3s kubectl -n rx-demo rollout status deploy/api-gateway --timeout=240s && k3s kubectl -n rx-demo rollout status deploy/legacy-sync-worker --timeout=240s && k3s kubectl -n rx-demo rollout status deploy/read-model-projection --timeout=240s && k3s kubectl -n rx-demo rollout status deploy/rx-ui --timeout=240s && k3s kubectl -n rx-demo get pods -o wide",
+  "expected": "API, UI, workers, dependencies, and loadgen are running or complete as appropriate."
+}

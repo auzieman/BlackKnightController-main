@@ -1,0 +1,268 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "rx-demo-k3s-redeploy-from-git",
+  "name": "Rx Demo K3s Redeploy From Git",
+  "status": "example",
+  "owner": "rx-demo",
+  "summary": "Redeploy rx-demo from a Git commit, update k3s images, and validate CloudEvents audit records through Loki/Grafana.",
+  "tags": [
+    "example",
+    "demo",
+    "rx-demo",
+    "git",
+    "k3s",
+    "registry",
+    "cloudevents",
+    "loki",
+    "grafana"
+  ],
+  "targets": {
+    "source_repo": "repo:rx-demo",
+    "source_checkout": "storage:rx-demo-shared-checkout",
+    "registry": "integration:docker-registry",
+    "k3s_control_plane": "resource:k3s-control-plane",
+    "grafana": "service:rx-observability/grafana",
+    "loki": "service:rx-observability/loki"
+  },
+  "inputs": {
+    "repo": {
+      "required": true,
+      "default": "rx-demo"
+    },
+    "ref": {
+      "required": true,
+      "default": "feature/deploy-dashboard-flow"
+    },
+    "commit": {
+      "required": true
+    },
+    "image_tag": {
+      "required": false,
+      "default_from": "commit.short"
+    },
+    "transaction_id": {
+      "required": false,
+      "default_from": "run.generated_rx_id"
+    }
+  },
+  "gates": [
+    {
+      "id": "source-ref-present",
+      "kind": "git.ref",
+      "with": {
+        "repo": "${inputs.repo}",
+        "ref": "${inputs.ref}",
+        "commit": "${inputs.commit}"
+      }
+    },
+    {
+      "id": "registry-reachable",
+      "kind": "docker.registry",
+      "with": {
+        "target": "${targets.registry}"
+      }
+    },
+    {
+      "id": "k3s-nodes-ready",
+      "kind": "k3s.nodes",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "minimum_ready_nodes": 2
+      }
+    },
+    {
+      "id": "promtail-loki-endpoint",
+      "kind": "promtail.endpoint",
+      "with": {
+        "namespace": "rx-observability",
+        "daemonset": "promtail-k3s",
+        "expected_endpoint": "http://loki.rx-observability.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "record-git-event",
+      "action": "git.event.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "repo": "${inputs.repo}",
+        "ref": "${inputs.ref}",
+        "commit": "${inputs.commit}",
+        "notes": "Redeploy triggered from Git event or rehearsal input."
+      },
+      "produces": [
+        "fact:source_ref",
+        "fact:source_commit"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "sync-source",
+      "action": "git.source.sync",
+      "transport": "ssh-manager",
+      "risk": "medium",
+      "with": {
+        "checkout": "${targets.source_checkout}",
+        "repo": "${inputs.repo}",
+        "ref": "${inputs.ref}",
+        "commit": "${inputs.commit}",
+        "require_clean": true
+      },
+      "produces": [
+        "fact:checked_out_commit",
+        "fact:image_tag"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "build-and-push-images",
+      "action": "docker.images.build_push",
+      "transport": "ssh-manager",
+      "risk": "medium",
+      "with": {
+        "checkout": "${targets.source_checkout}",
+        "registry": "${targets.registry}",
+        "tag": "${inputs.image_tag}",
+        "images": [
+          "api-gateway",
+          "legacy-sync-worker",
+          "read-model-projection",
+          "rx-ui",
+          "loadgen"
+        ]
+      },
+      "produces": [
+        "artifact:image_manifest"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "update-k3s-images",
+      "action": "kubectl.image.update",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "namespace": "rx-demo",
+        "tag": "${inputs.image_tag}",
+        "deployments": {
+          "api-gateway": "api-gateway",
+          "legacy-sync-worker": "worker",
+          "read-model-projection": "worker",
+          "rx-ui": "rx-ui",
+          "loadgen": "loadgen"
+        }
+      },
+      "produces": [
+        "fact:kubernetes_images"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "rollout-app",
+      "action": "kubectl.rollout.wait",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "namespace": "rx-demo",
+        "deployments": [
+          "api-gateway",
+          "legacy-sync-worker",
+          "read-model-projection",
+          "rx-ui",
+          "loadgen"
+        ],
+        "timeout_seconds": 180
+      },
+      "produces": [
+        "fact:rollout_status"
+      ],
+      "timeout_seconds": 240
+    },
+    {
+      "id": "verify-observability",
+      "action": "observability.stack.verify",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "namespace": "rx-observability",
+        "checks": [
+          "prometheus-ready",
+          "grafana-health",
+          "loki-ready",
+          "otel-metrics"
+        ]
+      },
+      "produces": [
+        "fact:observability_health"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "generate-cloudevent-transaction",
+      "action": "rx_demo.transaction.generate",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "namespace": "rx-demo",
+        "transaction_id": "${inputs.transaction_id}",
+        "operations": [
+          "approve",
+          "refill"
+        ]
+      },
+      "produces": [
+        "fact:transaction_id",
+        "fact:api_responses"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "verify-cloudevents-in-loki",
+      "action": "loki.query.verify",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${targets.k3s_control_plane}",
+        "loki": "${targets.loki}",
+        "query": "{service_name=~\"rx/.+\"} |= \"CloudEvent audit\" |= \"${inputs.transaction_id}\"",
+        "minimum_entries": 2,
+        "lookback_minutes": 10
+      },
+      "produces": [
+        "fact:loki_query",
+        "fact:loki_entries"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "publish-access-links",
+      "action": "run.links.publish",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "services": [
+          "rx-ui",
+          "api-gateway",
+          "grafana",
+          "prometheus",
+          "loki",
+          "tempo"
+        ]
+      },
+      "produces": [
+        "artifact:access_links"
+      ],
+      "timeout_seconds": 15
+    }
+  ],
+  "cleanup": {
+    "recommended_pipeline": "rx-demo-k3s-undeploy",
+    "notes": "For rehearsal reset, rerun this pipeline with a known commit and fresh transaction id. Use undeploy only when the namespace should be removed."
+  }
+}

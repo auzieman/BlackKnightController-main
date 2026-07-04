@@ -1,0 +1,7 @@
+{
+  "id": "install-k3s-agent",
+  "kind": "command",
+  "summary": "Install the k3s agent at the control-plane version and join it to the existing server.",
+  "command": "ssh <new-k3s-node> 'curl -sfL https://get.k3s.io -o /tmp/install-k3s.sh && chmod +x /tmp/install-k3s.sh && sudo INSTALL_K3S_VERSION=<kube1-k3s-version> K3S_URL=https://<k3s-server>:6443 K3S_TOKEN=<redacted-token> /tmp/install-k3s.sh agent --node-name <new-node-name> && sudo systemctl is-active --quiet k3s-agent'",
+  "expected": "The k3s-agent service is active on the new worker."
+}

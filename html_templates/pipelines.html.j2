@@ -9,28 +9,16 @@
 {% endblock %}
 
 {% block content %}
-    <section class="hero">
-        <div>
-            <p class="eyebrow">Pipeline deck</p>
-            <h2>Demo lanes for the lab control loop</h2>
-            <p class="hero-copy">This is the control surface for the parts we are stitching together: Auzix image builds, monitoring, host telemetry, and content publishing. The catalog stays compact; the deeper event and log views belong on the run page.</p>
-        </div>
-        <div class="hero-panel">
-            <p><strong>Control plane:</strong> BlackKnightController</p>
-            <p><strong>Execution tier:</strong> Docker Swarm + `ns1`</p>
-            <p><strong>Visibility:</strong> Grafana now, `micro-blog` next</p>
-        </div>
-    </section>
-
-    <section class="pipeline-card top-gap">
+    <section class="pipeline-card pipeline-console-filter">
         <div class="pipeline-card-top">
             <div>
-                <p class="eyebrow">Filter deck</p>
-                <h3>Search, tags, and progressive views</h3>
+                <p class="eyebrow">Pipeline console</p>
+                <h3>Catalog, selected lane, runs, and draft creation</h3>
             </div>
             <div class="pipeline-run-meta">
                 <span class="status-pill muted">{{ pipelines|length }} lanes</span>
                 <span class="status-pill muted">{{ runs|length }} runs</span>
+                <span class="status-pill muted">{{ candidates|length }} candidates</span>
             </div>
         </div>
         <form method="get" class="pipeline-filter-form top-gap-sm">
@@ -54,54 +42,170 @@
         </form>
     </section>
 
-    <section class="pipeline-grid top-gap">
-        {% for pipeline in pipelines %}
-            {% set latest = latest_runs_by_workflow.get(pipeline.workflow) %}
-            {% set supported = supported_workflows.get(pipeline.workflow) %}
-            <article class="pipeline-card">
-                <div class="pipeline-card-top">
-                    <div>
-                        <p class="eyebrow">{{ pipeline.repo }}</p>
-                        <h3>{{ pipeline.name }}</h3>
-                    </div>
-                    <span class="status-pill {% if latest %}muted{% endif %}">
-                        {% if supported %}
-                            {{ latest.status if latest else 'not started' }}
-                        {% else %}
-                            planned
-                        {% endif %}
-                    </span>
-                </div>
-                <p class="metric-copy">{{ pipeline.description }}</p>
-                <div class="pipeline-stage-row">
-                    {% for tag in pipeline.tags %}
-                        <span class="pipeline-stage-chip compact-chip">{{ tag }}</span>
-                    {% endfor %}
-                </div>
-                <div class="pipeline-stage-row">
-                    {% for stage in pipeline.stages %}
-                        <span class="pipeline-stage-chip compact-chip">{{ stage }}</span>
-                    {% endfor %}
-                </div>
-                {% if latest %}
-                    <div class="pipeline-run-meta">
-                        <span class="status-pill muted">Run {{ latest.id[:8] }}</span>
-                        <span class="status-pill muted">{{ latest.created_at }}</span>
-                        <span class="status-pill muted">{{ latest.stage_summary.complete }} done / {{ latest.stages|length }} stages</span>
-                    </div>
-                {% endif %}
-                <form method="post" class="pipeline-trigger-form compact-trigger-form">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="pipeline_id" value="{{ pipeline.id }}">
-                    <div class="pipeline-card-actions">
-                        <button class="button" type="submit" {% if not supported %}disabled{% endif %}>
-                            {{ 'Queue Run' if supported else 'Planned Lane' }}
+    <section class="pipeline-console-layout top-gap">
+        <aside class="pipeline-console-tree">
+            <div class="pipeline-console-heading">
+                <p class="eyebrow">Catalog tree</p>
+                <strong>{{ pipelines|length }} visible</strong>
+            </div>
+            <div class="pipeline-tree-list">
+                {% for pipeline in pipelines %}
+                    {% set latest = latest_runs_by_workflow.get(pipeline.workflow) %}
+                    {% set supported = supported_workflows.get(pipeline.workflow) %}
+                    <a class="pipeline-tree-node{% if selected_pipeline and selected_pipeline.id == pipeline.id %} active{% endif %}"
+                       href="{{ url_for('pipelines.pipelines', q=search_query, tag=selected_tag, pipeline=pipeline.id) }}">
+                        <span class="pipeline-tree-status status-{{ (latest.status if latest else ('planned' if not supported else 'idle'))|lower|replace(' ', '-') }}"></span>
+                        <strong>{{ pipeline.name }}</strong>
+                        <small>{{ pipeline.repo }} · {{ pipeline.workflow }}</small>
+                    </a>
+                {% else %}
+                    <div class="workflow-empty">No lanes match this filter.</div>
+                {% endfor %}
+            </div>
+
+            <div class="pipeline-console-heading top-gap">
+                <p class="eyebrow">Create</p>
+                <strong>Draft lanes</strong>
+            </div>
+            <div class="pipeline-tree-list">
+                {% for candidate in candidates[:6] %}
+                    <form method="post" class="pipeline-candidate-row">
+                        {{ csrf_field() }}
+                        <input type="hidden" name="action" value="create-candidate-pipeline">
+                        <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
+                        <button type="submit">
+                            <strong>{{ candidate.name }}</strong>
+                            <small>{{ candidate.source }} · {{ candidate.kind }}</small>
                         </button>
-                        <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_edit', pipeline_id=pipeline.id) }}">Edit Lane</a>
+                    </form>
+                {% else %}
+                    <div class="workflow-empty">No candidates match this filter.</div>
+                {% endfor %}
+            </div>
+        </aside>
+
+        <section class="pipeline-console-main">
+            {% if selected_pipeline %}
+                {% set latest = latest_runs_by_workflow.get(selected_pipeline.workflow) %}
+                {% set supported = supported_workflows.get(selected_pipeline.workflow) %}
+                <article class="pipeline-card pipeline-selected-card">
+                    <div class="pipeline-card-top">
+                        <div>
+                            <p class="eyebrow">{{ selected_pipeline.repo }}</p>
+                            <h3>{{ selected_pipeline.name }}</h3>
+                        </div>
+                        <span class="status-pill {% if latest %}muted{% endif %}">
+                            {% if supported %}
+                                {{ latest.status if latest else 'not started' }}
+                            {% else %}
+                                planned
+                            {% endif %}
+                        </span>
                     </div>
-                    <details class="pipeline-params">
-                        <summary>Run parameters</summary>
-                        <div class="pipeline-params-grid">
+                    <p class="metric-copy">{{ selected_pipeline.description }}</p>
+
+                    <div class="tab-strip pipeline-tabs">
+                        <a class="tab-link active" href="#pipeline-summary">Summary</a>
+                        <a class="tab-link" href="#pipeline-run-map">Run Map</a>
+                        <a class="tab-link" href="#pipeline-stages">Stages</a>
+                        <a class="tab-link" href="#pipeline-actions">Actions</a>
+                        <a class="tab-link" href="#pipeline-runs">Runs</a>
+                        <a class="tab-link" href="{{ url_for('pipelines.pipeline_edit', pipeline_id=selected_pipeline.id) }}">Edit</a>
+                    </div>
+
+                    <section id="pipeline-summary" class="pipeline-console-section">
+                        <div class="pipeline-summary-grid">
+                            <div>
+                                <p class="eyebrow">Identity</p>
+                                <dl class="fact-list">
+                                    <div><dt>workflow</dt><dd>{{ selected_pipeline.workflow }}</dd></div>
+                                    <div><dt>repo</dt><dd>{{ selected_pipeline.repo }}</dd></div>
+                                    <div><dt>stage count</dt><dd>{{ selected_pipeline.stages|length }}</dd></div>
+                                    <div><dt>executor</dt><dd>{{ 'wired' if supported else 'planned' }}</dd></div>
+                                </dl>
+                            </div>
+                            <div>
+                                <p class="eyebrow">Latest run</p>
+                                {% if latest %}
+                                    <dl class="fact-list">
+                                        <div><dt>run</dt><dd><a href="{{ url_for('pipelines.pipeline_run_detail', run_id=latest.id) }}">{{ latest.id[:8] }}</a></dd></div>
+                                        <div><dt>status</dt><dd>{{ latest.status }}</dd></div>
+                                        <div><dt>stages</dt><dd>{{ latest.stage_summary.complete }} complete / {{ latest.stages|length }}</dd></div>
+                                        <div><dt>updated</dt><dd>{{ latest.updated_at }}</dd></div>
+                                    </dl>
+                                {% else %}
+                                    <p class="metric-copy">No run has been recorded for this lane yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="pipeline-run-map" class="pipeline-console-section">
+                        <div class="pipeline-card-top">
+                            <div>
+                                <p class="eyebrow">Execution map</p>
+                                <h4>{{ selected_run_map.run.id[:8] if selected_run_map.run else 'Next run preview' }}</h4>
+                            </div>
+                            <span class="status-pill muted">{{ selected_run_map.stages|length }} stages</span>
+                        </div>
+                        <div class="pipeline-run-map">
+                            {% for stage in selected_run_map.stages %}
+                                <article class="run-map-stage status-{{ stage.status|lower|replace(' ', '-') }}">
+                                    <div class="run-map-stage-top">
+                                        <span>{{ loop.index }}</span>
+                                        <strong>{{ stage.name }}</strong>
+                                    </div>
+                                    <div class="run-map-state">
+                                        <span class="run-map-light"></span>
+                                        <span>{{ stage.status }}</span>
+                                    </div>
+                                    {% if stage.targets %}
+                                        <div class="run-map-targets">
+                                            {% for target in stage.targets %}
+                                                <span>{{ target }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    {% if stage.action %}
+                                        <a class="run-map-action" href="{{ url_for('resource_graph.resource_graph', resource='action:' ~ stage.action) }}">{{ stage.action }}</a>
+                                    {% endif %}
+                                    {% if stage.detail %}
+                                        <p>{{ stage.detail }}</p>
+                                    {% endif %}
+                                </article>
+                            {% else %}
+                                <div class="workflow-empty">No stages are available for this lane yet.</div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section id="pipeline-stages" class="pipeline-console-section">
+                        <p class="eyebrow">Stage recipe</p>
+                        <div class="pipeline-stage-table">
+                            {% for stage in selected_pipeline.stages %}
+                                <div>
+                                    <span>{{ loop.index }}</span>
+                                    <strong>{{ stage }}</strong>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section id="pipeline-actions" class="pipeline-console-section">
+                        <p class="eyebrow">Action bricks</p>
+                        <div class="pipeline-stage-row">
+                            {% for action in selected_pipeline.actions %}
+                                <a class="pipeline-stage-chip compact-chip" href="{{ url_for('resource_graph.resource_graph', resource='action:' ~ action) }}">{{ action }}</a>
+                            {% else %}
+                                <span class="pipeline-stage-chip compact-chip">action catalog pending</span>
+                            {% endfor %}
+                        </div>
+                    </section>
+
+                    <section id="pipeline-runs" class="pipeline-console-section">
+                        <form method="post" class="pipeline-trigger-form">
+                            {{ csrf_field() }}
+                            <input type="hidden" name="pipeline_id" value="{{ selected_pipeline.id }}">
                             <label>
                                 Ref
                                 <input type="text" name="ref" value="refs/heads/main">
@@ -110,77 +214,53 @@
                                 Commit
                                 <input type="text" name="commit" placeholder="optional commit sha">
                             </label>
+                            {% if selected_pipeline.workflow in ['fedora-cosmic-postinstall', 'demo-k3s-add-node'] %}
+                                <label>
+                                    Target host
+                                    <input type="text" name="target_host" placeholder="{{ '192.168.1.129' if selected_pipeline.workflow == 'fedora-cosmic-postinstall' else '192.168.1.x' }}">
+                                </label>
+                                <label>
+                                    Target VMID
+                                    <input type="text" name="target_vmid" placeholder="optional">
+                                </label>
+                                <label class="wide">
+                                    Target name
+                                    <input type="text" name="target_name" placeholder="{{ 'fedora-template-118' if selected_pipeline.workflow == 'fedora-cosmic-postinstall' else 'kube3' }}">
+                                </label>
+                            {% endif %}
                             <label class="wide">
                                 Notes
-                                <textarea name="notes" rows="3" placeholder="{{ pipeline.notes }}"></textarea>
+                                <textarea name="notes" rows="3" placeholder="{{ selected_pipeline.notes }}"></textarea>
                             </label>
-                        </div>
-                    </details>
+                            <div class="pipeline-card-actions">
+                                <button class="button" type="submit" {% if not supported %}disabled{% endif %}>
+                                    {{ 'Queue Run' if supported else 'Planned Lane' }}
+                                </button>
+                                <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_edit', pipeline_id=selected_pipeline.id) }}">Edit Lane</a>
+                            </div>
+                        </form>
+                    </section>
+
                     <div class="pipeline-inline-links">
-                        {% for link in pipeline.links %}
+                        {% for link in selected_pipeline.links %}
                             <a class="button button-quiet" href="{{ link.url }}">{{ link.label }}</a>
                         {% endfor %}
                     </div>
-                </form>
-            </article>
-        {% else %}
-            <section class="group-card empty-state">
-                <h4>No lanes match the current filter</h4>
-                <p>Clear the search or tag filter to see the full catalog again.</p>
-            </section>
-        {% endfor %}
-    </section>
-
-    <section class="section-header">
-        <div>
-            <p class="eyebrow">Candidate inventory</p>
-            <h3>Create a draft lane from an imported or catalog object</h3>
-        </div>
-    </section>
-
-    <section class="pipeline-card">
-        <p class="metric-copy">
-            These candidates are inventory-first. Creating a draft lane does not auto-run anything; it seeds a planned lane with a starter stage set so an operator can shape the import, boot, and validation logic before turning it into a runnable workflow.
-        </p>
-    </section>
-
-    <section class="pipeline-grid">
-        {% for candidate in candidates %}
-            <article class="pipeline-card">
-                <div class="pipeline-card-top">
-                    <div>
-                        <p class="eyebrow">{{ candidate.source }}</p>
-                        <h3>{{ candidate.name }}</h3>
-                    </div>
-                    <span class="status-pill muted">{{ candidate.kind }}</span>
-                </div>
-                <p class="metric-copy">{{ candidate.summary }}</p>
-                <div class="pipeline-stage-row">
-                    {% for stage in candidate.recommended_stages %}
-                        <span class="pipeline-stage-chip compact-chip">{{ stage }}</span>
-                    {% endfor %}
-                </div>
-                <form method="post" class="compact-trigger-form top-gap-sm">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="action" value="create-candidate-pipeline">
-                    <input type="hidden" name="candidate_id" value="{{ candidate.id }}">
-                    <div class="pipeline-card-actions">
-                        <button class="button" type="submit">Create Draft Lane</button>
-                    </div>
-                </form>
-            </article>
-        {% else %}
-            <section class="group-card empty-state">
-                <h4>No candidates match the current filter</h4>
-                <p>Clear the search to see imported Proxmox templates and starter appliance suggestions.</p>
-            </section>
-        {% endfor %}
+                </article>
+            {% else %}
+                <section class="group-card empty-state">
+                    <h4>No lane selected</h4>
+                    <p>Clear the search or tag filter to see the catalog.</p>
+                </section>
+            {% endif %}
+        </section>
     </section>
 
     <section class="section-header">
         <div>
             <p class="eyebrow">Recent automation runs</p>
-            <h3>Run ledger</h3>
+            <h3>Pipeline ledger</h3>
+            <p class="section-copy">Showing the latest run per pipeline. {{ raw_run_count }} matching run records remain available from each run detail.</p>
         </div>
     </section>
 
@@ -197,6 +277,13 @@
                 <p class="metric-copy">{{ run.notes or 'no notes' }}</p>
                 <div class="pipeline-run-meta">
                     <span class="status-pill muted">Run {{ run.id[:8] }}</span>
+                    <span class="status-pill muted">{{ run.attempt_count }} attempt{% if run.attempt_count != 1 %}s{% endif %}</span>
+                    {% if run.previous_attempt_count %}
+                        <span class="status-pill muted">{{ run.previous_attempt_count }} earlier</span>
+                    {% endif %}
+                    {% if run.failed_attempt_count %}
+                        <span class="status-pill muted">{{ run.failed_attempt_count }} failed</span>
+                    {% endif %}
                     <span class="status-pill muted">{{ run.ref or 'ref unset' }}</span>
                     {% if run.commit %}
                         <span class="status-pill muted">{{ run.commit[:12] }}</span>
@@ -239,7 +326,7 @@
                         <input type="hidden" name="action" value="redeploy">
                         <button class="button button-quiet" type="submit">Redeploy</button>
                     </form>
-                    {% if run.workflow in ('monitoring-stack', 'microblog-publish') %}
+                    {% if run.supports_undeploy %}
                         <form method="post" action="{{ url_for('pipelines.pipeline_run_action', run_id=run.id) }}" class="inline-action-form">
                             {{ csrf_field() }}
                             <input type="hidden" name="action" value="undeploy">

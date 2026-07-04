@@ -1,0 +1,8 @@
+{
+  "id": "loki-cloudevents-check",
+  "kind": "validation",
+  "summary": "Generate approve/refill activity and query Loki for CloudEvents audit records.",
+  "transport": "bkc-ssh",
+  "command": "curl api-gateway approve/refill for RX-BKC-CLOUDEVENTS, then query Loki for CloudEvent audit records",
+  "expected": "Loki returns audit log records containing RX-BKC-CLOUDEVENTS."
+}

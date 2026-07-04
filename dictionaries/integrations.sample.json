@@ -8,10 +8,21 @@
     "playbook": "site.yml"
   },
   "docker": {
+    "api_endpoint": "ssh://root@swarm1.lab.example",
+    "api_mode": "host",
+    "context_name": "auzix-swarm",
     "manager_host": "swarm-manager.example.lab",
     "manager_password": "",
     "manager_user": "root",
     "stack_name": "blackknight"
+  },
+  "kubernetes": {
+    "api_url": "https://kube1.lab.example:6443",
+    "cluster_name": "auzix-k3s",
+    "context": "auzix-k3s",
+    "kubeconfig_path": "~/.kube/config",
+    "namespace": "auzix-build",
+    "verify_ssl": true
   },
   "proxmox": {
     "api_url": "https://proxmox.example.lab:8006/api2/json",

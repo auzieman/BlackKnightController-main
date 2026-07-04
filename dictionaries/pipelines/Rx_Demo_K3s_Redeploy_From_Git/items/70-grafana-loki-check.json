@@ -1,0 +1,8 @@
+{
+  "id": "grafana-loki-check",
+  "kind": "validation",
+  "summary": "Verify Grafana is reachable and publish the Loki Explore query for the recording.",
+  "transport": "bkc-ssh",
+  "command": "curl Grafana /api/health and Loki /ready, then print the Explore query",
+  "expected": "Run history includes Grafana and Loki URLs plus the CloudEvents Loki query."
+}

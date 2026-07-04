@@ -1,0 +1,6 @@
+{
+  "id": "pull-smoke-image",
+  "kind": "validation",
+  "summary": "Confirm k3s/containerd can pull from the swarm-hosted registry.",
+  "command": "ssh <k3s-server> 'sudo k3s ctr images pull --plain-http swarm1.lab.auzietek.com:5001/rx-demo/busybox:smoke'"
+}

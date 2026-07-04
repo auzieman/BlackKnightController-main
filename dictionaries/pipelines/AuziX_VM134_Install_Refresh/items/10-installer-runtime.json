@@ -1,0 +1,14 @@
+{
+  "id": "installer-runtime",
+  "kind": "gate",
+  "summary": "The refreshed strict root must expose installer commands, package setup, and the installed-root finalizer.",
+  "required_paths": [
+    "/System/Tools/auzix-install-disk",
+    "/System/Tools/auzix-installer",
+    "/System/Tools/auzix-installer-gui",
+    "/System/Tools/auzix-package-setup",
+    "/System/Tools/finalize-installed-root",
+    "/System/Settings/installer/questions.json",
+    "/System/Settings/installer/plans/default.json"
+  ]
+}

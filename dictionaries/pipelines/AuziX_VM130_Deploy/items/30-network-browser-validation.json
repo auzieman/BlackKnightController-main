@@ -1,0 +1,10 @@
+{
+  "id": "network-browser-validation",
+  "kind": "check",
+  "summary": "Validate the installed system still has network access from command-line tools and browser-facing user state.",
+  "checks": [
+    "curl https://www.wikipedia.org",
+    "sudo curl https://www.wikipedia.org",
+    "auzix user can write Midori profile/cache paths"
+  ]
+}

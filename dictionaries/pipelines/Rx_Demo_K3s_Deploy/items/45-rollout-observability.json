@@ -1,0 +1,7 @@
+{
+  "id": "rollout-observability",
+  "kind": "validation",
+  "summary": "Wait for the in-cluster Grafana, Prometheus, Loki, and Tempo services to become available.",
+  "command": "k3s kubectl -n rx-observability rollout status deploy/grafana --timeout=240s && k3s kubectl -n rx-observability rollout status deploy/prometheus --timeout=240s && k3s kubectl -n rx-observability rollout status deploy/loki --timeout=240s && k3s kubectl -n rx-observability rollout status deploy/tempo --timeout=240s && k3s kubectl -n rx-observability get pods -o wide",
+  "expected": "Grafana and its data sources are running in k3s."
+}

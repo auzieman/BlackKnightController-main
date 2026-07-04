@@ -1,0 +1,7 @@
+{
+  "id": "source-commit",
+  "kind": "gate",
+  "summary": "Verify the shared AuziX source checkout is at the expected commit before deploy.",
+  "target": "/srv/nfs/swarm/AuziX/src/.auzix-commit",
+  "expected": "0a64310"
+}

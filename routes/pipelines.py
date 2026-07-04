@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -8,7 +9,7 @@ from services import bkc_db
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
 from services.automation_runs import get_run, load_runs
 from services.integration_store import load_proxmox_snapshot
-from services.job_queue import enqueue_job, job_queue_enabled
+from services.job_queue import SLOW_QUEUE_NAME, enqueue_job, job_queue_enabled
 from services.pipeline_catalog import (
     create_custom_pipeline,
     demo_pipelines,
@@ -39,7 +40,36 @@ PIPELINE_TAGS = (
     "content",
     "hypervisor",
     "telemetry",
+    "demo",
+    "rx-demo",
+    "k3s",
+    "registry",
+    "cluster",
+    "ssh",
+    "add-node",
 )
+
+
+def _available_pipeline_tags(pipelines: list[dict], runs: list[dict]) -> list[str]:
+    tags = set(PIPELINE_TAGS)
+    for pipeline in pipelines:
+        tags.update(_pipeline_tags(pipeline, supported=workflow_is_supported(str(pipeline.get("workflow", "")))))
+    for run in runs:
+        tags.update(_run_tags(run))
+    return sorted(tag for tag in tags if tag)
+
+
+def _run_timestamp(run: dict) -> datetime:
+    value = str(run.get("updated_at") or run.get("created_at") or "").strip()
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _stage_summary(run: dict) -> dict:
@@ -58,6 +88,11 @@ def _stage_summary(run: dict) -> dict:
 def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | None, user_id: int) -> dict:
     action_mode = str(run.get("extra", {}).get("action_mode", "deploy"))
     timeout = workflow_job_timeout(str(run.get("workflow", "")), action_mode=action_mode)
+    queue_name = (
+        SLOW_QUEUE_NAME
+        if str(run.get("extra", {}).get("resource_class", "")).strip().lower() == "slow"
+        else "bkc"
+    )
     if job_queue_enabled():
         try:
             job = enqueue_job(
@@ -70,6 +105,7 @@ def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | 
                     remote_ip,
                 ),
                 job_timeout=timeout,
+                queue_name=queue_name,
                 meta={
                     "kind": "automation",
                     "run_id": run["id"],
@@ -77,6 +113,7 @@ def _queue_run(run: dict, *, tenant_slug: str, tenant_id: int, remote_ip: str | 
                     "repo": run["repo"],
                     "workflow": run["workflow"],
                     "job_timeout": timeout,
+                    "queue_name": queue_name,
                 },
             )
             return mark_run_queued(run["id"], job.id) or run
@@ -94,16 +131,45 @@ def _run_external_links(run: dict) -> list[dict]:
     return list(pipeline.get("links", [])) if pipeline else []
 
 
+def _run_group_key(run: dict) -> str:
+    extra = run.get("extra", {}) or {}
+    pipeline_id = str(extra.get("pipeline_id", "")).strip()
+    if pipeline_id:
+        return f"pipeline:{pipeline_id}"
+    return f"workflow:{str(run.get('workflow', '')).strip()}"
+
+
+def _rx_demo_undeploy_workflow(workflow: str) -> str | None:
+    return {
+        "rx-demo-k3s-deploy": "rx-demo-k3s-undeploy",
+        "rx-demo-k3s-redeploy-from-git": "rx-demo-k3s-undeploy",
+        "rx-demo-redeploy-from-git-event": "rx-demo-k3s-undeploy",
+    }.get(workflow.strip())
+
+
+def _run_supports_undeploy(run: dict) -> bool:
+    workflow = str(run.get("workflow", "")).strip()
+    return bool(_rx_demo_undeploy_workflow(workflow) or workflow_supports_undeploy(workflow))
+
+
 def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
     workflow = str(pipeline.get("workflow", "")).strip().lower()
     repo = str(pipeline.get("repo", "")).strip().lower()
     tags = {"runnable" if supported else "planned"}
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
-    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow == "auzix-vm130-deploy":
+        tags.update({"deploy", "ssh", "auzix"})
+    if workflow == "auzix-vm134-install-refresh":
+        tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
+    if workflow == "auzix-vm135-fresh-install-target":
+        tags.update({"auzix", "deploy", "installer", "iso", "proxmox", "vm135"})
+    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
-    if workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.add("deploy")
+    if workflow == "fedora-cosmic-postinstall":
+        tags.update({"desktop", "ssh"})
     if workflow in {"monitoring-stack", "microblog-publish"}:
         tags.add("deploy")
     if workflow == "monitoring-stack":
@@ -141,6 +207,13 @@ def _matches_search(pipeline: dict, query: str) -> bool:
 def _run_matches_search(run: dict, query: str) -> bool:
     if not query:
         return True
+    extra = run.get("extra", {}) or {}
+    pipeline = None
+    pipeline_id = str(extra.get("pipeline_id", "")).strip()
+    if pipeline_id:
+        pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        pipeline = next((item for item in demo_pipelines() if item["workflow"] == run.get("workflow")), None)
     haystack = " ".join(
         [
             str(run.get("repo", "")),
@@ -149,6 +222,11 @@ def _run_matches_search(run: dict, query: str) -> bool:
             str(run.get("commit", "")),
             str(run.get("notes", "")),
             str(run.get("status", "")),
+            str(pipeline.get("id", "") if pipeline else ""),
+            str(pipeline.get("name", "") if pipeline else ""),
+            str(pipeline.get("description", "") if pipeline else ""),
+            str(pipeline.get("notes", "") if pipeline else ""),
+            " ".join(str(tag) for tag in (pipeline.get("tags", []) if pipeline else [])),
         ]
     ).lower()
     return query in haystack
@@ -160,10 +238,18 @@ def _run_tags(run: dict) -> list[str]:
     status = str(run.get("status", "")).strip().lower()
     if workflow in {"tabor-build", "fedora-workstation-spin"}:
         tags.add("build")
-    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow == "auzix-vm130-deploy":
+        tags.update({"deploy", "ssh", "auzix"})
+    if workflow == "auzix-vm134-install-refresh":
+        tags.update({"auzix", "build", "installer", "iso", "proxmox", "vm134"})
+    if workflow == "auzix-vm135-fresh-install-target":
+        tags.update({"auzix", "deploy", "installer", "iso", "proxmox", "vm135"})
+    if workflow in {"wordpress-appliance-import", "fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.update({"hypervisor", "candidate"})
-    if workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    if workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         tags.add("deploy")
+    if workflow == "fedora-cosmic-postinstall":
+        tags.update({"desktop", "ssh"})
     if workflow in {"monitoring-stack", "microblog-publish"}:
         tags.add("deploy")
     if workflow == "monitoring-stack":
@@ -179,8 +265,87 @@ def _run_tags(run: dict) -> list[str]:
     return sorted(tags)
 
 
+def _stage_targets(workflow: str, stage_name: str) -> list[str]:
+    workflow = (workflow or "").strip().lower()
+    stage = (stage_name or "").strip().lower()
+    if workflow == "auzix-vm130-deploy":
+        if "source" in stage:
+            return ["/srv/nfs/swarm/AuziX", "generated AuzixRoot"]
+        return ["VMID 130", "192.168.1.163"]
+    if workflow == "rx-demo-k3s-app-refresh":
+        if "source" in stage:
+            return ["/mnt/swarm/shared/rx-demo"]
+        if "build" in stage:
+            return ["swarm1", "rx-demo/rx-ui:latest"]
+        if "import" in stage:
+            return ["kube1 containerd", "kube2 containerd"]
+        if "apply" in stage:
+            return ["rx-demo namespace", "rx-ui deployment"]
+        if "smoke" in stage:
+            return ["/lookup", "/approve", "/refill"]
+        if "verify" in stage:
+            return ["kube1", "kube2"]
+    if workflow in {"k3s-fedora-cluster", "k3s-host-telemetry"}:
+        if "k3s" in stage or "cluster" in stage or "verify" in stage:
+            return ["kube1", "kube2"]
+        if "loki" in stage or "logs" in stage:
+            return ["promtail", "Loki"]
+        if "telemetry" in stage or "cadvisor" in stage:
+            return ["Telegraf", "cAdvisor"]
+        if "loadgen" in stage:
+            return ["rx-demo loadgen"]
+    if workflow in {"fedora-template-deploy", "fedora-cloud-import", "wordpress-appliance-import"}:
+        if "proxmox" in stage or "clone" in stage or "import" in stage:
+            return ["Proxmox", "VM target"]
+        if "ssh" in stage or "boot" in stage:
+            return ["guest VM", "BKC SSH"]
+    if "build" in stage or "image" in stage:
+        return ["builder", "artifact"]
+    if "deploy" in stage or "apply" in stage:
+        return ["runtime", "service"]
+    if "health" in stage or "smoke" in stage or "verify" in stage:
+        return ["health check"]
+    if "repo" in stage or "source" in stage:
+        return ["source"]
+    return []
+
+
+def _pipeline_run_map(pipeline: dict | None, latest_run: dict | None) -> dict:
+    if not pipeline:
+        return {"run": None, "stages": []}
+    workflow = str(pipeline.get("workflow", ""))
+    pipeline_stage_names = [str(stage_name) for stage_name in pipeline.get("stages", [])]
+    run_stages = list((latest_run or {}).get("stages") or [])
+    if run_stages and pipeline_stage_names:
+        run_stage_names = {str(stage.get("name") or "") for stage in run_stages}
+        if not run_stage_names.intersection(pipeline_stage_names):
+            run_stages = []
+    if not run_stages:
+        run_stages = [
+            {"name": stage_name, "status": "planned", "detail": ""}
+            for stage_name in pipeline_stage_names
+        ]
+    action_names = list(pipeline.get("actions") or [])
+    stages = []
+    for idx, stage in enumerate(run_stages):
+        name = str(stage.get("name") or "")
+        status = str(stage.get("status") or "planned").strip().lower() or "planned"
+        stages.append(
+            {
+                "name": name,
+                "status": status,
+                "detail": str(stage.get("detail") or ""),
+                "updated_at": str(stage.get("updated_at") or ""),
+                "action": action_names[idx] if idx < len(action_names) else "",
+                "targets": _stage_targets(workflow, name),
+            }
+        )
+    return {"run": latest_run, "stages": stages}
+
+
 def _executor_source_files(workflow: str) -> list[str]:
     sources = [
+        "/home/auzieman/Projects/BlackKnightController/services/action_catalog.py",
         "/home/auzieman/Projects/BlackKnightController/services/pipeline_catalog.py",
         "/home/auzieman/Projects/BlackKnightController/services/pipeline_executor.py",
     ]
@@ -205,6 +370,24 @@ def _executor_source_files(workflow: str) -> list[str]:
         sources.append("/home/auzieman/Projects/lab/ns1/ansible/microblog-stack.yml")
     elif workflow == "host-telemetry":
         sources.append("/home/auzieman/Projects/lab/ns1/ansible/setup_monitoring.yml")
+    elif workflow == "k3s-host-telemetry":
+        sources.extend(
+            [
+                "/home/auzieman/Projects/BlackKnightController/file_templates/k3s-host-telemetry.yaml",
+                "/home/auzieman/Projects/BlackKnightController/file_templates/k3s-loki-logs.yaml",
+                "/home/auzieman/Projects/BlackKnightController/file_templates/rx-loadgen-deployment.yaml",
+                "/home/auzieman/Projects/rx-demo/tools/pipelines/bkc-k3s-host-telemetry.md",
+            ]
+        )
+    elif workflow == "rx-demo-k3s-app-refresh":
+        sources.extend(
+            [
+                "/home/auzieman/Projects/BlackKnightController/docs/k3s-deployment-linkage.md",
+                "/home/auzieman/Projects/rx-demo/k8s/overlays/lab/kustomization.yaml",
+                "/home/auzieman/Projects/rx-demo/k8s/base/apps.yaml",
+                "/home/auzieman/Projects/rx-demo/src/rx-ui/Rx.Ui/Pages/Index.cshtml.cs",
+            ]
+        )
     elif workflow == "fedora-workstation-spin":
         sources.extend(
             [
@@ -212,7 +395,7 @@ def _executor_source_files(workflow: str) -> list[str]:
                 "/home/auzieman/Projects/BlackKnightController/file_templates/fedora-server-minimal.ks.j2",
             ]
         )
-    elif workflow in {"fedora-cloud-import", "fedora-template-deploy"}:
+    elif workflow in {"fedora-cloud-import", "fedora-template-deploy", "fedora-cosmic-postinstall"}:
         sources.extend(
             [
                 "/home/auzieman/Projects/BlackKnightController/services/proxmox.py",
@@ -403,12 +586,63 @@ def _stage_logic_map(workflow: str) -> dict[str, dict]:
     }
 
 
+def _default_stage_definition(pipeline: dict, stage_name: str, logic: dict | None) -> str:
+    workflow = str(pipeline.get("workflow", ""))
+    lines = [
+        f"stage: {stage_name}",
+        f"workflow: {workflow}",
+    ]
+    if not logic:
+        lines.extend(
+            [
+                "state: catalog-only",
+                "intent: define action, transport, target, inputs, validation, and rollback before wiring executor logic",
+            ]
+        )
+        return "\n".join(lines)
+
+    fields = [
+        ("transport", logic.get("transport")),
+        ("action", logic.get("action")),
+        ("handler", logic.get("kind")),
+        ("target", logic.get("target")),
+        ("timeout_seconds", logic.get("timeout")),
+    ]
+    for key, value in fields:
+        if value not in (None, ""):
+            lines.append(f"{key}: {value}")
+
+    if logic.get("active"):
+        lines.append(f"run: {logic['active']}")
+    if logic.get("complete"):
+        lines.append(f"success: {logic['complete']}")
+    if logic.get("message"):
+        lines.append(f"operator_message: {logic['message']}")
+    if logic.get("command"):
+        lines.extend(["command: |", *[f"  {line}" for line in str(logic["command"]).splitlines()]])
+    lines.append("validation: use stage completion, run events, and the run map target chips")
+    if str(logic.get("transport") or "").startswith("bkc-ssh"):
+        lines.append("rollback: rerun or repair through BKC SSH against the same target")
+    elif str(logic.get("transport") or "") == "ssh-manager":
+        lines.append("rollback: inspect manager-side artifacts, then rerun this stage or queue a redeploy")
+    return "\n".join(lines)
+
+
+def _default_stage_notes(stage_name: str, logic: dict | None) -> str:
+    if not logic:
+        return "Catalog-only stage. Add the desired action contract here before executor wiring."
+    action = str(logic.get("action") or logic.get("kind") or "stage action")
+    transport = str(logic.get("transport") or "internal")
+    return f"{stage_name} uses {action} over {transport}. Inputs, expected output, and rollback notes can be refined here."
+
+
 @pipelines_blueprint.route("/pipelines", methods=["GET", "POST"])
 def pipelines():
     tenant_id = get_current_tenant_id()
     tenant_slug = get_effective_tenant_slug()
     search_query = request.args.get("q", "").strip().lower()
     selected_tag = request.args.get("tag", "").strip().lower()
+    selected_pipeline_id = request.args.get("pipeline", "").strip()
     if request.method == "POST":
         if request.form.get("action") == "create-candidate-pipeline":
             candidate_id = request.form.get("candidate_id", "").strip()
@@ -432,6 +666,21 @@ def pipelines():
             flash(f"{pipeline['name']} is still a planned lane. Its executor is not wired yet.", "error")
             return redirect(url_for("pipelines.pipelines"))
 
+        extra = {"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]}
+        resource_class = str(pipeline.get("resource_class", "")).strip().lower()
+        if resource_class:
+            extra["resource_class"] = resource_class
+        if str(pipeline.get("workflow", "")).strip().lower() in {"fedora-cosmic-postinstall", "demo-k3s-add-node"}:
+            target_host = request.form.get("target_host", "").strip()
+            target_name = request.form.get("target_name", "").strip()
+            target_vmid = request.form.get("target_vmid", "").strip()
+            if target_host:
+                extra["target_host"] = target_host
+            if target_name:
+                extra["target_name"] = target_name
+            if target_vmid:
+                extra["target_vmid"] = target_vmid
+
         run = create_automation_run(
             tenant_slug=tenant_slug,
             requested_by=f"user:{getattr(current_user, 'id', 'unknown')}",
@@ -441,7 +690,7 @@ def pipelines():
             ref=ref,
             commit=commit,
             notes=notes or pipeline.get("notes", ""),
-            extra={"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]},
+            extra=extra,
         )
 
         queued = _queue_run(
@@ -468,9 +717,11 @@ def pipelines():
         )
         return redirect(url_for("pipelines.pipelines"))
 
-    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in demo_pipelines()}
+    all_pipelines = demo_pipelines()
+    tenant_runs = [run for run in load_runs() if run.get("tenant_slug") == tenant_slug]
+    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in all_pipelines}
     visible_pipelines = []
-    for item in demo_pipelines():
+    for item in all_pipelines:
         supported = supported_workflows.get(item["workflow"], False)
         tags = _pipeline_tags(item, supported=supported)
         if selected_tag and selected_tag not in tags:
@@ -482,9 +733,7 @@ def pipelines():
         visible_pipelines.append(enriched)
 
     visible_runs = []
-    for run in load_runs():
-        if run.get("tenant_slug") != tenant_slug:
-            continue
+    for run in sorted(tenant_runs, key=_run_timestamp, reverse=True):
         run_tags = _run_tags(run)
         if selected_tag and selected_tag not in run_tags:
             continue
@@ -493,21 +742,54 @@ def pipelines():
         enriched = dict(run)
         enriched["stage_summary"] = _stage_summary(run)
         enriched["tags"] = run_tags
+        enriched["supports_undeploy"] = _run_supports_undeploy(run)
         visible_runs.append(enriched)
+
+    run_groups: dict[str, list[dict]] = {}
+    for run in visible_runs:
+        run_groups.setdefault(_run_group_key(run), []).append(run)
+    ledger_runs = []
+    seen_run_groups = set()
+    for run in visible_runs:
+        group_key = _run_group_key(run)
+        if group_key in seen_run_groups:
+            continue
+        seen_run_groups.add(group_key)
+        attempts = run_groups.get(group_key, [run])
+        enriched = dict(run)
+        enriched["attempt_count"] = len(attempts)
+        enriched["previous_attempt_count"] = max(0, len(attempts) - 1)
+        enriched["failed_attempt_count"] = sum(1 for item in attempts if str(item.get("status", "")).lower() == "failed")
+        enriched["run_group_key"] = group_key
+        ledger_runs.append(enriched)
 
     latest_runs_by_workflow: dict[str, dict] = {}
     for run in visible_runs:
         latest_runs_by_workflow.setdefault(str(run.get("workflow", "")), run)
+    visible_pipelines.sort(
+        key=lambda item: (
+            latest_runs_by_workflow.get(str(item.get("workflow", ""))) is None,
+            -_run_timestamp(latest_runs_by_workflow.get(str(item.get("workflow", "")), {})).timestamp(),
+            str(item.get("name", "")).lower(),
+        )
+    )
+    selected_pipeline = next((item for item in visible_pipelines if item.get("id") == selected_pipeline_id), None)
+    if not selected_pipeline and visible_pipelines:
+        selected_pipeline = visible_pipelines[0]
+    selected_latest = latest_runs_by_workflow.get(str(selected_pipeline.get("workflow", ""))) if selected_pipeline else None
 
     return render_template(
         "pipelines.html.j2",
         pipelines=visible_pipelines,
-        runs=visible_runs[:12],
+        selected_pipeline=selected_pipeline,
+        selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),
+        runs=ledger_runs[:12],
+        raw_run_count=len(visible_runs),
         latest_runs_by_workflow=latest_runs_by_workflow,
         supported_workflows=supported_workflows,
         search_query=search_query,
         selected_tag=selected_tag,
-        available_tags=PIPELINE_TAGS,
+        available_tags=_available_pipeline_tags(all_pipelines, tenant_runs),
         candidates=[item for item in _candidate_catalog() if _candidate_matches(item, search_query)],
     )
 
@@ -531,7 +813,7 @@ def pipeline_run_detail(run_id: str):
         "pipeline_run_detail.html.j2",
         run=enriched,
         logs_snapshot=logs_snapshot,
-        supports_undeploy=workflow_supports_undeploy(str(run.get("workflow", ""))),
+        supports_undeploy=_run_supports_undeploy(run),
         external_links=_run_external_links(run),
         pipeline_definition=pipeline_by_id(str(run.get("extra", {}).get("pipeline_id", ""))),
         workflow_stage_details=workflow_stage_definitions(
@@ -556,13 +838,16 @@ def pipeline_run_action(run_id: str):
     if not workflow_is_supported(str(source.get("workflow", ""))):
         flash("This lane is still planned. Its executor is not wired yet.", "error")
         return redirect(url_for("pipelines.pipeline_run_detail", run_id=run_id))
-    if action == "undeploy" and not workflow_supports_undeploy(str(source.get("workflow", ""))):
+    source_workflow = str(source.get("workflow", "")).strip()
+    undeploy_workflow = _rx_demo_undeploy_workflow(source_workflow)
+    action_workflow = undeploy_workflow if action == "undeploy" and undeploy_workflow else source_workflow
+    if action == "undeploy" and not (undeploy_workflow or workflow_supports_undeploy(source_workflow)):
         flash("This pipeline does not support undeploy.", "error")
         return redirect(url_for("pipelines.pipeline_run_detail", run_id=run_id))
 
     extra = dict(source.get("extra", {}))
     extra["parent_run_id"] = source["id"]
-    extra["action_mode"] = "undeploy" if action == "undeploy" else "deploy"
+    extra["action_mode"] = "deploy" if undeploy_workflow else ("undeploy" if action == "undeploy" else "deploy")
     extra["trigger_action"] = action
 
     note_prefix = {
@@ -576,7 +861,7 @@ def pipeline_run_action(run_id: str):
         requested_by=f"user:{getattr(current_user, 'id', 'unknown')}",
         trigger_source="ui",
         repo=source.get("repo", ""),
-        workflow=source.get("workflow", ""),
+        workflow=action_workflow,
         ref=source.get("ref", ""),
         commit=source.get("commit", ""),
         notes=f"{note_prefix} of {source['id'][:8]}. {source.get('notes', '').strip()}".strip(),
@@ -688,5 +973,7 @@ def pipeline_stage_edit(pipeline_id: str, stage_name: str):
         supported=workflow_is_supported(str(pipeline.get("workflow", ""))),
         logic=logic,
         saved=saved,
+        default_operator_notes=_default_stage_notes(stage_name, logic),
+        default_draft_definition=_default_stage_definition(pipeline, stage_name, logic),
         executor_source_files=_executor_source_files(str(pipeline.get("workflow", ""))),
     )

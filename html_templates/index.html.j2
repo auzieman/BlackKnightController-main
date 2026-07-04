@@ -4,17 +4,72 @@
 {% block page_heading %}Overview{% endblock %}
 
 {% block content %}
-    <section class="hero">
-        <div>
-            <p class="eyebrow">Operator console</p>
-            <h2>Run the lab here, inspect the deeper consoles when the run needs proof</h2>
-            <p class="hero-copy">BKC is the operator surface for the lab. Ansible and Docker perform the work, Proxmox is the later VM tier, and Grafana, Loki, Portainer, and the public services stay one click away instead of being awkwardly reimplemented in the control plane.</p>
+    <section class="ops-overview">
+        <div class="ops-command-panel">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Resource command</p>
+                    <h2>Infrastructure by resource, relationship, and action</h2>
+                </div>
+                <a class="button" href="{{ url_for('resource_graph.resource_graph') }}">Open graph</a>
+            </div>
+            <section class="resource-metrics overview-resource-metrics">
+                {% for kind, meta in resource_kind_meta.items() %}
+                    {% if resource_graph.counts.get(kind) %}
+                        <a class="resource-metric" href="{{ url_for('resource_graph.resource_graph', kind=kind) }}">
+                            <span class="resource-icon">{{ meta.short }}</span>
+                            <strong>{{ resource_graph.counts.get(kind) }}</strong>
+                            <span>{{ meta.label }}</span>
+                        </a>
+                    {% endif %}
+                {% endfor %}
+            </section>
+            <div class="overview-resource-list">
+                {% for resource in resource_preview %}
+                    <a class="overview-resource-row" href="{{ url_for('resource_graph.resource_graph', resource=resource.id) }}">
+                        <span class="resource-icon">{{ resource_kind_meta.get(resource.kind, {}).get('short', resource.kind[:3]|upper) }}</span>
+                        <strong>{{ resource.name }}</strong>
+                        <span>{{ resource.state }}</span>
+                        <small>{{ resource.summary }}</small>
+                    </a>
+                {% else %}
+                    <div class="workflow-empty">No resources have been discovered yet.</div>
+                {% endfor %}
+            </div>
         </div>
-        <div class="hero-panel">
-            <p><strong>Global environment:</strong> {{ globals_meta.env }}</p>
-            <p><strong>Datacenter:</strong> {{ globals_meta.datacenter }}</p>
-            <p><strong>Release:</strong> {{ globals_meta.release }}</p>
-            <p><strong>Tracked pipelines:</strong> {{ pipelines | length }}</p>
+
+        <div class="ops-side-panel">
+            <p class="eyebrow">Relationship preview</p>
+            <h3>{{ resource_graph.relationships|length }} inferred edges</h3>
+            <div class="overview-edge-list">
+                {% for relationship in relationship_preview %}
+                    <a href="{{ url_for('resource_graph.resource_graph', resource=relationship.source_id, tab='relationships') }}">
+                        <strong>{{ relationship.source_label }}</strong>
+                        <span>{{ relationship.type }}</span>
+                        <strong>{{ relationship.target_label }}</strong>
+                    </a>
+                {% else %}
+                    <div class="workflow-empty">No relationships inferred yet.</div>
+                {% endfor %}
+            </div>
+            <div class="ops-meta-grid">
+                <div>
+                    <span>Environment</span>
+                    <strong>{{ globals_meta.env }}</strong>
+                </div>
+                <div>
+                    <span>Datacenter</span>
+                    <strong>{{ globals_meta.datacenter }}</strong>
+                </div>
+                <div>
+                    <span>Release</span>
+                    <strong>{{ globals_meta.release }}</strong>
+                </div>
+                <div>
+                    <span>Pipelines</span>
+                    <strong>{{ pipelines | length }}</strong>
+                </div>
+            </div>
         </div>
     </section>
 

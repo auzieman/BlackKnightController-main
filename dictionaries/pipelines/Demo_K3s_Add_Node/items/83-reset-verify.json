@@ -1,0 +1,7 @@
+{
+  "id": "verify-reset",
+  "kind": "validation",
+  "summary": "Verify the demo worker is absent from both k3s and Proxmox.",
+  "command": "Check kubectl node absence and Proxmox VM absence by VMID or target name.",
+  "expected": "The add-node lane can be run again for another recording session."
+}

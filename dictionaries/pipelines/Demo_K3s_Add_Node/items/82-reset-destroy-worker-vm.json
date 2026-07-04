@@ -1,0 +1,7 @@
+{
+  "id": "destroy-worker-vm",
+  "kind": "reset-operation",
+  "summary": "Stop and destroy the cloned Proxmox worker VM.",
+  "command": "Proxmox stop/destroy the recorded worker VMID, or find it by target name if the VMID is missing.",
+  "expected": "The cloned worker VM is gone from Proxmox inventory."
+}

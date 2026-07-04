@@ -1,0 +1,12 @@
+{
+  "id": "select-target",
+  "kind": "planning-gate",
+  "summary": "Select the worker name and Fedora 44 Proxmox source that will become the new k3s worker.",
+  "inputs": [
+    "desired node name, for example kube3.lab.auzietek.com",
+    "Fedora 44 source VMID 131",
+    "cluster name",
+    "operator approval"
+  ],
+  "expected": "BKC has a source VM/template and a new worker name before cloning."
+}

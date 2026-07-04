@@ -15,15 +15,31 @@ BUILTIN_PIPELINES = [
         "name": "Auzix Lab Demo",
         "repo": "tabor-linux-forge",
         "workflow": "lab-demo",
-        "description": "Build the current Auzix artifacts, stage monitoring visibility, then hand off to the later hypervisor import and VM boot-test leg.",
+        "description": "Run the strict AuzixRoot filesystem contract demo through the tabor-linux-forge builder lane, then publish the audit output for the later image and VM boot-test legs.",
         "stages": [
             "repo-sync",
-            "image-build",
-            "monitoring-deploy",
-            "microblog-publish",
-            "hypervisor-handoff",
+            "builder-ready",
+            "strict-root-scaffold",
+            "sample-payload-build",
+            "busybox-package-build",
+            "strict-root-audit",
+            "strict-container-build",
+            "legacy-prune-test",
+            "artifact-publish",
+            "dashboard-link",
         ],
-        "notes": "Primary demo lane for the full lab loop. This remains planned until the composite executor is wired.",
+        "actions": [
+            "repo.source.verify",
+            "docker.builder.prepare",
+            "auzix.root.scaffold",
+            "auzix.package.build",
+            "auzix.busybox.build",
+            "auzix.root.audit",
+            "docker.image.import_root",
+            "auzix.legacy_links.prune_test",
+            "artifact.report.publish",
+        ],
+        "notes": "Primary Auzix demo lane. It deliberately proves the strict root contract in the tabor container/build substrate before attempting a full image or hypervisor handoff.",
         "editable": True,
         "links": [
             {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
@@ -39,10 +55,11 @@ BUILTIN_PIPELINES = [
             },
             {
                 "name": "Lab Infra",
-                "summary": "Watch swarm node pressure, restarts, and shared-storage backed runtime behavior during the Auzix path.",
+                "summary": "Watch swarm node pressure and shared-storage backed runtime behavior during the Auzix strict-root path.",
                 "url": "http://swarm1.lab.auzietek.com:3000",
             },
         ],
+        "tags": ["auzix", "tabor", "strict-root", "demo"],
     },
     {
         "id": "wordpress-appliance",
@@ -102,11 +119,346 @@ BUILTIN_PIPELINES = [
         "tags": ["candidate", "hypervisor", "deploy"],
     },
     {
+        "id": "fedora-cosmic-postinstall",
+        "name": "Fedora COSMIC Post Install",
+        "repo": "proxmox-template-deploy",
+        "workflow": "fedora-cosmic-postinstall",
+        "description": "Take over a freshly cloned Fedora VM over BKC SSH, install COSMIC Desktop unattended, enable graphical boot, reboot once, and verify the display manager is online.",
+        "stages": [
+            "target-select",
+            "wait-ssh",
+            "package-plan",
+            "desktop-install",
+            "graphical-enable",
+            "reboot",
+            "gui-validate",
+            "register-resource",
+        ],
+        "notes": "Second-stage VM customization lane. It deliberately avoids firstboot scripts so a broken desktop setup cannot put the installer back into a boot loop.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+            {"label": "Fedora COSMIC", "url": "https://fedoraproject.org/spins/cosmic"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Follow SSH takeover, package install, reboot, and graphical target validation from BKC.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["fedora", "cosmic", "desktop", "ssh", "postinstall"],
+    },
+    {
+        "id": "k3s-fedora-cluster",
+        "name": "K3s Fedora Cluster",
+        "repo": "proxmox-template-deploy",
+        "workflow": "k3s-fedora-cluster",
+        "description": "Clone two Fedora 44 guests, bootstrap k3s with BKC SSH, pass the kube1 join token into kube2, verify node readiness, and register the cluster in inventory.",
+        "stages": [
+            "source-select",
+            "clone-plan",
+            "proxmox-clone",
+            "boot",
+            "discover-ssh",
+            "base-os-bootstrap",
+            "install-k3s-server",
+            "capture-k3s-token",
+            "install-k3s-agent",
+            "verify-cluster",
+            "register-resources",
+        ],
+        "notes": "BKC-native SSH example for cluster orchestration. It expects kube1.lab.auzietek.com and kube2.lab.auzietek.com to resolve after the Proxmox guests boot.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+            {"label": "K3s API", "url": "https://kube1.lab.auzietek.com:6443"},
+            {"label": "Portainer", "url": "https://swarm1.lab.auzietek.com:9443"},
+            {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Follow clone, SSH bootstrap, k3s install, and readiness stages from the normal BKC pipeline surface.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+            {
+                "name": "Cluster API",
+                "summary": "Future API integration point for reading Kubernetes nodes, pods, services, and events through kube1.",
+                "url": "https://kube1.lab.auzietek.com:6443",
+            },
+            {
+                "name": "Portainer",
+                "summary": "Existing Portainer CE control plane for Docker Swarm today and the k3s environment once the agent or kubeconfig is registered.",
+                "url": "https://swarm1.lab.auzietek.com:9443",
+            },
+        ],
+        "tags": ["kubernetes", "k3s", "hypervisor", "deploy", "ssh"],
+    },
+    {
+        "id": "k3s-host-telemetry",
+        "name": "K3s Lab Housekeeping",
+        "repo": "rx-demo",
+        "workflow": "k3s-host-telemetry",
+        "description": "Mount shared project storage, deploy Telegraf/cAdvisor, push k3s host and pod logs to Loki, keep loadgen running, update Prometheus, and verify Grafana has k3s signals.",
+        "stages": [
+            "verify-k3s",
+            "nfs-projects",
+            "apply-host-telemetry",
+            "apply-loki-logs",
+            "loadgen-steady",
+            "open-firewall",
+            "prometheus-targets",
+            "scrape-validate",
+            "dashboard-link",
+        ],
+        "actions": [
+            "k3s.nodes.ready",
+            "ssh.nfs.ensure_mounts",
+            "k3s.manifest.apply",
+            "ssh.firewall.open_ports",
+            "prometheus.scrape_job.ensure",
+            "prometheus.targets.verify",
+        ],
+        "notes": "BKC-native SSH lane for kube1/kube2 housekeeping after the k3s app stack is online.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Prometheus Targets", "url": "http://swarm1.lab.auzietek.com:9090/targets"},
+            {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
+        ],
+        "dashboards": [
+            {
+                "name": "Host Ops",
+                "summary": "Confirm kube1 and kube2 host CPU, memory, disk, and network telemetry from Telegraf.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/host-ops/host-ops",
+            },
+            {
+                "name": "Container Overview - Telegraf",
+                "summary": "Use cAdvisor and Telegraf-backed runtime panels to inspect k3s container pressure.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/auzix-container-telegraf/container-overview-telegraf-auzix-lab",
+            },
+            {
+                "name": "Loki k3s Logs",
+                "summary": "Inspect k3s host and pod logs with job=k3s-hostlogs and job=k3s-pods labels.",
+                "url": "http://swarm1.lab.auzietek.com:3000/explore",
+            },
+        ],
+        "tags": ["kubernetes", "k3s", "monitoring", "storage", "ssh"],
+    },
+    {
+        "id": "demo-swarm-image-registry",
+        "name": "Demo: Swarm Image Registry",
+        "repo": "BlackKnightController",
+        "workflow": "demo-swarm-image-registry",
+        "description": "Deploy the demo registry stack, validate push and pull behavior, and prepare k3s nodes to trust the swarm-hosted image source.",
+        "stages": [
+            "storage-ready",
+            "deploy-registry-stack",
+            "registry-health",
+            "k3s-dns-or-ip",
+            "k3s-containerd-trust",
+            "push-smoke-image",
+            "pull-smoke-image",
+        ],
+        "actions": [
+            "docker.registry.probe",
+            "docker.image.push",
+            "k3s.registry.trust",
+        ],
+        "notes": "Demo step 1. Use this before the rx-demo deploy lane when the cluster image source needs to be proven on camera.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Registry", "url": "http://swarm1.lab.auzietek.com:5001/v2/"},
+            {"label": "Portainer", "url": "https://swarm1.lab.auzietek.com:9443"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Watch registry deploy, push, and k3s trust stages from the BKC pipeline surface.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=demo-swarm-image-registry",
+            },
+        ],
+        "tags": ["demo", "registry", "swarm", "k3s", "deploy"],
+    },
+    {
+        "id": "rx-demo-k3s-deploy",
+        "name": "Demo: Rx Demo K3s Deploy",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-deploy",
+        "description": "Build rx-demo images, apply the k3s demo overlay, roll out the app and observability stack, smoke the UI/API, and publish access links.",
+        "stages": [
+            "k3s-ready",
+            "runtime-secrets",
+            "registry-images",
+            "apply-k3s-demo-overlay",
+            "rollout-app",
+            "rollout-observability",
+            "smoke-api",
+            "smoke-ui",
+            "telemetry-check",
+            "access-links",
+        ],
+        "actions": [
+            "k3s.nodes.ready",
+            "docker.images.build_push",
+            "kubectl.manifest.apply",
+            "kubectl.rollout.wait",
+            "http.smoke",
+            "prometheus.metrics.check",
+        ],
+        "notes": "Demo step 2. This is the full rx-demo bring-up lane and now validates the Grafmaid panel plugin as part of telemetry checks.",
+        "editable": True,
+        "links": [
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
+            {"label": "Rx API", "url": "http://192.168.1.239:30081"},
+            {"label": "Grafana", "url": "http://192.168.1.239:30300"},
+            {"label": "Prometheus", "url": "http://192.168.1.239:30090"},
+        ],
+        "dashboards": [
+            {
+                "name": "Rx Traffic Map",
+                "summary": "Grafmaid-backed service map for the rx-demo flow.",
+                "url": "http://192.168.1.239:30300/d/rx-traffic-map/rx-traffic-map",
+            },
+            {
+                "name": "Rx CloudEvents Audit",
+                "summary": "Known transaction audit trail through Loki.",
+                "url": "http://192.168.1.239:30300/d/rx-cloudevents/rx-cloudevents-audit",
+            },
+        ],
+        "tags": ["demo", "k3s", "rx-demo", "deploy", "grafana"],
+    },
+    {
+        "id": "rx-demo-k3s-redeploy-from-git",
+        "name": "Demo: Rx Demo Redeploy From Git",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-redeploy-from-git",
+        "description": "Record a Git-triggered rx-demo redeploy, build and push commit-tagged images, update k3s, and prove CloudEvents still arrive in Loki/Grafana.",
+        "stages": [
+            "git-event",
+            "sync-source-from-git",
+            "build-and-push",
+            "update-images",
+            "k3s-network-ready",
+            "rollout-app",
+            "cloudinit-node-check",
+            "visible-change-check",
+            "telemetry-still-flowing",
+            "loki-cloudevents-check",
+            "grafana-loki-check",
+            "access-links",
+        ],
+        "actions": [
+            "git.source.sync",
+            "docker.images.build_push",
+            "kubectl.image.update",
+            "kubectl.rollout.wait",
+            "loki.query.verify",
+            "grafana.datasource.verify",
+        ],
+        "notes": "Demo step 3. Use this for the source-to-runtime story after the full stack is already online.",
+        "editable": True,
+        "links": [
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
+            {"label": "Grafana", "url": "http://192.168.1.239:30300"},
+            {"label": "Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-redeploy-from-git"},
+        ],
+        "dashboards": [
+            {
+                "name": "Rx CloudEvents Audit",
+                "summary": "Shows the known transaction generated by the redeploy validation lane.",
+                "url": "http://192.168.1.239:30300/d/rx-cloudevents/rx-cloudevents-audit",
+            },
+        ],
+        "tags": ["demo", "git", "k3s", "rx-demo", "redeploy"],
+    },
+    {
+        "id": "rx-demo-k3s-undeploy",
+        "name": "Demo: Rx Demo K3s Undeploy",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-undeploy",
+        "description": "Capture rx-demo state, remove demo-owned app and observability resources, verify cleanup, and keep registry artifacts intact.",
+        "stages": [
+            "capture-state",
+            "delete-overlay",
+            "delete-namespace",
+            "verify-removed",
+            "registry-retained",
+        ],
+        "actions": [
+            "kubectl.get",
+            "kubectl.delete",
+            "kubectl.verify_absent",
+            "docker.registry.probe",
+        ],
+        "notes": "Demo step 4. Use this from the latest rx-demo run's Undeploy button or queue it directly to reset the rehearsal environment.",
+        "editable": True,
+        "links": [
+            {"label": "Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-undeploy"},
+            {"label": "Registry", "url": "http://swarm1.lab.auzietek.com:5001/v2/"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Follow cleanup evidence and verify the demo namespaces were removed.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-undeploy",
+            },
+        ],
+        "tags": ["demo", "cleanup", "k3s", "rx-demo", "undeploy"],
+    },
+    {
+        "id": "rx-demo-k3s-app-refresh",
+        "name": "Demo: Rx Demo App Refresh",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-app-refresh",
+        "description": "Build the staged rx-demo UI image on the swarm manager, import it into both k3s nodes, apply the lab overlay, restart rx-ui, and smoke the routed UI actions.",
+        "stages": [
+            "verify-k3s",
+            "source-check",
+            "build-rx-ui-image",
+            "import-rx-ui-image",
+            "apply-lab-overlay",
+            "smoke-ui-routes",
+            "dashboard-link",
+        ],
+        "actions": [
+            "k3s.nodes.ready",
+            "docker.image.build",
+            "k3s.image.import",
+            "k3s.manifest.apply",
+            "http.route.smoke",
+        ],
+        "notes": "This lane expects the working rx-demo tree to be staged at /mnt/swarm/shared/rx-demo so BKC can deploy the test build without ad-hoc kube1 commands.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
+            {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
+        ],
+        "dashboards": [
+            {
+                "name": "Rx Executive Health",
+                "summary": "Watch route-level UI activity and component health after the k3s refresh.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/rx-executive-health/rx-demo-executive-health",
+            },
+            {
+                "name": "Tempo Traces",
+                "summary": "Inspect browser-to-UI-to-API route traces after the routed action smoke checks run.",
+                "url": "http://swarm1.lab.auzietek.com:3000/d/rx-tempo-traces/rx-tempo-traces",
+            },
+        ],
+        "tags": ["kubernetes", "k3s", "rx-demo", "deploy", "ssh"],
+    },
+    {
         "id": "tabor-build",
-        "name": "Auzix Image Build",
-        "repo": "tabor-linux-forge",
+        "name": "AuziX Image Build",
+        "repo": "AuziX",
         "workflow": "tabor-build",
-        "description": "Use the staged tabor-linux-forge source on ns1, prepare the swarm builder, construct the current Auzix build artifacts, and verify they landed on shared storage.",
+        "description": "Use the staged AuziX source on ns1, prepare the swarm builder, construct the current AuziX build artifacts, and verify they landed on shared storage.",
         "stages": [
             "repo-sync",
             "builder-prepare",
@@ -133,6 +485,147 @@ BUILTIN_PIPELINES = [
                 "url": "http://swarm1.lab.auzietek.com:3000/d/auzix-container-telegraf/container-overview-telegraf-auzix-lab",
             },
         ],
+    },
+    {
+        "id": "auzix-vm130-deploy",
+        "name": "AuziX VM130 Deploy",
+        "repo": "AuziX",
+        "workflow": "auzix-vm130-deploy",
+        "description": "Deploy the generated AuziX runtime startup and Midori wrapper to the installed VMID 130 guest, then verify browser networking and user-state permissions.",
+        "stages": [
+            "source-verify",
+            "runtime-deploy",
+            "network-validate",
+        ],
+        "notes": "Repeatable SSH deployment for root@192.168.1.163. The lane consumes the generated AuzixRoot on the shared AuziX build workspace and records the deployed Git commit in /System/State/deployments.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Track the VM130 payload copy and browser-network validation as separate rerunnable stages.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["auzix", "vm130", "deploy", "ssh"],
+    },
+    {
+        "id": "auzix-installer-foundation",
+        "name": "AuziX Installer Foundation",
+        "repo": "AuziX",
+        "workflow": "auzix-installer-foundation",
+        "description": "Build and validate the Lua installer engine, dialog TUI, JSON plan contract, and graphical frontend protocol from the staged AuziX source.",
+        "resource_class": "slow",
+        "stages": [
+            "source-verify",
+            "installer-build",
+            "contract-test",
+            "artifact-report",
+        ],
+        "notes": "Non-destructive installer lane. It packages Lua and dialog, validates guarded plan execution with a fake executor, and reports the staged installer artifacts without running auzix-install-disk or changing VM130.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "AuziX Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-installer-foundation"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Track installer package construction and the guarded execution contract on the shared build workspace.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines",
+            },
+        ],
+        "tags": ["auzix", "installer", "lua", "dialog", "build"],
+    },
+    {
+        "id": "lab-cluster-storage",
+        "name": "Lab Cluster Storage",
+        "repo": "BlackKnightController",
+        "workflow": "lab-cluster-storage",
+        "description": "Preflight, grow, and verify the LVM-backed root filesystems on the Swarm and k3s guests.",
+        "stages": ["storage-preflight", "swarm-grow", "k3s-grow", "storage-verify"],
+        "actions": ["ssh.lvm.grow_root"],
+        "notes": "Idempotent guest-side growth to 50 GiB. The current 60 GiB virtual disks retain about 8 GiB free in each volume group.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Proxmox", "url": "https://192.168.1.9:8006"},
+        ],
+        "tags": ["lab", "storage", "swarm", "k3s", "lvm"],
+    },
+    {
+        "id": "auzix-installer-package-bot",
+        "name": "AuziX Installer Package Bot",
+        "repo": "AuziX",
+        "workflow": "auzix-installer-package-bot",
+        "description": "Build and publish the installer UI package batch sequentially on the bounded BKC slow worker.",
+        "resource_class": "slow",
+        "stages": [
+            "source-verify",
+            "queue-contract",
+            "package-build",
+            "artifact-report",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ],
+        "notes": "Consumes the installer queue and source catalog, runs only allowlisted package scripts, stops on failure, builds checksummed AuziX archives, and publishes index.json last.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Package Bot Runs", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=auzix-installer-package-bot"},
+        ],
+        "tags": ["auzix", "installer", "packages", "build", "slow-worker"],
+    },
+    {
+        "id": "auzix-trixie-package-intake",
+        "name": "AuziX Trixie Package Intake",
+        "repo": "AuziX",
+        "workflow": "auzix-trixie-package-intake",
+        "description": "Attempt the vmid132-derived Trixie application list sequentially and publish successful AuziX compatibility packages.",
+        "resource_class": "slow",
+        "stages": [
+            "source-verify",
+            "builder-prepare",
+            "package-intake",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ],
+        "notes": "Uses a Debian Trixie builder, continues after individual package failures, records a JSON report, and publishes successful Debian.<name> compatibility packages.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "AuziX Repository", "url": "http://192.168.1.10/auzix/repo/"},
+        ],
+        "tags": ["auzix", "trixie", "applications", "packages", "slow-worker"],
+    },
+    {
+        "id": "auzix-office-package-smoke",
+        "name": "AuziX Office Package Smoke",
+        "repo": "AuziX",
+        "workflow": "auzix-office-package-smoke",
+        "description": "Build, validate, and publish focused AbiWord and Gnumeric compatibility packages.",
+        "resource_class": "slow",
+        "stages": [
+            "source-verify",
+            "builder-prepare",
+            "package-build",
+            "package-test",
+            "repository-build",
+            "repository-publish",
+            "repository-verify",
+        ],
+        "notes": "Uses a dedicated two-package profile and report, then verifies both payloads and served checksummed archives.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "AuziX Repository", "url": "http://192.168.1.10/auzix/repo/"},
+        ],
+        "tags": ["auzix", "trixie", "office", "packages", "smoke", "slow-worker"],
     },
     {
         "id": "monitoring-stack",
@@ -273,7 +766,17 @@ BUILTIN_PIPELINES = [
 
 
 def _definitions_path() -> Path:
+    override = os.environ.get("BKC_PIPELINE_DEFINITIONS_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return BASE_DIR / "dictionaries" / "pipeline_definitions.local.json"
+
+
+def _pipeline_folders_path() -> Path:
+    override = os.environ.get("BKC_PIPELINE_FOLDERS_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return BASE_DIR / "dictionaries" / "pipelines"
 
 
 def _load_catalog_state() -> dict:
@@ -297,6 +800,51 @@ def _load_overrides() -> dict[str, dict]:
 
 def _load_custom_pipelines() -> list[dict]:
     return _load_catalog_state()["custom_pipelines"]
+
+
+def _load_pipeline_items(folder: Path) -> list[dict]:
+    items_dir = folder / "items"
+    if not items_dir.is_dir():
+        return []
+    items: list[dict] = []
+    for path in sorted(items_dir.glob("*.json")):
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        item = dict(payload)
+        item.setdefault("id", path.stem)
+        item.setdefault("source_path", str(path))
+        items.append(item)
+    return items
+
+
+def _load_folder_pipelines() -> list[dict]:
+    root = _pipeline_folders_path()
+    if not root.is_dir():
+        return []
+    pipelines: list[dict] = []
+    for folder in sorted(path for path in root.iterdir() if path.is_dir()):
+        path = folder / "pipeline.json"
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict) or not payload.get("id"):
+            continue
+        pipeline = dict(payload)
+        pipeline.setdefault("source_path", str(path))
+        items = _load_pipeline_items(folder)
+        if items:
+            pipeline["items"] = items
+        pipelines.append(pipeline)
+    return pipelines
 
 
 def _save_catalog_state(state: dict) -> None:
@@ -334,7 +882,7 @@ def _save_overrides(overrides: dict[str, dict]) -> None:
 def _merge_pipeline(base: dict, override: dict) -> dict:
     merged = deepcopy(base)
     for key, value in override.items():
-        if key in {"links", "dashboards", "stages"} and isinstance(value, list):
+        if key in {"actions", "dashboards", "gates", "items", "links", "stages", "tags"} and isinstance(value, list):
             merged[key] = deepcopy(value)
         else:
             merged[key] = value
@@ -343,9 +891,16 @@ def _merge_pipeline(base: dict, override: dict) -> dict:
 
 def demo_pipelines() -> list[dict]:
     overrides = _load_overrides()
-    builtins = [_merge_pipeline(pipeline, overrides.get(pipeline["id"], {})) for pipeline in BUILTIN_PIPELINES]
+    folder_pipelines = {pipeline["id"]: pipeline for pipeline in _load_folder_pipelines()}
+    builtins = []
+    for pipeline in BUILTIN_PIPELINES:
+        merged = _merge_pipeline(pipeline, overrides.get(pipeline["id"], {}))
+        folder_pipeline = folder_pipelines.pop(pipeline["id"], None)
+        if folder_pipeline:
+            merged = _merge_pipeline(merged, folder_pipeline)
+        builtins.append(merged)
     customs = [dict(item) for item in _load_custom_pipelines()]
-    return builtins + customs
+    return builtins + customs + list(folder_pipelines.values())
 
 
 def pipeline_by_id(pipeline_id: str) -> dict | None:

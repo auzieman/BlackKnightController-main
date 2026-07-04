@@ -1,0 +1,8 @@
+{
+  "id": "apply-k3s-demo-overlay",
+  "kind": "command",
+  "summary": "Apply the full k3s demo overlay: app, dependencies, OTel collector, host telemetry, Loki, Tempo, Prometheus, Grafana, and loadgen.",
+  "working_directory": "/mnt/swarm/shared/rx-demo",
+  "command": "k3s kubectl apply -k k8s/overlays/k3s-demo",
+  "expected": "rx-demo and rx-observability resources are created or updated."
+}

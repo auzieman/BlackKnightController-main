@@ -188,6 +188,39 @@ def sync_docker_inventory_job(tenant_slug: str, tenant_id: int | None, user_id: 
         return {"sync": result, "reconcile": reconcile}
 
 
+def scan_kubernetes_job(tenant_slug: str, tenant_id: int | None, user_id: int | None, remote_ip: str | None):
+    import os
+
+    os.environ["BKC_TENANT_SLUG"] = tenant_slug
+    from services import bkc_db
+    from services.integration_store import save_kubernetes_snapshot
+    from services.kubernetes_api import scan_kubernetes_cluster
+
+    app = _app()
+    with app.app_context():
+        scan = scan_kubernetes_cluster()
+        save_kubernetes_snapshot(scan)
+        bkc_db.append_audit(
+            user_id,
+            tenant_id,
+            "job.scan_kubernetes",
+            "integrations",
+            {
+                "nodes": len(scan.get("nodes", [])),
+                "namespaces": len(scan.get("namespaces", [])),
+                "pods": len(scan.get("pods", [])),
+                "services": len(scan.get("services", [])),
+            },
+            remote_ip,
+        )
+        return {
+            "nodes": len(scan.get("nodes", [])),
+            "namespaces": len(scan.get("namespaces", [])),
+            "pods": len(scan.get("pods", [])),
+            "services": len(scan.get("services", [])),
+        }
+
+
 def scan_subnet_job(payload: dict[str, Any]):
     """Subnet discovery + import (single dict arg for RQ simplicity)."""
     import os

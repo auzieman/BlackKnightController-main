@@ -11,7 +11,7 @@ from services.automation_pipeline import create_automation_run, mark_run_blocked
 from services.automation_runs import get_run, load_runs
 from services.health_checks import readiness_report
 from services.job_queue import enqueue_job, job_queue_enabled
-from services.pipeline_executor import workflow_job_timeout
+from services.pipeline_executor import workflow_is_supported, workflow_job_timeout, workflow_supports_undeploy
 from services.rate_limit import limiter
 from services.rules_store import load_rules
 from services.tenant_context import set_request_tenant
@@ -75,6 +75,48 @@ def _api_bearer_limit() -> str:
             except (TypeError, ValueError):
                 pass
     return os.environ.get("BKC_API_KEY_RATE_LIMIT", "120 per minute").strip() or "120 per minute"
+
+
+def _rx_demo_undeploy_workflow(workflow: str) -> str | None:
+    return {
+        "rx-demo-k3s-deploy": "rx-demo-k3s-undeploy",
+        "rx-demo-k3s-redeploy-from-git": "rx-demo-k3s-undeploy",
+        "rx-demo-redeploy-from-git-event": "rx-demo-k3s-undeploy",
+    }.get(workflow.strip())
+
+
+def _queue_api_automation_run(run: dict, workflow: str, action_mode: str, api_row: dict) -> tuple[dict, bool, str]:
+    queued = False
+    job_id = ""
+    tenant_slug = str(api_row.get("tenant_slug") or "default")
+    if job_queue_enabled():
+        try:
+            timeout = workflow_job_timeout(workflow, action_mode=action_mode)
+            job = enqueue_job(
+                "services.job_tasks.automation_pipeline_job",
+                (
+                    run["id"],
+                    tenant_slug,
+                    api_row.get("tenant_id"),
+                    api_row.get("created_by"),
+                    request.remote_addr,
+                ),
+                job_timeout=timeout,
+                meta={
+                    "kind": "automation",
+                    "run_id": run["id"],
+                    "tenant_slug": tenant_slug,
+                    "repo": run.get("repo", ""),
+                    "workflow": workflow,
+                    "job_timeout": timeout,
+                },
+            )
+            queued = True
+            job_id = job.id
+            run = mark_run_queued(run["id"], job.id) or run
+        except Exception as exc:
+            run = mark_run_blocked(run["id"], f"Queue backend unavailable: {exc}") or run
+    return run, queued, job_id
 
 
 @api_blueprint.get("/health")
@@ -155,35 +197,7 @@ def automation_trigger():
         extra={"request_payload": payload},
     )
 
-    queued = False
-    job_id = ""
-    if job_queue_enabled():
-        try:
-            timeout = workflow_job_timeout(workflow, action_mode="deploy")
-            job = enqueue_job(
-                "services.job_tasks.automation_pipeline_job",
-                (
-                    run["id"],
-                    tenant_slug,
-                    api_row.get("tenant_id"),
-                    api_row.get("created_by"),
-                    request.remote_addr,
-                ),
-                job_timeout=timeout,
-                meta={
-                    "kind": "automation",
-                    "run_id": run["id"],
-                    "tenant_slug": tenant_slug,
-                    "repo": repo,
-                    "workflow": workflow,
-                    "job_timeout": timeout,
-                },
-            )
-            queued = True
-            job_id = job.id
-            run = mark_run_queued(run["id"], job.id) or run
-        except Exception as exc:
-            run = mark_run_blocked(run["id"], f"Queue backend unavailable: {exc}") or run
+    run, queued, job_id = _queue_api_automation_run(run, workflow, "deploy", api_row)
 
     return (
         jsonify(
@@ -193,6 +207,67 @@ def automation_trigger():
                 "queued": queued,
                 "job_id": job_id,
                 "workflow": run["workflow"],
+                "queue_available": queued,
+            }
+        ),
+        202,
+    )
+
+
+@api_blueprint.post("/automation/runs/<run_id>/action")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def automation_run_action(run_id: str):
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action", "")).strip().lower()
+    if action not in {"retry", "redeploy", "undeploy"}:
+        return jsonify({"error": "invalid_action", "allowed": ["retry", "redeploy", "undeploy"]}), 400
+
+    api_row = g.get("bkc_api_key_row") or {}
+    tenant_slug = str(api_row.get("tenant_slug") or "default")
+    key_name = str(api_row.get("name") or "api")
+    source = get_run(run_id)
+    if not source or source.get("tenant_slug") != tenant_slug:
+        abort(404)
+
+    source_workflow = str(source.get("workflow", "")).strip()
+    if not workflow_is_supported(source_workflow):
+        return jsonify({"error": "workflow_not_supported", "workflow": source_workflow}), 400
+
+    undeploy_workflow = _rx_demo_undeploy_workflow(source_workflow)
+    action_workflow = undeploy_workflow if action == "undeploy" and undeploy_workflow else source_workflow
+    if action == "undeploy" and not (undeploy_workflow or workflow_supports_undeploy(source_workflow)):
+        return jsonify({"error": "undeploy_not_supported", "workflow": source_workflow}), 400
+
+    extra = dict(source.get("extra", {}))
+    extra["parent_run_id"] = source["id"]
+    action_mode = "deploy" if undeploy_workflow else ("undeploy" if action == "undeploy" else "deploy")
+    extra["action_mode"] = action_mode
+    extra["trigger_action"] = action
+
+    note_prefix = {"retry": "Retry", "redeploy": "Redeploy", "undeploy": "Undeploy"}[action]
+    run = create_automation_run(
+        tenant_slug=tenant_slug,
+        requested_by=f"api-key:{key_name}",
+        trigger_source="api",
+        repo=str(source.get("repo", "")),
+        workflow=action_workflow,
+        ref=str(source.get("ref", "")),
+        commit=str(source.get("commit", "")),
+        notes=f"{note_prefix} of {source['id'][:8]}. {str(source.get('notes', '')).strip()}".strip(),
+        extra=extra,
+    )
+    run, queued, job_id = _queue_api_automation_run(run, action_workflow, action_mode, api_row)
+    return (
+        jsonify(
+            {
+                "run_id": run["id"],
+                "source_run_id": source["id"],
+                "action": action,
+                "status": run["status"],
+                "queued": queued,
+                "job_id": job_id,
+                "workflow": run["workflow"],
+                "action_mode": action_mode,
                 "queue_available": queued,
             }
         ),

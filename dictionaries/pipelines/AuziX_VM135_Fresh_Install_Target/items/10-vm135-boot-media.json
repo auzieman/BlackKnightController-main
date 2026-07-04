@@ -1,0 +1,7 @@
+{
+  "id": "vm135-boot-media",
+  "kind": "artifact",
+  "summary": "Proxmox local ISO storage receives a VM135-named copy of the current AuziX install media.",
+  "source": "/mnt/swarm/AuziX/src/artifacts/auzix/auzix-strict-desktop-vm134.iso",
+  "target": "/var/lib/vz/template/iso/auzix-strict-desktop-vm135.iso"
+}

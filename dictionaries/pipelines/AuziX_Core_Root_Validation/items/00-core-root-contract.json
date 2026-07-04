@@ -1,0 +1,5 @@
+{
+  "id": "core-root-contract",
+  "summary": "The strict root must satisfy native top-level directories, compatibility links, users/groups, startup contracts, installer files, and graphical launch hooks.",
+  "validation": "scripts/audit-auzix-strict-root.sh"
+}

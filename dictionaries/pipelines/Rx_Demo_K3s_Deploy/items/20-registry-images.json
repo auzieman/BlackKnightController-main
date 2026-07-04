@@ -1,0 +1,7 @@
+{
+  "id": "registry-images",
+  "kind": "check",
+  "summary": "Confirm every rx-demo image needed by the k3s-demo overlay exists in the local swarm registry.",
+  "command": "for repo in rx-ui api-gateway legacy-sync-worker read-model-projection loadgen; do curl -fsS \"http://swarm1.lab.auzietek.com:5001/v2/rx-demo/${repo}/tags/list\" | grep -F '097889a'; done",
+  "expected": "All five application images have tag 097889a in the registry."
+}

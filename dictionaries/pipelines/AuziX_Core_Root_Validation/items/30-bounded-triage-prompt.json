@@ -1,0 +1,5 @@
+{
+  "id": "bounded-triage-prompt",
+  "summary": "The validation loop must emit a narrow Ollama-ready prompt that contains only summary stats, FAIL lines, and container smoke evidence.",
+  "artifact": "/srv/nfs/swarm/AuziX/src/out/core-validation/ollama-prompt.md"
+}

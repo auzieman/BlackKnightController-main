@@ -1,0 +1,7 @@
+{
+  "id": "target-disk-size",
+  "kind": "gate",
+  "summary": "Fail before install/deploy if the VM target disk is too small for the desktop root.",
+  "minimum_gib": 16,
+  "reason": "A 4 GiB root can surface as package, permission, browser, or GUI instability instead of an obvious storage failure."
+}
