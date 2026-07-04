@@ -124,6 +124,42 @@ def test_automation_trigger_forbidden_without_scope(client, api_setup):
     assert r.get_json()["required"] == "write:automation"
 
 
+def test_automation_run_action_maps_rx_demo_undeploy(client, api_setup):
+    tid = api_setup["tenant_id"]
+    uid = api_setup["user_id"]
+    raw, _kid = bkc_db.create_api_key(
+        tid,
+        "automation-action",
+        uid,
+        scopes="read:automation,write:automation",
+    )
+    h = {"Authorization": f"Bearer {raw}"}
+
+    trigger = client.post(
+        "/api/v1/automation/trigger",
+        headers=h,
+        json={"repo": "rx-demo", "workflow": "rx-demo-k3s-deploy"},
+    )
+    assert trigger.status_code == 202
+    source_run_id = trigger.get_json()["run_id"]
+
+    action = client.post(
+        f"/api/v1/automation/runs/{source_run_id}/action",
+        headers=h,
+        json={"action": "undeploy"},
+    )
+    assert action.status_code == 202
+    body = action.get_json()
+    assert body["source_run_id"] == source_run_id
+    assert body["workflow"] == "rx-demo-k3s-undeploy"
+    assert body["action_mode"] == "deploy"
+
+    detail = client.get(f"/api/v1/automation/runs/{body['run_id']}", headers=h)
+    child = detail.get_json()
+    assert child["extra"]["parent_run_id"] == source_run_id
+    assert child["extra"]["trigger_action"] == "undeploy"
+
+
 def test_me_rate_limit_env(client, api_setup, monkeypatch):
     monkeypatch.setenv("BKC_API_KEY_RATE_LIMIT", "2 per minute")
     tid = api_setup["tenant_id"]

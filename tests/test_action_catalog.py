@@ -327,6 +327,29 @@ def test_folder_backed_pipeline_loader_keeps_items_scoped(monkeypatch, tmp_path)
     assert pipeline["items"][0]["source_path"].endswith("items/00-preflight.json")
 
 
+def test_pipeline_folder_loader_can_use_runtime_mount(monkeypatch, tmp_path):
+    pipeline_dir = tmp_path / "runtime-pipelines" / "Runtime_Pipeline"
+    pipeline_dir.mkdir(parents=True)
+    (pipeline_dir / "pipeline.json").write_text(
+        """{
+  "id": "runtime-folder-pipeline",
+  "name": "Runtime Folder Pipeline",
+  "repo": "Runtime",
+  "workflow": "candidate-import",
+  "description": "Loaded from a runtime mount.",
+  "stages": ["preflight"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("runtime-folder-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_path"].endswith("Runtime_Pipeline/pipeline.json")
+
+
 def test_auzix_installer_pipeline_is_non_destructive():
     pipeline = pipeline_by_id("auzix-installer-foundation")
     assert pipeline is not None

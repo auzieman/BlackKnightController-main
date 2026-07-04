@@ -28,6 +28,20 @@ Redis also holds live queue and job state. Runtime keys, credentials,
 integration dictionaries, generated tenant data, and queue state must not be
 copied into Git or replaced by a source deployment.
 
+Pipeline folders are runtime data. The web UI reads
+`dictionaries/pipelines/<Pipeline_Name>/pipeline.json` and sibling
+`items/*.json` files on demand, so normal pipeline metadata, gates, links,
+operator notes, and child objects should be updated through the shared runtime
+mount rather than by rebuilding the BKC image. Set `BKC_PIPELINE_FOLDERS_PATH`
+when a workstation or container should load pipeline folders from a dedicated
+NFS mount without replacing the rest of `dictionaries/`. Set
+`BKC_PIPELINE_DEFINITIONS_PATH` when UI-edited pipeline overrides should also
+live outside the default dictionaries path.
+
+Executor code remains versioned source. Changing stage handlers, transports,
+credentials behavior, or API routes still requires the normal BKC deployment
+procedure and a clean validation run.
+
 The local developer checkout may contain a private `keys/` directory for
 direct testing. That directory is not the authority for the Swarm deployment;
 the mounted runtime key is. Target hosts must authorize the public key from

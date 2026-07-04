@@ -139,6 +139,19 @@ def _run_group_key(run: dict) -> str:
     return f"workflow:{str(run.get('workflow', '')).strip()}"
 
 
+def _rx_demo_undeploy_workflow(workflow: str) -> str | None:
+    return {
+        "rx-demo-k3s-deploy": "rx-demo-k3s-undeploy",
+        "rx-demo-k3s-redeploy-from-git": "rx-demo-k3s-undeploy",
+        "rx-demo-redeploy-from-git-event": "rx-demo-k3s-undeploy",
+    }.get(workflow.strip())
+
+
+def _run_supports_undeploy(run: dict) -> bool:
+    workflow = str(run.get("workflow", "")).strip()
+    return bool(_rx_demo_undeploy_workflow(workflow) or workflow_supports_undeploy(workflow))
+
+
 def _pipeline_tags(pipeline: dict, *, supported: bool) -> list[str]:
     workflow = str(pipeline.get("workflow", "")).strip().lower()
     repo = str(pipeline.get("repo", "")).strip().lower()
@@ -729,6 +742,7 @@ def pipelines():
         enriched = dict(run)
         enriched["stage_summary"] = _stage_summary(run)
         enriched["tags"] = run_tags
+        enriched["supports_undeploy"] = _run_supports_undeploy(run)
         visible_runs.append(enriched)
 
     run_groups: dict[str, list[dict]] = {}
@@ -799,7 +813,7 @@ def pipeline_run_detail(run_id: str):
         "pipeline_run_detail.html.j2",
         run=enriched,
         logs_snapshot=logs_snapshot,
-        supports_undeploy=workflow_supports_undeploy(str(run.get("workflow", ""))),
+        supports_undeploy=_run_supports_undeploy(run),
         external_links=_run_external_links(run),
         pipeline_definition=pipeline_by_id(str(run.get("extra", {}).get("pipeline_id", ""))),
         workflow_stage_details=workflow_stage_definitions(
@@ -824,13 +838,16 @@ def pipeline_run_action(run_id: str):
     if not workflow_is_supported(str(source.get("workflow", ""))):
         flash("This lane is still planned. Its executor is not wired yet.", "error")
         return redirect(url_for("pipelines.pipeline_run_detail", run_id=run_id))
-    if action == "undeploy" and not workflow_supports_undeploy(str(source.get("workflow", ""))):
+    source_workflow = str(source.get("workflow", "")).strip()
+    undeploy_workflow = _rx_demo_undeploy_workflow(source_workflow)
+    action_workflow = undeploy_workflow if action == "undeploy" and undeploy_workflow else source_workflow
+    if action == "undeploy" and not (undeploy_workflow or workflow_supports_undeploy(source_workflow)):
         flash("This pipeline does not support undeploy.", "error")
         return redirect(url_for("pipelines.pipeline_run_detail", run_id=run_id))
 
     extra = dict(source.get("extra", {}))
     extra["parent_run_id"] = source["id"]
-    extra["action_mode"] = "undeploy" if action == "undeploy" else "deploy"
+    extra["action_mode"] = "deploy" if undeploy_workflow else ("undeploy" if action == "undeploy" else "deploy")
     extra["trigger_action"] = action
 
     note_prefix = {
@@ -844,7 +861,7 @@ def pipeline_run_action(run_id: str):
         requested_by=f"user:{getattr(current_user, 'id', 'unknown')}",
         trigger_source="ui",
         repo=source.get("repo", ""),
-        workflow=source.get("workflow", ""),
+        workflow=action_workflow,
         ref=source.get("ref", ""),
         commit=source.get("commit", ""),
         notes=f"{note_prefix} of {source['id'][:8]}. {source.get('notes', '').strip()}".strip(),

@@ -17,6 +17,21 @@ def _expand_path(value: str) -> str:
 
 
 def _kubectl_json(args: list[str], kubeconfig: str, context: str) -> dict:
+    completed = _kubectl(args, kubeconfig, context, timeout=30)
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise KubernetesScanError("kubectl returned non-JSON output.") from exc
+
+
+def _kubectl(
+    args: list[str],
+    kubeconfig: str,
+    context: str,
+    *,
+    timeout: int,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
     cmd = ["kubectl", "--kubeconfig", kubeconfig]
     if context:
         cmd.extend(["--context", context])
@@ -25,11 +40,11 @@ def _kubectl_json(args: list[str], kubeconfig: str, context: str) -> dict:
     try:
         completed = subprocess.run(
             cmd,
-            check=True,
+            check=check,
             capture_output=True,
             env=env,
             text=True,
-            timeout=30,
+            timeout=timeout,
         )
     except FileNotFoundError as exc:
         raise KubernetesScanError("kubectl is not installed on the BKC host.") from exc
@@ -39,10 +54,23 @@ def _kubectl_json(args: list[str], kubeconfig: str, context: str) -> dict:
     except subprocess.TimeoutExpired as exc:
         raise KubernetesScanError("kubectl timed out while contacting the cluster.") from exc
 
-    try:
-        return json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise KubernetesScanError("kubectl returned non-JSON output.") from exc
+    return completed
+
+
+def kubectl_text(args: list[str], *, timeout: int = 30, check: bool = True) -> str:
+    integrations = load_integrations()
+    cfg = integrations["kubernetes"]
+    kubeconfig = _expand_path(str(cfg.get("kubeconfig_path") or "~/.kube/config"))
+    context = str(cfg.get("context") or "").strip()
+
+    if not Path(kubeconfig).exists():
+        raise KubernetesScanError(f"Kubeconfig not found: {kubeconfig}")
+
+    completed = _kubectl(args, kubeconfig, context, timeout=timeout, check=check)
+    output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part.strip())
+    if not check and completed.returncode != 0:
+        return output or f"kubectl exited {completed.returncode}"
+    return output
 
 
 def scan_kubernetes_cluster() -> dict:

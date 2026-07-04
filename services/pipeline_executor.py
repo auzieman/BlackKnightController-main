@@ -5,8 +5,12 @@ import json
 import re
 import shlex
 import socket
+import secrets
 import tempfile
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from base64 import b64decode, b64encode
 from pathlib import Path
 from urllib.parse import quote
@@ -28,6 +32,7 @@ from services.integration_store import (
     save_docker_snapshot,
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
+from services.kubernetes_api import kubectl_text
 from services.proxmox import ProxmoxClient, load_proxmox_config
 from services.remote_ops import (
     download_remote_file,
@@ -53,6 +58,7 @@ K3S_NODE_PLAN = [
 K3S_LIVE_NODES = [
     {"name": "kube1.lab.auzietek.com", "host": "192.168.1.14", "role": "server"},
     {"name": "kube2.lab.auzietek.com", "host": "192.168.1.59", "role": "agent"},
+    {"name": "kube3.lab.auzietek.com", "host": "192.168.1.239", "role": "agent"},
 ]
 K3S_NFS_MOUNTS = [
     ("192.168.1.10:/srv/nfs/swarm/shared", "/mnt/swarm/shared"),
@@ -61,7 +67,7 @@ K3S_NFS_MOUNTS = [
     ("192.168.1.10:/srv/nfs/swarm/blackknightcontroller", "/mnt/swarm/blackknightcontroller"),
 ]
 LAB_STORAGE_SWARM_HOSTS = "swarm1.lab.auzietek.com swarm2.lab.auzietek.com swarm3.lab.auzietek.com"
-LAB_STORAGE_K3S_HOSTS = "192.168.1.14 192.168.1.59"
+LAB_STORAGE_K3S_HOSTS = "192.168.1.14 192.168.1.59 192.168.1.239"
 LAB_STORAGE_ALL_HOSTS = f"{LAB_STORAGE_SWARM_HOSTS} {LAB_STORAGE_K3S_HOSTS}"
 LAB_STORAGE_SWARM_HOST_LIST = LAB_STORAGE_SWARM_HOSTS.split()
 LAB_STORAGE_K3S_HOST_LIST = LAB_STORAGE_K3S_HOSTS.split()
@@ -520,7 +526,7 @@ WORKFLOW_DEFINITIONS = {
         "stage_plan": [
             {
                 "name": "k3s-ready",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-ready",
                 "action": "k3s.nodes.ready",
                 "active": "Verifying kube1 can read the k3s cluster and all nodes are Ready.",
@@ -529,7 +535,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "runtime-secrets",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-secrets",
                 "action": "kubernetes.secret.ensure",
                 "active": "Verifying rx-demo runtime secrets exist before deployment.",
@@ -556,7 +562,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "rollout-app",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-rollout-app",
                 "action": "kubectl.rollout_status",
                 "active": "Waiting for rx-demo application workloads to become ready.",
@@ -565,7 +571,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "rollout-observability",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-rollout-observability",
                 "action": "kubectl.rollout_status",
                 "active": "Waiting for Grafana, Prometheus, Loki, and Tempo to become ready.",
@@ -574,7 +580,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "smoke-api",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-smoke-api-full",
                 "action": "http.smoke",
                 "active": "Smoking rx-demo API routes through the k3s NodePort.",
@@ -583,7 +589,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "smoke-ui",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-smoke-ui-full",
                 "action": "http.smoke",
                 "active": "Smoking rx-demo UI routes through the k3s NodePort.",
@@ -592,16 +598,16 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "telemetry-check",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-telemetry-check",
                 "action": "prometheus.metrics.check",
-                "active": "Checking rx-demo metrics and Grafana routing.",
-                "complete": "Rx-demo telemetry endpoints responded.",
+                "active": "Checking rx-demo metrics, Grafana routing, and dashboard panel plugins.",
+                "complete": "Rx-demo telemetry endpoints and dashboard plugins responded.",
                 "timeout": 180,
             },
             {
                 "name": "access-links",
-                "transport": "internal",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-access-links",
                 "active": "Publishing demo access links.",
                 "complete": "Demo access links published.",
@@ -615,7 +621,7 @@ WORKFLOW_DEFINITIONS = {
         "stage_plan": [
             {
                 "name": "capture-state",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-undeploy-capture",
                 "action": "kubectl.get",
                 "active": "Capturing rx-demo and demo observability state before cleanup.",
@@ -624,7 +630,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "delete-overlay",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-undeploy-demo-observability",
                 "action": "kubectl.delete",
                 "active": "Removing demo-owned Grafana, Prometheus, Loki, and Tempo resources while preserving host telemetry.",
@@ -633,7 +639,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "delete-namespace",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-undeploy-namespace",
                 "action": "kubectl.delete",
                 "active": "Removing the rx-demo application namespace.",
@@ -642,7 +648,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "verify-removed",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-undeploy-verify",
                 "action": "kubectl.wait_absent",
                 "active": "Verifying rx-demo is absent and host telemetry remains.",
@@ -693,7 +699,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "update-images",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-redeploy-update-images",
                 "action": "kubectl.set_image",
                 "active": "Pointing k3s deployments at the commit-tagged images.",
@@ -702,16 +708,16 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "k3s-network-ready",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-network-ready",
-                "action": "k3s.firewall.flannel",
-                "active": "Verifying k3s pod networking and firewalld allowances.",
+                "action": "kubernetes.endpoints.verify",
+                "active": "Verifying k3s nodes and rx-demo endpoints through the Kubernetes API.",
                 "complete": "K3s pod networking prerequisites are ready.",
                 "timeout": 300,
             },
             {
                 "name": "rollout-app",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-rollout-app",
                 "action": "kubectl.rollout_status",
                 "active": "Waiting for the redeployed rx-demo workloads.",
@@ -720,16 +726,16 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "cloudinit-node-check",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-cloudinit-node-check",
-                "action": "k3s.node.provenance",
-                "active": "Capturing k3s node and cloud-init provenance evidence.",
+                "action": "kubernetes.node.provenance",
+                "active": "Capturing k3s node provenance evidence from the Kubernetes API.",
                 "complete": "K3s node and cloud-init evidence captured.",
                 "timeout": 180,
             },
             {
                 "name": "visible-change-check",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-redeploy-visible-activity",
                 "action": "http.content_check",
                 "active": "Generating UI/API activity after the redeploy.",
@@ -738,16 +744,16 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "telemetry-still-flowing",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-telemetry-check",
                 "action": "prometheus.metrics.check",
-                "active": "Checking telemetry endpoints after the redeploy.",
-                "complete": "Telemetry endpoints responded after the redeploy.",
+                "active": "Checking telemetry endpoints and dashboard plugins after the redeploy.",
+                "complete": "Telemetry endpoints and dashboard plugins responded after the redeploy.",
                 "timeout": 180,
             },
             {
                 "name": "loki-cloudevents-check",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-loki-cloudevents-check",
                 "action": "loki.stream.verify",
                 "active": "Querying Loki for CloudEvents audit records.",
@@ -756,7 +762,7 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "grafana-loki-check",
-                "transport": "bkc-ssh",
+                "transport": "kubernetes-api",
                 "kind": "rx-demo-k3s-grafana-loki-check",
                 "action": "grafana.datasource.check",
                 "active": "Checking Grafana and publishing the Loki Explore query.",
@@ -4267,46 +4273,48 @@ printf 'rx-ui-routes-ok %s\n' "$base"
 
 
 def _run_rx_demo_k3s_ready(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = "\n".join(
+    output = "\n".join(
         [
-            "set -euo pipefail",
-            "k3s kubectl get nodes -o wide",
-            "k3s kubectl wait --for=condition=Ready nodes --all --timeout=90s",
+            kubectl_text(["get", "nodes", "-o", "wide"], timeout=120),
+            kubectl_text(["wait", "--for=condition=Ready", "nodes", "--all", "--timeout=90s"], timeout=120),
         ]
     )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=120,
-    )
     _set_stage(run_id, stage_name, "complete", "K3s node readiness verified.")
-    append_event(run_id, "info", stage_name, output[-1600:] if output else "k3s-ready")
+    append_event(run_id, "info", stage_name, (output[-1600:] if output else "k3s-ready") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_secrets(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-k3s kubectl get namespace rx-demo >/dev/null 2>&1 || k3s kubectl create namespace rx-demo >/dev/null
-sa_password="$(python3 -c 'import secrets; print("AuzixDemo9!" + secrets.token_urlsafe(18))')"
-rabbit_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-k3s kubectl -n rx-demo create secret generic rx-demo-secrets \
-  --from-literal=SA_PASSWORD="$sa_password" \
-  --from-literal=RABBITMQ_DEFAULT_USER="rx_demo" \
-  --from-literal=RABBITMQ_DEFAULT_PASS="$rabbit_password" \
-  --dry-run=client -o yaml | k3s kubectl apply -f - >/dev/null
-k3s kubectl -n rx-demo get secret rx-demo-secrets -o name
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
+    namespace = kubectl_text(["get", "namespace", "rx-demo"], timeout=60, check=False)
+    outputs = []
+    if "not found" in namespace.lower():
+        outputs.append(kubectl_text(["create", "namespace", "rx-demo"], timeout=60))
+    sa_password = "AuzixDemo9!" + secrets.token_urlsafe(18)
+    rabbit_password = secrets.token_urlsafe(24)
+    secret_yaml = kubectl_text(
+        [
+            "-n",
+            "rx-demo",
+            "create",
+            "secret",
+            "generic",
+            "rx-demo-secrets",
+            f"--from-literal=SA_PASSWORD={sa_password}",
+            "--from-literal=RABBITMQ_DEFAULT_USER=rx_demo",
+            f"--from-literal=RABBITMQ_DEFAULT_PASS={rabbit_password}",
+            "--dry-run=client",
+            "-o",
+            "yaml",
+        ],
         timeout=60,
     )
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".yaml", delete=True) as handle:
+        handle.write(secret_yaml)
+        handle.flush()
+        outputs.append(kubectl_text(["apply", "-f", handle.name], timeout=60))
+    outputs.append(kubectl_text(["-n", "rx-demo", "get", "secret", "rx-demo-secrets", "-o", "name"], timeout=60))
+    output = "\n".join(outputs)
     _set_stage(run_id, stage_name, "complete", "Rx-demo runtime secrets are present.")
-    append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-demo-secrets-present")
+    append_event(run_id, "info", stage_name, (output[-1200:] if output else "rx-demo-secrets-present") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_registry_images(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
@@ -4360,277 +4368,140 @@ def _run_rx_demo_k3s_apply_demo_overlay(run_id: str, stage_name: str) -> None:
 
 
 def _run_rx_demo_k3s_rollout_app(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    deployments = "api-gateway legacy-sync-worker loadgen otel-collector rabbitmq read-model-projection redis rx-ui"
-    script = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl -n rx-demo get pods -o wide",
-            f"for deploy in {deployments}; do",
-            "  k3s kubectl -n rx-demo rollout restart deploy/$deploy",
-            "done",
-            f"for deploy in {deployments}; do",
-            "  k3s kubectl -n rx-demo rollout status deploy/$deploy --timeout=300s",
-            "done",
-            "k3s kubectl -n rx-demo rollout status statefulset/mssql --timeout=300s",
-            "k3s kubectl -n rx-demo get pods -o wide",
-            "k3s kubectl -n rx-demo get events --sort-by=.lastTimestamp | tail -40",
-        ]
-    )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=900,
-    )
+    deployments = ["api-gateway", "legacy-sync-worker", "loadgen", "otel-collector", "rabbitmq", "read-model-projection", "redis", "rx-ui"]
+    outputs = [kubectl_text(["-n", "rx-demo", "get", "pods", "-o", "wide"], timeout=120, check=False)]
+    for deploy in deployments:
+        outputs.append(kubectl_text(["-n", "rx-demo", "rollout", "restart", f"deploy/{deploy}"], timeout=120))
+    for deploy in deployments:
+        outputs.append(kubectl_text(["-n", "rx-demo", "rollout", "status", f"deploy/{deploy}", "--timeout=300s"], timeout=360))
+    outputs.append(kubectl_text(["-n", "rx-demo", "rollout", "status", "statefulset/mssql", "--timeout=300s"], timeout=360))
+    outputs.append(kubectl_text(["-n", "rx-demo", "get", "pods", "-o", "wide"], timeout=120))
+    outputs.append(kubectl_text(["-n", "rx-demo", "get", "events", "--sort-by=.lastTimestamp"], timeout=120, check=False))
+    output = "\n".join(item for item in outputs if item)
     _set_stage(run_id, stage_name, "complete", "Rx-demo application workloads are ready.")
-    append_event(run_id, "info", stage_name, output[-3000:] if output else "rx-demo-rollout-ready")
+    append_event(run_id, "info", stage_name, (output[-3000:] if output else "rx-demo-rollout-ready") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_network_ready(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
     _set_stage(run_id, stage_name, "active", "Verifying k3s pod networking and firewalld allowances.")
-    discover = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'",
-        ]
-    )
-    node_output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(discover)}",
-        timeout=60,
-    )
-    node_hosts = [line.strip() for line in node_output.splitlines() if line.strip()]
-    if not node_hosts:
-        raise PipelineExecutionError("No k3s node InternalIP addresses were discovered.")
-
-    repair_script = "\n".join(
-        [
-            "set -euo pipefail",
-            "if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then",
-            "  firewall-cmd --permanent --zone=trusted --add-interface=cni0 || true",
-            "  firewall-cmd --permanent --zone=trusted --add-interface=flannel.1 || true",
-            "  firewall-cmd --permanent --add-port=8472/udp || true",
-            "  firewall-cmd --permanent --add-port=6443/tcp || true",
-            "  firewall-cmd --permanent --add-port=10250/tcp || true",
-            "  firewall-cmd --reload",
-            "  echo trusted=$(firewall-cmd --zone=trusted --list-interfaces)",
-            "  echo ports=$(firewall-cmd --list-ports)",
-            "else",
-            "  echo firewalld-not-active",
-            "fi",
-        ]
-    )
-    outputs = []
-    for host in node_hosts:
-        output = run_remote_command(
-            host=host,
-            user="root",
-            command=f"bash -lc {shlex.quote(repair_script)}",
-            timeout=120,
-        )
-        outputs.append(f"=== {host} ===\n{output}")
-
-    verify_script = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl get nodes -o wide",
-            "k3s kubectl -n rx-demo get endpoints rabbitmq otel-collector api-gateway rx-ui -o wide || true",
-        ]
-    )
-    verify = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(verify_script)}",
-        timeout=60,
-    )
+    outputs = [
+        kubectl_text(["get", "nodes", "-o", "wide"], timeout=120),
+        kubectl_text(["wait", "--for=condition=Ready", "nodes", "--all", "--timeout=90s"], timeout=120),
+        kubectl_text(["-n", "rx-demo", "get", "endpoints", "rabbitmq", "otel-collector", "api-gateway", "rx-ui", "-o", "wide"], timeout=120),
+        kubectl_text(["-n", "rx-demo", "get", "networkpolicy", "-o", "wide"], timeout=120, check=False),
+    ]
     _set_stage(run_id, stage_name, "complete", "K3s pod networking prerequisites are ready.")
-    append_event(run_id, "info", stage_name, ("\n".join(outputs) + "\n" + verify)[-3600:])
+    append_event(run_id, "info", stage_name, ("\n".join(outputs))[-3600:] + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_rollout_observability(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    deployments = "grafana loki prometheus tempo"
-    script = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl -n rx-observability get pods -o wide",
-            f"for deploy in {deployments}; do",
-            "  k3s kubectl -n rx-observability rollout status deploy/$deploy --timeout=300s",
-            "done",
-            "k3s kubectl -n rx-observability get pods -o wide",
-            "k3s kubectl -n rx-observability get events --sort-by=.lastTimestamp | tail -40",
-        ]
-    )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=900,
-    )
+    deployments = ["grafana", "loki", "prometheus", "tempo"]
+    outputs = [kubectl_text(["-n", "rx-observability", "get", "pods", "-o", "wide"], timeout=120, check=False)]
+    for deploy in deployments:
+        outputs.append(kubectl_text(["-n", "rx-observability", "rollout", "status", f"deploy/{deploy}", "--timeout=300s"], timeout=360))
+    outputs.append(kubectl_text(["-n", "rx-observability", "get", "pods", "-o", "wide"], timeout=120))
+    outputs.append(kubectl_text(["-n", "rx-observability", "get", "events", "--sort-by=.lastTimestamp"], timeout=120, check=False))
+    output = "\n".join(item for item in outputs if item)
     _set_stage(run_id, stage_name, "complete", "Rx-demo observability workloads are ready.")
-    append_event(run_id, "info", stage_name, output[-3000:] if output else "rx-demo-observability-ready")
+    append_event(run_id, "info", stage_name, (output[-3000:] if output else "rx-demo-observability-ready") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_smoke_api_full(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-base="http://127.0.0.1:30081"
-rx_id="RX-BKC-K3S-API"
-curl -fsS "$base/healthz"
-curl -fsS "$base/readyz"
-curl -fsS "$base/prescriptions/${rx_id}" | grep -F "$rx_id" >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"approvedBy":"bkc.pipeline","notes":"BKC k3s API smoke"}' \
-  "$base/prescriptions/${rx_id}/approve" | grep -F 'ApproveQueued' >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"refillCount":1}' \
-  "$base/prescriptions/${rx_id}/refill" | grep -F 'RefillQueued' >/dev/null
-printf 'rx-api-nodeport-ok %s\n' "$base"
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=180,
+    base = _k8s_nodeport_base("rx-demo", "api-gateway", "http")
+    rx_id = "RX-BKC-K3S-API"
+    _http_text(f"{base}/healthz")
+    _http_text(f"{base}/readyz")
+    _retry_http_contains(f"{base}/prescriptions/{rx_id}", rx_id, attempts=30, delay=3)
+    _retry_http_contains(
+        f"{base}/prescriptions/{rx_id}/approve",
+        "ApproveQueued",
+        method="POST",
+        payload={"approvedBy": "bkc.pipeline", "notes": "BKC k3s API smoke"},
+        attempts=30,
+        delay=3,
     )
+    _retry_http_contains(
+        f"{base}/prescriptions/{rx_id}/refill",
+        "RefillQueued",
+        method="POST",
+        payload={"refillCount": 1},
+        attempts=30,
+        delay=3,
+    )
+    output = f"rx-api-nodeport-ok {base}\ntransport=kubernetes-api"
     _set_stage(run_id, stage_name, "complete", "Rx-demo API smoke checks passed.")
     append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-api-nodeport-ok")
 
 
 def _run_rx_demo_k3s_smoke_ui_full(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_port="$(k3s kubectl -n rx-demo get svc rx-ui -o jsonpath='{.spec.ports[?(@.name=="http")].nodePort}')"
-node_name="$(k3s kubectl -n rx-demo get endpoints rx-ui -o jsonpath='{.subsets[0].addresses[0].nodeName}')"
-node_ip="$(k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
-base="http://${node_ip}:${node_port}"
-rx_id="RX-BKC-K3S-UI"
-retry_get_contains() {
-  url="$1"
-  text="$2"
-  for _ in $(seq 1 30); do
-    if curl -fsS "$url" | grep -F "$text" >/dev/null; then
-      return 0
-    fi
-    sleep 3
-  done
-  curl -fsS "$url" | grep -F "$text" >/dev/null
-}
-retry_post_contains() {
-  url="$1"
-  body="$2"
-  text="$3"
-  for _ in $(seq 1 30); do
-    if curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null; then
-      return 0
-    fi
-    sleep 3
-  done
-  curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null
-}
-retry_get_contains "$base/" "Prescription Demo UI"
-retry_post_contains "$base/lookup" "{\"rxId\":\"${rx_id}\"}" '"operation":"lookup"'
-retry_post_contains "$base/approve" "{\"rxId\":\"${rx_id}\",\"approvedBy\":\"bkc.pipeline\",\"notes\":\"BKC k3s demo smoke\"}" '"operation":"approve"'
-retry_post_contains "$base/refill" "{\"rxId\":\"${rx_id}\",\"refillCount\":1}" '"operation":"refill"'
-printf 'rx-ui-nodeport-ok %s\n' "$base"
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=180,
+    base = _k8s_nodeport_base("rx-demo", "rx-ui", "http")
+    rx_id = "RX-BKC-K3S-UI"
+    _retry_http_contains(f"{base}/", "Prescription Demo UI", attempts=30, delay=3)
+    _retry_http_contains(f"{base}/lookup", '"operation":"lookup"', method="POST", payload={"rxId": rx_id}, attempts=30, delay=3)
+    _retry_http_contains(
+        f"{base}/approve",
+        '"operation":"approve"',
+        method="POST",
+        payload={"rxId": rx_id, "approvedBy": "bkc.pipeline", "notes": "BKC k3s demo smoke"},
+        attempts=30,
+        delay=3,
     )
+    _retry_http_contains(
+        f"{base}/refill",
+        '"operation":"refill"',
+        method="POST",
+        payload={"rxId": rx_id, "refillCount": 1},
+        attempts=30,
+        delay=3,
+    )
+    output = f"rx-ui-nodeport-ok {base}\ntransport=kubernetes-api"
     _set_stage(run_id, stage_name, "complete", "Rx-demo UI smoke checks passed.")
     append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-ui-nodeport-ok")
 
 
 def _run_rx_demo_k3s_telemetry_check(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_ip_for_endpoint() {
-  ns="$1"
-  svc="$2"
-  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
-  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-}
-node_port_for_service() {
-  ns="$1"
-  svc="$2"
-  port_name="$3"
-  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
-}
-otel_base="http://$(node_ip_for_endpoint rx-demo otel-collector):$(node_port_for_service rx-demo otel-collector prom-metrics)"
-prom_base="http://$(node_ip_for_endpoint rx-observability prometheus):$(node_port_for_service rx-observability prometheus http)"
-grafana_base="http://$(node_ip_for_endpoint rx-observability grafana):$(node_port_for_service rx-observability grafana http)"
-metrics_file="$(mktemp)"
-trap 'rm -f "$metrics_file"' EXIT
-curl -fsS "$otel_base/metrics" >"$metrics_file"
-grep -m 10 -E '^(rx_|otelcol_)' "$metrics_file"
-curl -fsS "$prom_base/-/ready"
-curl -fsS "$grafana_base/api/health" | grep -F '"database"' >/dev/null
-printf 'rx-telemetry-nodeports-ok grafana=%s prometheus=%s otel=%s\n' "$grafana_base" "$prom_base" "$otel_base"
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=180,
+    otel_base = _k8s_nodeport_base("rx-demo", "otel-collector", "prom-metrics")
+    prom_base = _k8s_nodeport_base("rx-observability", "prometheus", "http")
+    grafana_base = _k8s_nodeport_base("rx-observability", "grafana", "http")
+    metrics = _http_text(f"{otel_base}/metrics", timeout=10)
+    if not any(line.startswith(("rx_", "otelcol_")) for line in metrics.splitlines()):
+        raise PipelineExecutionError("OTel metrics endpoint did not expose rx_ or otelcol_ metrics.")
+    _http_text(f"{prom_base}/-/ready", timeout=10)
+    grafana_health = _http_text(f"{grafana_base}/api/health", timeout=10)
+    if '"database"' not in grafana_health:
+        raise PipelineExecutionError(f"Grafana health response did not include database status: {grafana_health}")
+    kubectl_text(
+        ["-n", "rx-observability", "exec", "deploy/grafana", "--", "test", "-d", "/var/lib/grafana/plugins/neildengg-grafmaid-panel"],
+        timeout=120,
+    )
+    output = "\n".join(
+        [
+            f"rx-telemetry-nodeports-ok grafana={grafana_base} prometheus={prom_base} otel={otel_base}",
+            "grafana-plugin-ok plugin=neildengg-grafmaid-panel",
+            "transport=kubernetes-api",
+        ]
     )
     _set_stage(run_id, stage_name, "complete", "Rx-demo telemetry endpoints responded.")
     append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-telemetry-nodeports-ok")
 
 
 def _run_rx_demo_k3s_access_links(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_ip_for_endpoint() {
-  ns="$1"
-  svc="$2"
-  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
-  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-}
-node_port_for_service() {
-  ns="$1"
-  svc="$2"
-  port_name="$3"
-  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
-}
-printf 'rx_ui=http://%s:%s\n' "$(node_ip_for_endpoint rx-demo rx-ui)" "$(node_port_for_service rx-demo rx-ui http)"
-printf 'rx_api=http://%s:%s\n' "$(node_ip_for_endpoint rx-demo api-gateway)" "$(node_port_for_service rx-demo api-gateway http)"
-printf 'otel_metrics=http://%s:%s/metrics\n' "$(node_ip_for_endpoint rx-demo otel-collector)" "$(node_port_for_service rx-demo otel-collector prom-metrics)"
-printf 'grafana=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability grafana)" "$(node_port_for_service rx-observability grafana http)"
-printf 'prometheus=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability prometheus)" "$(node_port_for_service rx-observability prometheus http)"
-printf 'loki=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability loki)" "$(node_port_for_service rx-observability loki http)"
-printf 'tempo=http://%s:%s\n' "$(node_ip_for_endpoint rx-observability tempo)" "$(node_port_for_service rx-observability tempo http)"
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=120,
-    )
     run = get_run(run_id) or {}
     extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
     image_tag = str(extra.get("rx_demo_redeploy_tag") or RX_DEMO_K3S_DEMO_TAG).strip()
     links = {
         "image_tag": image_tag,
+        "rx_ui": _k8s_nodeport_base("rx-demo", "rx-ui", "http"),
+        "rx_api": _k8s_nodeport_base("rx-demo", "api-gateway", "http"),
+        "otel_metrics": f"{_k8s_nodeport_base('rx-demo', 'otel-collector', 'prom-metrics')}/metrics",
+        "grafana": _k8s_nodeport_base("rx-observability", "grafana", "http"),
+        "prometheus": _k8s_nodeport_base("rx-observability", "prometheus", "http"),
+        "loki": _k8s_nodeport_base("rx-observability", "loki", "http"),
+        "tempo": _k8s_nodeport_base("rx-observability", "tempo", "http"),
     }
-    for line in output.splitlines():
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        if key.strip() and value.strip():
-            links[key.strip()] = value.strip()
     _store_run_extra(run_id, {"rx_demo_k3s_links": links})
     _set_stage(run_id, stage_name, "complete", "Demo access links published.")
-    append_event(run_id, "info", stage_name, json.dumps(links, sort_keys=True))
+    append_event(run_id, "info", stage_name, json.dumps({**links, "transport": "kubernetes-api"}, sort_keys=True))
 
 
 def _rx_demo_redeploy_run_context(run_id: str) -> dict[str, str]:
@@ -4755,304 +4626,332 @@ def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings:
     append_event(run_id, "info", stage_name, output[-2400:] if output else "rx-demo-redeploy-images-ready")
 
 
-def _run_rx_demo_k3s_redeploy_update_images(run_id: str, stage_name: str) -> None:
+def _rx_demo_redeploy_tag(run_id: str) -> str:
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    tag = str(extra.get("rx_demo_redeploy_tag") or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{7,12}", tag):
+        raise PipelineExecutionError("Unable to determine rx-demo redeploy image tag from run state.")
+    return tag
+
+
+def _k8s_jsonpath(args: list[str], expression: str, *, timeout: int = 60) -> str:
+    return kubectl_text([*args, "-o", f"jsonpath={expression}"], timeout=timeout).strip()
+
+
+def _k8s_node_ip_for_endpoint(namespace: str, service: str) -> str:
+    node_name = _k8s_jsonpath(
+        ["-n", namespace, "get", "endpoints", service],
+        "{.subsets[0].addresses[0].nodeName}",
+    )
+    if not node_name:
+        raise PipelineExecutionError(f"No endpoint node found for {namespace}/{service}.")
+    node_ip = _k8s_jsonpath(
+        ["get", "node", node_name],
+        '{.status.addresses[?(@.type=="InternalIP")].address}',
+    )
+    if not node_ip:
+        raise PipelineExecutionError(f"No InternalIP found for Kubernetes node {node_name}.")
+    return node_ip
+
+
+def _k8s_nodeport(namespace: str, service: str, port_name: str) -> str:
+    port = _k8s_jsonpath(
+        ["-n", namespace, "get", "svc", service],
+        f'{{.spec.ports[?(@.name=="{port_name}")].nodePort}}',
+    )
+    if not port:
+        raise PipelineExecutionError(f"No NodePort named {port_name} found for {namespace}/{service}.")
+    return port
+
+
+def _k8s_nodeport_base(namespace: str, service: str, port_name: str) -> str:
+    return f"http://{_k8s_node_ip_for_endpoint(namespace, service)}:{_k8s_nodeport(namespace, service, port_name)}"
+
+
+def _http_text(url: str, *, method: str = "GET", payload: dict | None = None, timeout: int = 10) -> str:
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - lab endpoint validation
+            return response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise PipelineExecutionError(f"HTTP {exc.code} from {url}: {body}") from exc
+    except urllib.error.URLError as exc:
+        raise PipelineExecutionError(f"HTTP request failed for {url}: {exc}") from exc
+
+
+def _retry_http_contains(url: str, text: str, *, method: str = "GET", payload: dict | None = None, attempts: int = 30, delay: int = 3) -> str:
+    last = ""
+    for _ in range(attempts):
+        try:
+            last = _http_text(url, method=method, payload=payload)
+            if text in last:
+                return last
+        except PipelineExecutionError as exc:
+            last = str(exc)
+        time.sleep(delay)
+    if text not in last:
+        raise PipelineExecutionError(f"Expected {text!r} from {url}. Last response: {last[-800:]}")
+    return last
+
+
+def _ensure_rx_demo_overlay_present_for_redeploy() -> str:
+    namespace = kubectl_text(["get", "namespace", "rx-demo"], timeout=60, check=False)
+    api_deploy = kubectl_text(["-n", "rx-demo", "get", "deploy/api-gateway"], timeout=60, check=False)
+    if "not found" not in namespace.lower() and "not found" not in api_deploy.lower():
+        return "rx-demo-overlay-present"
+
     server = _k3s_live_node("server")
     script = "\n".join(
         [
             "set -euo pipefail",
+            f"test -d {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
             f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
-            "tag=\"$(cat .bkc-source-tag)\"",
-            "test -n \"$tag\"",
-            f"registry={shlex.quote(DEMO_REGISTRY)}/rx-demo",
-            "k3s kubectl -n rx-demo set image deploy/api-gateway api-gateway=\"$registry/api-gateway:$tag\"",
-            "k3s kubectl -n rx-demo set image deploy/rx-ui rx-ui=\"$registry/rx-ui:$tag\"",
-            "k3s kubectl -n rx-demo set image deploy/legacy-sync-worker worker=\"$registry/legacy-sync-worker:$tag\"",
-            "k3s kubectl -n rx-demo set image deploy/read-model-projection worker=\"$registry/read-model-projection:$tag\"",
-            "if k3s kubectl -n rx-demo get deploy/loadgen >/dev/null 2>&1; then",
-            "  k3s kubectl -n rx-demo set image deploy/loadgen loadgen=\"$registry/loadgen:$tag\"",
-            "fi",
-            "k3s kubectl -n rx-demo get deploy -o custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image",
+            "test -d k8s/overlays/k3s-demo",
+            "k3s kubectl apply -k k8s/overlays/k3s-demo",
+            "k3s kubectl -n rx-demo get deploy api-gateway rx-ui legacy-sync-worker read-model-projection -o wide",
+            "k3s kubectl -n rx-observability get deploy grafana loki prometheus tempo -o wide",
         ]
     )
     output = run_remote_command(
         host=server["host"],
         user="root",
         command=f"bash -lc {shlex.quote(script)}",
-        timeout=240,
+        timeout=300,
     )
+    return "rx-demo-overlay-created-for-redeploy\n" + (output[-1800:] if output else "k3s-demo-overlay-applied")
+
+
+def _run_rx_demo_k3s_redeploy_update_images(run_id: str, stage_name: str) -> None:
+    tag = _rx_demo_redeploy_tag(run_id)
+    registry = f"{DEMO_REGISTRY}/rx-demo"
+    outputs = [
+        _ensure_rx_demo_overlay_present_for_redeploy(),
+        kubectl_text(["-n", "rx-demo", "set", "image", "deploy/api-gateway", f"api-gateway={registry}/api-gateway:{tag}"], timeout=240),
+        kubectl_text(["-n", "rx-demo", "set", "image", "deploy/rx-ui", f"rx-ui={registry}/rx-ui:{tag}"], timeout=240),
+        kubectl_text(
+            ["-n", "rx-demo", "set", "image", "deploy/legacy-sync-worker", f"worker={registry}/legacy-sync-worker:{tag}"],
+            timeout=240,
+        ),
+        kubectl_text(
+            ["-n", "rx-demo", "set", "image", "deploy/read-model-projection", f"worker={registry}/read-model-projection:{tag}"],
+            timeout=240,
+        ),
+    ]
+    loadgen = kubectl_text(["-n", "rx-demo", "get", "deploy/loadgen"], timeout=60, check=False)
+    if "not found" not in loadgen.lower():
+        outputs.append(kubectl_text(["-n", "rx-demo", "set", "image", "deploy/loadgen", f"loadgen={registry}/loadgen:{tag}"], timeout=240))
+    outputs.append(
+        kubectl_text(
+            ["-n", "rx-demo", "get", "deploy", "-o", "custom-columns=NAME:.metadata.name,IMAGE:.spec.template.spec.containers[0].image"],
+            timeout=120,
+        )
+    )
+    output = "\n".join(outputs)
     _set_stage(run_id, stage_name, "complete", "K3s deployments reference the commit-tagged images.")
-    append_event(run_id, "info", stage_name, output[-2000:] if output else "rx-demo-images-updated")
+    append_event(run_id, "info", stage_name, (output[-2000:] if output else "rx-demo-images-updated") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_cloudinit_node_check(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-k3s kubectl get nodes -o wide
-for node in $(k3s kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
-  ip="$(k3s kubectl get node "$node" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')"
-  printf 'node=%s ip=%s\n' "$node" "$ip"
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=8 "root@$ip" \
-    'set -e; hostnamectl --static 2>/dev/null || hostname; test -d /var/lib/cloud && printf "cloud-init-dir=present\n" || printf "cloud-init-dir=missing\n"; cloud-init status --long 2>/dev/null || true; test -f /etc/machine-id && cut -c1-12 /etc/machine-id' \
-    || printf 'node-ssh-unavailable=%s\n' "$node"
-done
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=180,
+    output = "\n".join(
+        [
+            kubectl_text(["get", "nodes", "-o", "wide"], timeout=120),
+            kubectl_text(
+                [
+                    "get",
+                    "nodes",
+                    "-o",
+                    "custom-columns=NAME:.metadata.name,INTERNAL_IP:.status.addresses[?(@.type==\"InternalIP\")].address,OS:.status.nodeInfo.osImage,KERNEL:.status.nodeInfo.kernelVersion,KUBELET:.status.nodeInfo.kubeletVersion,RUNTIME:.status.nodeInfo.containerRuntimeVersion",
+                ],
+                timeout=120,
+            ),
+            kubectl_text(["get", "nodes", "--show-labels"], timeout=120),
+        ]
     )
     _set_stage(run_id, stage_name, "complete", "K3s node and cloud-init evidence captured.")
-    append_event(run_id, "info", stage_name, output[-3000:] if output else "cloudinit-node-evidence")
+    append_event(run_id, "info", stage_name, (output[-3000:] if output else "k3s-node-evidence") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_loki_cloudevents_check(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_ip_for_endpoint() {
-  ns="$1"
-  svc="$2"
-  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
-  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-}
-node_port_for_service() {
-  ns="$1"
-  svc="$2"
-  port_name="$3"
-  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
-}
-api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_service rx-demo api-gateway http)"
-loki_base="http://$(node_ip_for_endpoint rx-observability loki):$(node_port_for_service rx-observability loki http)"
-rx_id="RX-BKC-CLOUDEVENTS"
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"approvedBy":"bkc.pipeline","notes":"CloudEvents Loki demo"}' \
-  "$api_base/prescriptions/${rx_id}/approve" | grep -F 'ApproveQueued' >/dev/null
-curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' \
-  -d '{"refillCount":2}' \
-  "$api_base/prescriptions/${rx_id}/refill" | grep -F 'RefillQueued' >/dev/null
-query='{service_name=~"rx/.+"} |= "CloudEvent audit" |= "RX-BKC-CLOUDEVENTS"'
-for _ in $(seq 1 30); do
-  body="$(curl -fsS --get "$loki_base/loki/api/v1/query_range" \
-    --data-urlencode "query=$query" \
-    --data-urlencode "limit=20" \
-    --data-urlencode "start=$(date -u -d '15 minutes ago' +%s)000000000" \
-    --data-urlencode "end=$(date -u +%s)000000000")"
-  if printf '%s' "$body" | grep -F 'CloudEvent audit' | grep -F 'RX-BKC-CLOUDEVENTS' >/dev/null; then
-    printf 'loki-cloudevents-ok api=%s loki=%s query=%s\n' "$api_base" "$loki_base" "$query"
-    printf '%s' "$body" | grep -o 'CloudEvent audit[^"]*' | head -5
-    exit 0
-  fi
-  sleep 5
-done
-printf '%s\n' "$body"
-exit 1
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=300,
+    api_base = _k8s_nodeport_base("rx-demo", "api-gateway", "http")
+    loki_base = _k8s_nodeport_base("rx-observability", "loki", "http")
+    rx_id = "RX-BKC-CLOUDEVENTS"
+    _retry_http_contains(
+        f"{api_base}/prescriptions/{rx_id}/approve",
+        "ApproveQueued",
+        method="POST",
+        payload={"approvedBy": "bkc.pipeline", "notes": "CloudEvents Loki demo"},
+        attempts=10,
     )
+    _retry_http_contains(
+        f"{api_base}/prescriptions/{rx_id}/refill",
+        "RefillQueued",
+        method="POST",
+        payload={"refillCount": 2},
+        attempts=10,
+    )
+    query = '{service_name=~"rx/.+"} |= "CloudEvent audit" |= "RX-BKC-CLOUDEVENTS"'
+    body = ""
+    for _ in range(30):
+        params = urllib.parse.urlencode(
+            {
+                "query": query,
+                "limit": "20",
+                "start": f"{int(time.time() - 900)}000000000",
+                "end": f"{int(time.time())}000000000",
+            }
+        )
+        body = _http_text(f"{loki_base}/loki/api/v1/query_range?{params}", timeout=10)
+        if "CloudEvent audit" in body and rx_id in body:
+            break
+        time.sleep(5)
+    if "CloudEvent audit" not in body or rx_id not in body:
+        raise PipelineExecutionError(f"Loki did not return CloudEvents audit records for {rx_id}: {body[-1200:]}")
+    output = f"loki-cloudevents-ok api={api_base} loki={loki_base} query={query}\ntransport=kubernetes-api"
     _set_stage(run_id, stage_name, "complete", "Loki returned CloudEvents audit records.")
     append_event(run_id, "info", stage_name, output[-2400:] if output else "loki-cloudevents-ok")
 
 
 def _run_rx_demo_k3s_redeploy_visible_activity(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_ip_for_endpoint() {
-  ns="$1"
-  svc="$2"
-  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
-  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-}
-node_port_for_service() {
-  ns="$1"
-  svc="$2"
-  port_name="$3"
-  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
-}
-ui_base="http://$(node_ip_for_endpoint rx-demo rx-ui):$(node_port_for_service rx-demo rx-ui http)"
-api_base="http://$(node_ip_for_endpoint rx-demo api-gateway):$(node_port_for_service rx-demo api-gateway http)"
-rx_id="RX-BKC-REDEPLOY"
-k3s kubectl -n rx-demo rollout restart deploy/rabbitmq
-k3s kubectl -n rx-demo rollout status deploy/rabbitmq --timeout=180s
-retry_get_contains() {
-  url="$1"
-  text="$2"
-  for _ in $(seq 1 40); do
-    if curl -fsS "$url" | grep -F "$text" >/dev/null; then
-      return 0
-    fi
-    sleep 3
-  done
-  curl -fsS "$url" | grep -F "$text" >/dev/null
-}
-retry_post_contains() {
-  url="$1"
-  body="$2"
-  text="$3"
-  for _ in $(seq 1 40); do
-    if curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null; then
-      return 0
-    fi
-    sleep 3
-  done
-  curl -fsS -H 'Content-Type: application/json' -H 'Accept: application/json' -d "$body" "$url" | grep -F "$text" >/dev/null
-}
-for _ in $(seq 1 30); do
-  if curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null; then
-    break
-  fi
-  sleep 3
-done
-curl -fsS "$ui_base/" | grep -F "Prescription Demo UI" >/dev/null
-curl -fsS "$api_base/healthz"
-retry_get_contains "$api_base/readyz" '"rabbitmq":"ok"'
-retry_get_contains "$api_base/prescriptions/${rx_id}" "$rx_id"
-retry_post_contains "$api_base/prescriptions/${rx_id}/approve" '{"approvedBy":"bkc.pipeline","notes":"BKC redeploy visible activity"}' 'ApproveQueued'
-retry_post_contains "$api_base/prescriptions/${rx_id}/refill" '{"refillCount":1}' 'RefillQueued'
-printf 'rx-redeploy-visible-activity-ok ui=%s api=%s rx_id=%s\n' "$ui_base" "$api_base" "$rx_id"
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=180,
+    ui_base = _k8s_nodeport_base("rx-demo", "rx-ui", "http")
+    api_base = _k8s_nodeport_base("rx-demo", "api-gateway", "http")
+    rx_id = "RX-BKC-REDEPLOY"
+    kubectl_text(["-n", "rx-demo", "rollout", "restart", "deploy/rabbitmq"], timeout=120)
+    kubectl_text(["-n", "rx-demo", "rollout", "status", "deploy/rabbitmq", "--timeout=180s"], timeout=240)
+    _retry_http_contains(f"{ui_base}/", "Prescription Demo UI", attempts=30, delay=3)
+    _http_text(f"{api_base}/healthz")
+    _retry_http_contains(f"{api_base}/readyz", '"rabbitmq":"ok"', attempts=40, delay=3)
+    _retry_http_contains(f"{api_base}/prescriptions/{rx_id}", rx_id, attempts=40, delay=3)
+    _retry_http_contains(
+        f"{api_base}/prescriptions/{rx_id}/approve",
+        "ApproveQueued",
+        method="POST",
+        payload={"approvedBy": "bkc.pipeline", "notes": "BKC redeploy visible activity"},
+        attempts=40,
+        delay=3,
     )
+    _retry_http_contains(
+        f"{api_base}/prescriptions/{rx_id}/refill",
+        "RefillQueued",
+        method="POST",
+        payload={"refillCount": 1},
+        attempts=40,
+        delay=3,
+    )
+    output = f"rx-redeploy-visible-activity-ok ui={ui_base} api={api_base} rx_id={rx_id}\ntransport=kubernetes-api"
     _set_stage(run_id, stage_name, "complete", "Post-redeploy UI/API smoke activity completed.")
     append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-redeploy-visible-activity-ok")
 
 
 def _run_rx_demo_k3s_grafana_loki_check(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-node_ip_for_endpoint() {
-  ns="$1"
-  svc="$2"
-  node_name="$(k3s kubectl -n "$ns" get endpoints "$svc" -o jsonpath='{.subsets[0].addresses[0].nodeName}' 2>/dev/null)"
-  k3s kubectl get node "$node_name" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
-}
-node_port_for_service() {
-  ns="$1"
-  svc="$2"
-  port_name="$3"
-  k3s kubectl -n "$ns" get svc "$svc" -o jsonpath="{.spec.ports[?(@.name==\"${port_name}\")].nodePort}"
-}
-grafana_base="http://$(node_ip_for_endpoint rx-observability grafana):$(node_port_for_service rx-observability grafana http)"
-loki_base="http://$(node_ip_for_endpoint rx-observability loki):$(node_port_for_service rx-observability loki http)"
-curl -fsS "$grafana_base/api/health" | grep -F '"database"' >/dev/null
-curl -fsS "$loki_base/ready"
-printf 'grafana-loki-ready grafana=%s loki=%s explore_query=%s\n' "$grafana_base" "$loki_base" '{service_name=~"rx/.+"} |= "CloudEvent audit"'
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
+    grafana_base = _k8s_nodeport_base("rx-observability", "grafana", "http")
+    loki_base = _k8s_nodeport_base("rx-observability", "loki", "http")
+    grafana_health = _http_text(f"{grafana_base}/api/health")
+    if '"database"' not in grafana_health:
+        raise PipelineExecutionError(f"Grafana health response did not include database status: {grafana_health}")
+    loki_ready = _http_text(f"{loki_base}/ready")
+    plugin_check = kubectl_text(
+        ["-n", "rx-observability", "exec", "deploy/grafana", "--", "test", "-d", "/var/lib/grafana/plugins/neildengg-grafmaid-panel"],
         timeout=120,
+    )
+    output = "\n".join(
+        [
+            loki_ready,
+            plugin_check,
+            "grafana-plugin-ok plugin=neildengg-grafmaid-panel",
+            f"grafana-loki-ready grafana={grafana_base} loki={loki_base} explore_query={{service_name=~\"rx/.+\"}} |= \"CloudEvent audit\"",
+            "transport=kubernetes-api",
+        ]
     )
     _set_stage(run_id, stage_name, "complete", "Grafana is reachable and the Loki query is ready for the demo.")
     append_event(run_id, "info", stage_name, output[-1200:] if output else "grafana-loki-ready")
 
 
 def _run_rx_demo_k3s_undeploy_capture(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-k3s kubectl -n rx-demo get all,pvc,secret,configmap -o wide || true
-k3s kubectl -n rx-observability get deploy,svc,configmap,daemonset -o wide || true
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=120,
+    output = "\n\n".join(
+        [
+            kubectl_text(["-n", "rx-demo", "get", "all,pvc,secret,configmap", "-o", "wide"], timeout=120, check=False),
+            kubectl_text(
+                ["-n", "rx-observability", "get", "deploy,svc,configmap,daemonset", "-o", "wide"],
+                timeout=120,
+                check=False,
+            ),
+        ]
     )
     _set_stage(run_id, stage_name, "complete", "Pre-cleanup k3s state captured.")
-    append_event(run_id, "info", stage_name, output[-3000:] if output else "pre-cleanup-state-captured")
+    append_event(run_id, "info", stage_name, (output[-3000:] if output else "pre-cleanup-state-captured") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_undeploy_demo_observability(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    configmaps = (
-        "prometheus-k3s-config loki-config tempo-config grafana-datasources "
-        "grafana-dashboard-provider rx-overview-dashboard rx-service-flow-dashboard "
-        "rx-executive-health-dashboard rx-executive-flow-grafmaid-dashboard "
-        "rx-grafmaid-probe-dashboard rx-traffic-map-grafmaid-dashboard rx-tempo-traces-dashboard"
-    )
-    script = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl -n rx-observability delete deploy grafana loki prometheus tempo --ignore-not-found=true",
-            "k3s kubectl -n rx-observability delete svc grafana loki prometheus tempo --ignore-not-found=true",
-            f"k3s kubectl -n rx-observability delete configmap {configmaps} --ignore-not-found=true",
-            "k3s kubectl -n rx-observability delete serviceaccount prometheus --ignore-not-found=true",
-            "k3s kubectl delete clusterrole rx-demo-prometheus-discovery --ignore-not-found=true",
-            "k3s kubectl delete clusterrolebinding rx-demo-prometheus-discovery --ignore-not-found=true",
-            "k3s kubectl -n rx-observability get daemonset,svc -o wide || true",
-        ]
-    )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=300,
-    )
+    configmaps = [
+        "prometheus-k3s-config",
+        "loki-config",
+        "tempo-config",
+        "grafana-datasources",
+        "grafana-dashboard-provider",
+        "rx-overview-dashboard",
+        "rx-service-flow-dashboard",
+        "rx-executive-health-dashboard",
+        "rx-executive-flow-grafmaid-dashboard",
+        "rx-grafmaid-probe-dashboard",
+        "rx-traffic-map-grafmaid-dashboard",
+        "rx-tempo-traces-dashboard",
+    ]
+    outputs = [
+        kubectl_text(
+            ["-n", "rx-observability", "delete", "deploy", "grafana", "loki", "prometheus", "tempo", "--ignore-not-found=true"],
+            timeout=300,
+        ),
+        kubectl_text(
+            ["-n", "rx-observability", "delete", "svc", "grafana", "loki", "prometheus", "tempo", "--ignore-not-found=true"],
+            timeout=120,
+        ),
+        kubectl_text(["-n", "rx-observability", "delete", "configmap", *configmaps, "--ignore-not-found=true"], timeout=120),
+        kubectl_text(["-n", "rx-observability", "delete", "serviceaccount", "prometheus", "--ignore-not-found=true"], timeout=120),
+        kubectl_text(["delete", "clusterrole", "rx-demo-prometheus-discovery", "--ignore-not-found=true"], timeout=120),
+        kubectl_text(["delete", "clusterrolebinding", "rx-demo-prometheus-discovery", "--ignore-not-found=true"], timeout=120),
+        kubectl_text(["-n", "rx-observability", "get", "daemonset,svc", "-o", "wide"], timeout=120, check=False),
+    ]
+    output = "\n".join(item for item in outputs if item)
     _set_stage(run_id, stage_name, "complete", "Demo observability resources removed.")
-    append_event(run_id, "info", stage_name, output[-3000:] if output else "demo-observability-removed")
+    append_event(run_id, "info", stage_name, (output[-3000:] if output else "demo-observability-removed") + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_undeploy_namespace(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = "\n".join(
-        [
-            "set -euo pipefail",
-            "k3s kubectl delete namespace rx-demo --ignore-not-found=true --timeout=240s",
-            "for _ in $(seq 1 30); do",
-            "  if ! k3s kubectl get namespace rx-demo >/dev/null 2>&1; then echo rx-demo-namespace-absent; exit 0; fi",
-            "  sleep 2",
-            "done",
-            "k3s kubectl get namespace rx-demo",
-            "exit 1",
-        ]
-    )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
+    output = kubectl_text(["delete", "namespace", "rx-demo", "--ignore-not-found=true", "--timeout=240s"], timeout=300)
+    wait_output = kubectl_text(
+        ["wait", "--for=delete", "namespace/rx-demo", "--timeout=240s"],
         timeout=300,
+        check=False,
     )
+    if "not found" not in wait_output.lower() and "deleted" not in wait_output.lower():
+        namespace_check = kubectl_text(["get", "namespace", "rx-demo"], timeout=60, check=False)
+        if "not found" not in namespace_check.lower():
+            raise PipelineExecutionError(namespace_check or wait_output or "rx-demo namespace still exists")
+    output = "\n".join(item for item in (output, wait_output, "rx-demo-namespace-absent") if item)
     _set_stage(run_id, stage_name, "complete", "Rx-demo namespace removed.")
-    append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-demo-namespace-absent")
+    append_event(run_id, "info", stage_name, output[-1600:] + "\ntransport=kubernetes-api")
 
 
 def _run_rx_demo_k3s_undeploy_verify(run_id: str, stage_name: str) -> None:
-    server = _k3s_live_node("server")
-    script = r"""
-set -euo pipefail
-if k3s kubectl get namespace rx-demo >/dev/null 2>&1; then
-  echo "rx-demo namespace still exists"
-  exit 1
-fi
-for deploy in grafana loki prometheus tempo; do
-  if k3s kubectl -n rx-observability get deploy "$deploy" >/dev/null 2>&1; then
-    echo "demo observability deployment still exists: $deploy"
-    exit 1
-  fi
-done
-k3s kubectl -n rx-observability get daemonset telegraf-k3s-host cadvisor-k3s -o name
-printf 'rx-demo-cleanup-verified\n'
-"""
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
+    namespace_check = kubectl_text(["get", "namespace", "rx-demo"], timeout=60, check=False)
+    if "not found" not in namespace_check.lower():
+        raise PipelineExecutionError(namespace_check or "rx-demo namespace still exists")
+    for deploy in ("grafana", "loki", "prometheus", "tempo"):
+        deploy_check = kubectl_text(["-n", "rx-observability", "get", "deploy", deploy], timeout=60, check=False)
+        if "not found" not in deploy_check.lower():
+            raise PipelineExecutionError(f"demo observability deployment still exists: {deploy}\n{deploy_check}")
+    daemonsets = kubectl_text(
+        ["-n", "rx-observability", "get", "daemonset", "telegraf-k3s-host", "cadvisor-k3s", "-o", "name"],
         timeout=120,
     )
+    output = "\n".join([namespace_check, daemonsets, "rx-demo-cleanup-verified", "transport=kubernetes-api"])
     _set_stage(run_id, stage_name, "complete", "Cleanup verification passed.")
     append_event(run_id, "info", stage_name, output[-1600:] if output else "rx-demo-cleanup-verified")
 

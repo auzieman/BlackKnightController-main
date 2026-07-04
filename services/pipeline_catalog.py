@@ -249,8 +249,170 @@ BUILTIN_PIPELINES = [
         "tags": ["kubernetes", "k3s", "monitoring", "storage", "ssh"],
     },
     {
+        "id": "demo-swarm-image-registry",
+        "name": "Demo: Swarm Image Registry",
+        "repo": "BlackKnightController",
+        "workflow": "demo-swarm-image-registry",
+        "description": "Deploy the demo registry stack, validate push and pull behavior, and prepare k3s nodes to trust the swarm-hosted image source.",
+        "stages": [
+            "storage-ready",
+            "deploy-registry-stack",
+            "registry-health",
+            "k3s-dns-or-ip",
+            "k3s-containerd-trust",
+            "push-smoke-image",
+            "pull-smoke-image",
+        ],
+        "actions": [
+            "docker.registry.probe",
+            "docker.image.push",
+            "k3s.registry.trust",
+        ],
+        "notes": "Demo step 1. Use this before the rx-demo deploy lane when the cluster image source needs to be proven on camera.",
+        "editable": True,
+        "links": [
+            {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
+            {"label": "Registry", "url": "http://swarm1.lab.auzietek.com:5001/v2/"},
+            {"label": "Portainer", "url": "https://swarm1.lab.auzietek.com:9443"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Watch registry deploy, push, and k3s trust stages from the BKC pipeline surface.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=demo-swarm-image-registry",
+            },
+        ],
+        "tags": ["demo", "registry", "swarm", "k3s", "deploy"],
+    },
+    {
+        "id": "rx-demo-k3s-deploy",
+        "name": "Demo: Rx Demo K3s Deploy",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-deploy",
+        "description": "Build rx-demo images, apply the k3s demo overlay, roll out the app and observability stack, smoke the UI/API, and publish access links.",
+        "stages": [
+            "k3s-ready",
+            "runtime-secrets",
+            "registry-images",
+            "apply-k3s-demo-overlay",
+            "rollout-app",
+            "rollout-observability",
+            "smoke-api",
+            "smoke-ui",
+            "telemetry-check",
+            "access-links",
+        ],
+        "actions": [
+            "k3s.nodes.ready",
+            "docker.images.build_push",
+            "kubectl.manifest.apply",
+            "kubectl.rollout.wait",
+            "http.smoke",
+            "prometheus.metrics.check",
+        ],
+        "notes": "Demo step 2. This is the full rx-demo bring-up lane and now validates the Grafmaid panel plugin as part of telemetry checks.",
+        "editable": True,
+        "links": [
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
+            {"label": "Rx API", "url": "http://192.168.1.239:30081"},
+            {"label": "Grafana", "url": "http://192.168.1.239:30300"},
+            {"label": "Prometheus", "url": "http://192.168.1.239:30090"},
+        ],
+        "dashboards": [
+            {
+                "name": "Rx Traffic Map",
+                "summary": "Grafmaid-backed service map for the rx-demo flow.",
+                "url": "http://192.168.1.239:30300/d/rx-traffic-map/rx-traffic-map",
+            },
+            {
+                "name": "Rx CloudEvents Audit",
+                "summary": "Known transaction audit trail through Loki.",
+                "url": "http://192.168.1.239:30300/d/rx-cloudevents/rx-cloudevents-audit",
+            },
+        ],
+        "tags": ["demo", "k3s", "rx-demo", "deploy", "grafana"],
+    },
+    {
+        "id": "rx-demo-k3s-redeploy-from-git",
+        "name": "Demo: Rx Demo Redeploy From Git",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-redeploy-from-git",
+        "description": "Record a Git-triggered rx-demo redeploy, build and push commit-tagged images, update k3s, and prove CloudEvents still arrive in Loki/Grafana.",
+        "stages": [
+            "git-event",
+            "sync-source-from-git",
+            "build-and-push",
+            "update-images",
+            "k3s-network-ready",
+            "rollout-app",
+            "cloudinit-node-check",
+            "visible-change-check",
+            "telemetry-still-flowing",
+            "loki-cloudevents-check",
+            "grafana-loki-check",
+            "access-links",
+        ],
+        "actions": [
+            "git.source.sync",
+            "docker.images.build_push",
+            "kubectl.image.update",
+            "kubectl.rollout.wait",
+            "loki.query.verify",
+            "grafana.datasource.verify",
+        ],
+        "notes": "Demo step 3. Use this for the source-to-runtime story after the full stack is already online.",
+        "editable": True,
+        "links": [
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
+            {"label": "Grafana", "url": "http://192.168.1.239:30300"},
+            {"label": "Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-redeploy-from-git"},
+        ],
+        "dashboards": [
+            {
+                "name": "Rx CloudEvents Audit",
+                "summary": "Shows the known transaction generated by the redeploy validation lane.",
+                "url": "http://192.168.1.239:30300/d/rx-cloudevents/rx-cloudevents-audit",
+            },
+        ],
+        "tags": ["demo", "git", "k3s", "rx-demo", "redeploy"],
+    },
+    {
+        "id": "rx-demo-k3s-undeploy",
+        "name": "Demo: Rx Demo K3s Undeploy",
+        "repo": "rx-demo",
+        "workflow": "rx-demo-k3s-undeploy",
+        "description": "Capture rx-demo state, remove demo-owned app and observability resources, verify cleanup, and keep registry artifacts intact.",
+        "stages": [
+            "capture-state",
+            "delete-overlay",
+            "delete-namespace",
+            "verify-removed",
+            "registry-retained",
+        ],
+        "actions": [
+            "kubectl.get",
+            "kubectl.delete",
+            "kubectl.verify_absent",
+            "docker.registry.probe",
+        ],
+        "notes": "Demo step 4. Use this from the latest rx-demo run's Undeploy button or queue it directly to reset the rehearsal environment.",
+        "editable": True,
+        "links": [
+            {"label": "Pipelines", "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-undeploy"},
+            {"label": "Registry", "url": "http://swarm1.lab.auzietek.com:5001/v2/"},
+        ],
+        "dashboards": [
+            {
+                "name": "Pipeline Control",
+                "summary": "Follow cleanup evidence and verify the demo namespaces were removed.",
+                "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=rx-demo-k3s-undeploy",
+            },
+        ],
+        "tags": ["demo", "cleanup", "k3s", "rx-demo", "undeploy"],
+    },
+    {
         "id": "rx-demo-k3s-app-refresh",
-        "name": "Rx Demo K3s App Refresh",
+        "name": "Demo: Rx Demo App Refresh",
         "repo": "rx-demo",
         "workflow": "rx-demo-k3s-app-refresh",
         "description": "Build the staged rx-demo UI image on the swarm manager, import it into both k3s nodes, apply the lab overlay, restart rx-ui, and smoke the routed UI actions.",
@@ -274,7 +436,7 @@ BUILTIN_PIPELINES = [
         "editable": True,
         "links": [
             {"label": "BlackKnightController", "url": "http://swarm1.lab.auzietek.com:5000"},
-            {"label": "Rx UI", "url": "http://kube1.lab.auzietek.com:30080"},
+            {"label": "Rx UI", "url": "http://192.168.1.239:30080"},
             {"label": "Grafana", "url": "http://swarm1.lab.auzietek.com:3000"},
         ],
         "dashboards": [
@@ -604,10 +766,16 @@ BUILTIN_PIPELINES = [
 
 
 def _definitions_path() -> Path:
+    override = os.environ.get("BKC_PIPELINE_DEFINITIONS_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return BASE_DIR / "dictionaries" / "pipeline_definitions.local.json"
 
 
 def _pipeline_folders_path() -> Path:
+    override = os.environ.get("BKC_PIPELINE_FOLDERS_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
     return BASE_DIR / "dictionaries" / "pipelines"
 
 

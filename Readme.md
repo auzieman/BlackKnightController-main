@@ -323,11 +323,19 @@ Runtime state is intentionally separate from source:
 - `dictionaries/bkc.db` stores auth, RBAC, audit, and API key hashes.
 - `dictionaries/tenants/<slug>/` stores tenant inventory and integration
   snapshots.
+- `dictionaries/pipelines/<Pipeline_Name>/` stores live pipeline definitions
+  and child item JSON. BKC reloads these folders from disk when rendering the
+  pipeline UI.
 - `keys/` stores local generated secrets and automation keys.
 - `file_templates/` stores shared templates, with optional tenant overrides.
 
 Git ignores real runtime state so lab credentials and inventory do not end up in
 the public repo.
+
+Use `BKC_PIPELINE_FOLDERS_PATH` to point BKC at an NFS-backed pipeline folder
+mount without replacing the rest of `dictionaries/`. Use
+`BKC_PIPELINE_DEFINITIONS_PATH` for UI-edited pipeline overrides when those
+should live on the same runtime volume.
 
 For complete security details, see [SECURITY.md](SECURITY.md).
 
