@@ -4492,51 +4492,43 @@ def _run_rx_demo_k3s_apply_observability(run_id: str, stage_name: str) -> None:
     context = _rx_demo_redeploy_run_context(run_id)
     ref = context["ref"]
     commit = context["commit"]
-    server = _k3s_live_node("server")
-    script = "\n".join(
-        [
-            "set -euo pipefail",
-            "if ! command -v git >/dev/null 2>&1; then",
-            "  if command -v dnf >/dev/null 2>&1; then dnf -y install git;",
-            "  elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y git;",
-            "  elif command -v apk >/dev/null 2>&1; then apk add --no-cache git;",
-            "  else echo 'git package manager not found' >&2; exit 1; fi",
-            "fi",
-            "git_work=/tmp/bkc-rx-demo-observability-work",
-            "if ! test -d \"$git_work/.git\"; then",
-            "  rm -rf \"$git_work\"",
-            "  git clone https://github.com/auzieman/rx-demo.git \"$git_work\"",
-            "fi",
-            "cd \"$git_work\"",
-            "git reset --hard",
-            "git clean -fdx",
-            "git fetch --prune origin",
-            f"commit={shlex.quote(commit)}",
-            f"ref={shlex.quote(ref)}",
-            "if test -n \"$commit\"; then",
-            "  git checkout --detach \"$commit\"",
-            "else",
-            "  branch=\"${ref#refs/heads/}\"",
-            "  test -n \"$branch\" || branch=\"$(git branch --show-current)\"",
-            "  test -n \"$branch\"",
-            "  git checkout \"$branch\"",
-            "  git pull --ff-only origin \"$branch\"",
-            "fi",
-            "git rev-parse --short HEAD",
-            "test -d k8s/observability",
-            "k3s kubectl apply -k k8s/observability",
-            "k3s kubectl -n rx-observability rollout restart deploy/grafana",
-            "k3s kubectl -n rx-observability rollout status deploy/grafana --timeout=240s",
-            "k3s kubectl -n rx-observability get configmap rx-traffic-map-grafmaid-dashboard -o name",
-            "k3s kubectl -n rx-observability get pods -l app=grafana -o wide",
-        ]
+    github_ref = commit or ref.removeprefix("refs/heads/") or "main"
+    api_url = (
+        "https://api.github.com/repos/auzieman/rx-demo/contents/"
+        "k8s/observability/grafana/rx-traffic-map-grafmaid-dashboard.json?"
+        f"ref={urllib.parse.quote(github_ref, safe='')}"
     )
-    output = run_remote_command(
-        host=server["host"],
-        user="root",
-        command=f"bash -lc {shlex.quote(script)}",
-        timeout=300,
-    )
+    with urllib.request.urlopen(api_url, timeout=30) as response:  # noqa: S310 - public GitHub content
+        payload = json.loads(response.read().decode("utf-8"))
+    content = b64decode(str(payload.get("content") or "").encode("ascii")).decode("utf-8")
+    json.loads(content)
+
+    outputs = [f"dashboard-source-ref={github_ref}"]
+    with tempfile.TemporaryDirectory(prefix="rx-observability-dashboard-") as tmp:
+        dashboard_path = Path(tmp) / "rx-traffic-map-grafmaid-dashboard.json"
+        dashboard_path.write_text(content, encoding="utf-8")
+        configmap_yaml = kubectl_text(
+            [
+                "-n",
+                "rx-observability",
+                "create",
+                "configmap",
+                "rx-traffic-map-grafmaid-dashboard",
+                f"--from-file=rx-traffic-map-grafmaid-dashboard.json={dashboard_path}",
+                "--dry-run=client",
+                "-o",
+                "yaml",
+            ],
+            timeout=60,
+        )
+        configmap_path = Path(tmp) / "rx-traffic-map-grafmaid-dashboard.configmap.yaml"
+        configmap_path.write_text(configmap_yaml, encoding="utf-8")
+        outputs.append(kubectl_text(["apply", "-f", str(configmap_path)], timeout=60))
+    outputs.append(kubectl_text(["-n", "rx-observability", "rollout", "restart", "deploy/grafana"], timeout=120))
+    outputs.append(kubectl_text(["-n", "rx-observability", "rollout", "status", "deploy/grafana", "--timeout=240s"], timeout=300))
+    outputs.append(kubectl_text(["-n", "rx-observability", "get", "configmap", "rx-traffic-map-grafmaid-dashboard", "-o", "name"], timeout=60))
+    outputs.append(kubectl_text(["-n", "rx-observability", "get", "pods", "-l", "app=grafana", "-o", "wide"], timeout=120))
+    output = "\n".join(item for item in outputs if item)
     _set_stage(run_id, stage_name, "complete", "Rx-demo observability manifests and dashboards applied.")
     append_event(run_id, "info", stage_name, (output[-2400:] if output else "rx-demo-observability-applied") + "\ntransport=kubernetes-api")
 
