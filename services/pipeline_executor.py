@@ -4741,12 +4741,13 @@ def _run_rx_demo_k3s_publish_source_to_shared(run_id: str, stage_name: str, sett
         [
             "set -euo pipefail",
             f"test -d {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}",
-            f"mkdir -p {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
-            f"rsync -a --delete --exclude .git/ {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}/ {shlex.quote(RX_DEMO_SHARED_SOURCE)}/",
+            f"test -d {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}/k8s/observability",
+            f"mkdir -p {shlex.quote(RX_DEMO_SHARED_SOURCE)}/k8s",
+            f"timeout 60 rsync -a --delete {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}/k8s/observability/ {shlex.quote(RX_DEMO_SHARED_SOURCE)}/k8s/observability/",
             f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
             "test -d k8s/observability",
-            "test -f rx-demo.sln",
-            "printf 'rx-demo-shared-source-ready %s\\n' \"$PWD\"",
+            "test -f k8s/observability/kustomization.yaml",
+            "printf 'rx-demo-observability-source-ready %s\\n' \"$PWD/k8s/observability\"",
         ]
     )
     output = run_remote_command(
