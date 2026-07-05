@@ -212,6 +212,17 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "grafana-loki-check",
             "access-links",
         ]
+    if normalized == "rx-demo-k3s-observability-refresh":
+        return [
+            "git-event",
+            "sync-source-from-git",
+            "publish-source-to-shared",
+            "apply-observability",
+            "rollout-observability",
+            "telemetry-check",
+            "grafana-loki-check",
+            "access-links",
+        ]
     if normalized == "demo-k3s-add-node":
         if action_mode == "undeploy":
             return [
