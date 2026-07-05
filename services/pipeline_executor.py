@@ -781,6 +781,83 @@ WORKFLOW_DEFINITIONS = {
         ],
         "complete_message": "Rx-demo k3s Git redeploy pipeline completed.",
     },
+    "rx-demo-k3s-observability-refresh": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "git-event",
+                "transport": "internal",
+                "kind": "rx-demo-k3s-git-event",
+                "action": "git.event.record",
+                "active": "Recording the Git trigger inputs for the rx-demo observability refresh.",
+                "complete": "Git trigger inputs recorded.",
+                "timeout": 30,
+            },
+            {
+                "name": "sync-source-from-git",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-sync-source-from-git",
+                "action": "git.checkout",
+                "active": "Updating the rx-demo working copy from Git.",
+                "complete": "Rx-demo source is on the requested Git revision.",
+                "timeout": 300,
+            },
+            {
+                "name": "publish-source-to-shared",
+                "transport": "ssh-manager",
+                "kind": "rx-demo-k3s-publish-source-to-shared",
+                "action": "git.source.publish",
+                "active": "Publishing the synced rx-demo source to the shared k3s workspace.",
+                "complete": "Synced rx-demo source is available to the k3s server.",
+                "timeout": 180,
+            },
+            {
+                "name": "apply-observability",
+                "transport": "kubernetes-api",
+                "kind": "rx-demo-k3s-apply-observability",
+                "action": "kubectl.apply",
+                "active": "Applying rx-demo observability manifests and provisioned Grafana dashboards.",
+                "complete": "Rx-demo observability manifests and dashboards applied.",
+                "timeout": 300,
+            },
+            {
+                "name": "rollout-observability",
+                "transport": "kubernetes-api",
+                "kind": "rx-demo-k3s-rollout-observability",
+                "action": "kubectl.rollout_status",
+                "active": "Waiting for Grafana, Prometheus, Loki, and Tempo to become ready.",
+                "complete": "Rx-demo observability workloads are ready.",
+                "timeout": 900,
+            },
+            {
+                "name": "telemetry-check",
+                "transport": "kubernetes-api",
+                "kind": "rx-demo-k3s-telemetry-check",
+                "action": "prometheus.metrics.check",
+                "active": "Checking rx-demo metrics, Grafana routing, and dashboard panel plugins.",
+                "complete": "Rx-demo telemetry endpoints and dashboard plugins responded.",
+                "timeout": 180,
+            },
+            {
+                "name": "grafana-loki-check",
+                "transport": "kubernetes-api",
+                "kind": "rx-demo-k3s-grafana-loki-check",
+                "action": "grafana.datasource.check",
+                "active": "Checking Grafana and publishing the Loki Explore query.",
+                "complete": "Grafana is reachable and the Loki query is ready for the demo.",
+                "timeout": 120,
+            },
+            {
+                "name": "access-links",
+                "transport": "internal",
+                "kind": "rx-demo-k3s-access-links",
+                "active": "Publishing demo access links.",
+                "complete": "Demo access links published.",
+                "timeout": 30,
+            },
+        ],
+        "complete_message": "Rx-demo k3s observability refresh pipeline completed.",
+    },
     "fedora-workstation-spin": {
         "supports_undeploy": False,
         "stage_plan": [
@@ -4411,6 +4488,31 @@ def _run_rx_demo_k3s_rollout_observability(run_id: str, stage_name: str) -> None
     append_event(run_id, "info", stage_name, (output[-3000:] if output else "rx-demo-observability-ready") + "\ntransport=kubernetes-api")
 
 
+def _run_rx_demo_k3s_apply_observability(run_id: str, stage_name: str) -> None:
+    server = _k3s_live_node("server")
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"test -d {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "test -d k8s/observability",
+            "k3s kubectl apply -k k8s/observability",
+            "k3s kubectl -n rx-observability rollout restart deploy/grafana",
+            "k3s kubectl -n rx-observability rollout status deploy/grafana --timeout=240s",
+            "k3s kubectl -n rx-observability get configmap rx-traffic-map-grafmaid-dashboard -o name",
+            "k3s kubectl -n rx-observability get pods -l app=grafana -o wide",
+        ]
+    )
+    output = run_remote_command(
+        host=server["host"],
+        user="root",
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=300,
+    )
+    _set_stage(run_id, stage_name, "complete", "Rx-demo observability manifests and dashboards applied.")
+    append_event(run_id, "info", stage_name, (output[-2400:] if output else "rx-demo-observability-applied") + "\ntransport=kubernetes-api")
+
+
 def _run_rx_demo_k3s_smoke_api_full(run_id: str, stage_name: str) -> None:
     base = _k8s_nodeport_base("rx-demo", "api-gateway", "http")
     rx_id = "RX-BKC-K3S-API"
@@ -4628,6 +4730,30 @@ def _run_rx_demo_k3s_redeploy_build_push(run_id: str, stage_name: str, settings:
     )
     _set_stage(run_id, stage_name, "complete", "Commit-tagged rx-demo images are present in the local registry.")
     append_event(run_id, "info", stage_name, output[-2400:] if output else "rx-demo-redeploy-images-ready")
+
+
+def _run_rx_demo_k3s_publish_source_to_shared(run_id: str, stage_name: str, settings: dict[str, str]) -> None:
+    script = "\n".join(
+        [
+            "set -euo pipefail",
+            f"test -d {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}",
+            f"mkdir -p {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            f"rsync -a --delete --exclude .git/ {shlex.quote(RX_DEMO_REDEPLOY_SOURCE)}/ {shlex.quote(RX_DEMO_SHARED_SOURCE)}/",
+            f"cd {shlex.quote(RX_DEMO_SHARED_SOURCE)}",
+            "test -d k8s/observability",
+            "test -f rx-demo.sln",
+            "printf 'rx-demo-shared-source-ready %s\\n' \"$PWD\"",
+        ]
+    )
+    output = run_remote_command(
+        host=settings["manager_host"],
+        user=settings["manager_user"],
+        password=settings["manager_password"],
+        command=f"bash -lc {shlex.quote(script)}",
+        timeout=180,
+    )
+    _set_stage(run_id, stage_name, "complete", "Synced rx-demo source is available to the k3s server.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "rx-demo-shared-source-ready")
 
 
 def _rx_demo_redeploy_tag(run_id: str) -> str:
@@ -5986,6 +6112,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_rx_demo_k3s_rollout_observability(run_id, stage_name)
             continue
 
+        if kind == "rx-demo-k3s-apply-observability":
+            _run_rx_demo_k3s_apply_observability(run_id, stage_name)
+            continue
+
         if kind == "rx-demo-k3s-smoke-api-full":
             _run_rx_demo_k3s_smoke_api_full(run_id, stage_name)
             continue
@@ -6012,6 +6142,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "rx-demo-k3s-redeploy-build-push":
             _run_rx_demo_k3s_redeploy_build_push(run_id, stage_name, settings)
+            continue
+
+        if kind == "rx-demo-k3s-publish-source-to-shared":
+            _run_rx_demo_k3s_publish_source_to_shared(run_id, stage_name, settings)
             continue
 
         if kind == "rx-demo-k3s-redeploy-update-images":
