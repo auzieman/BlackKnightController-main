@@ -9,11 +9,10 @@
   "provisioning_network_node_id": "node:network:lab-provisioning",
   "provisioning_network_cidr": "10.20.0.0/24",
   "provisioning_address": "10.20.0.10/24",
-  "provisioning_interface": "",
+  "provisioning_interface": "ens19",
   "allow_secondary_address_on_existing_interface": false,
   "no_default_route": true,
   "enable_dhcp": false,
   "enable_pxe": false,
-  "notes": "Set provisioning_interface after discovery identifies the isolated NIC on ns1."
+  "notes": "ns1 provisioning interface discovered as ens19 and configured with 10.20.0.10/24. DHCP and PXE remain disabled."
 }
-

@@ -207,7 +207,7 @@
         },
         "network": {
           "primary_ip": "192.168.1.10",
-          "observed_ips": ["192.168.1.10"],
+          "observed_ips": ["192.168.1.10", "10.20.0.10"],
           "planned_provisioning_ip": "10.20.0.10/24"
         },
         "proxmox": {
@@ -266,26 +266,30 @@
       }
     },
     {
-      "id": "node:boot_image:debian-stable-amd64-netboot",
-      "name": "debian-stable-amd64-netboot",
+      "id": "node:boot_image:debian-trixie-amd64-netboot",
+      "name": "debian-trixie-amd64-netboot",
       "type": "boot_image",
       "actionable": false,
       "structural": true,
       "lifecycle_state": "known",
       "current_state": "cached",
       "desired_state": "cached",
-      "tags": ["debian", "netboot", "pxe"],
+      "tags": ["debian", "trixie", "netboot", "pxe"],
       "labels": {
         "architecture": "amd64"
       },
       "facts": {
         "boot_image": {
           "distribution": "debian",
-          "version": "stable",
+          "version": "trixie",
           "architecture": "amd64",
-          "kernel_path": "/srv/netboot/debian/stable/amd64/linux",
-          "initrd_path": "/srv/netboot/debian/stable/amd64/initrd.gz",
-          "source_url": "https://deb.debian.org/debian/dists/stable/main/installer-amd64/current/images/netboot/"
+          "kernel_path": "/srv/netboot/debian/trixie/amd64/linux",
+          "initrd_path": "/srv/netboot/debian/trixie/amd64/initrd.gz",
+          "source_url": "https://deb.debian.org/debian/dists/trixie/main/installer-amd64/current/images/netboot/debian-installer/amd64/",
+          "sha256": {
+            "linux": "4cc864b8e34c86c281f66b36157a52945a95a1b290762245c608b7c7e3934a11",
+            "initrd.gz": "53376f70d695276c5d9c903589348a966d0f57dc0bbd6a701d4a97300761ba40"
+          }
         }
       },
       "owners": [],
@@ -426,7 +430,7 @@
     {
       "source_id": "node:network:lab-provisioning",
       "type": "uses",
-      "target_id": "node:boot_image:debian-stable-amd64-netboot",
+      "target_id": "node:boot_image:debian-trixie-amd64-netboot",
       "source": "bkc",
       "confidence": "declared"
     }
