@@ -1,0 +1,8 @@
+{
+  "id": "select-provisioning-interface",
+  "name": "Select Provisioning Interface",
+  "action": "network.interface.select",
+  "risk": "low",
+  "description": "Choose the isolated provisioning NIC. Leave unset for the first discovery-only review."
+}
+

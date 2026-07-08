@@ -44,7 +44,9 @@
           "cidr": "192.168.1.0/24",
           "gateway": "192.168.1.1",
           "dns": ["192.168.1.1"],
-          "role": "management"
+          "role": "management",
+          "dhcp_authority": "spectrum-router",
+          "bkc_managed": false
         }
       },
       "owners": [],
@@ -70,19 +72,49 @@
       "facts": {
         "network": {
           "cidr": "10.20.0.0/24",
-          "gateway": "10.20.0.1",
+          "gateway": "",
           "dhcp_range_start": "10.20.0.100",
           "dhcp_range_end": "10.20.0.199",
-          "role": "provisioning"
+          "role": "provisioning",
+          "dhcp_authority": "ns1",
+          "bkc_managed": true
         },
         "pxe": {
-          "enabled": true,
+          "enabled": false,
           "boot_server": "10.20.0.10",
           "ipxe_script": "http://10.20.0.10/boot.ipxe"
         }
       },
       "owners": [],
       "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:router:spectrum-router",
+      "name": "spectrum-router",
+      "type": "router",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "management", "external"],
+      "labels": {
+        "environment": "lab",
+        "authority": "external"
+      },
+      "facts": {
+        "network": {
+          "primary_ip": "192.168.1.1",
+          "provides_dhcp": true,
+          "bkc_managed": false
+        }
+      },
+      "owners": [],
+      "security_classification": "external",
       "source": {
         "system": "bkc",
         "method": "declared"
@@ -140,8 +172,8 @@
           "hostname": "pve1"
         },
         "network": {
-          "primary_ip": "192.168.1.10",
-          "observed_ips": ["192.168.1.10"]
+          "primary_ip": "192.168.1.9",
+          "observed_ips": ["192.168.1.9"]
         },
         "platform": {
           "provider": "proxmox"
@@ -152,6 +184,47 @@
       "source": {
         "system": "proxmox",
         "method": "discovered"
+      }
+    },
+    {
+      "id": "node:vm:ns1",
+      "name": "ns1",
+      "type": "vm",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "dns", "ansible", "provisioning"],
+      "labels": {
+        "environment": "lab",
+        "role": "provisioning-controller"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "ns1",
+          "fqdn": "ns1.lab.auzietek.com"
+        },
+        "network": {
+          "primary_ip": "192.168.1.10",
+          "observed_ips": ["192.168.1.10"],
+          "planned_provisioning_ip": "10.20.0.10/24"
+        },
+        "proxmox": {
+          "vmid": 129,
+          "host": "pve1"
+        },
+        "services": {
+          "ansible_controller": true,
+          "dhcp_enabled": false,
+          "pxe_enabled": false
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
       }
     },
     {
@@ -267,6 +340,20 @@
       "confidence": "declared"
     },
     {
+      "source_id": "node:router:spectrum-router",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:router:spectrum-router",
+      "type": "provides_network",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
       "source_id": "node:network_switch:core-sw1",
       "type": "located_in",
       "target_id": "node:location:lab",
@@ -293,6 +380,27 @@
       "target_id": "node:network:lab-mgmt",
       "source": "bkc",
       "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "runs_on",
+      "target_id": "node:bare_metal:pve1",
+      "source": "proxmox",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "uses",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
     },
     {
       "source_id": "node:vm:kube1",

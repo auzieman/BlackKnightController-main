@@ -1,0 +1,16 @@
+{
+  "target_node_id": "node:vm:ns1",
+  "target_host": "ns1.lab.auzietek.com",
+  "management_network_cidr": "192.168.1.0/24",
+  "management_dhcp_authority": "spectrum-router",
+  "management_bkc_managed": false,
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "provisioning_network_cidr": "10.20.0.0/24",
+  "provisioning_address": "10.20.0.10/24",
+  "provisioning_interface": "",
+  "allow_secondary_address_on_existing_interface": false,
+  "no_default_route": true,
+  "enable_dhcp": false,
+  "enable_pxe": false
+}
+

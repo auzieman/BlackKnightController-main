@@ -1,0 +1,8 @@
+{
+  "id": "discover-current-network",
+  "name": "Discover Current Network",
+  "action": "ssh.network.discover",
+  "risk": "low",
+  "description": "Collect interface, route, and hostname facts before any network change."
+}
+

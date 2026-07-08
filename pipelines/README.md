@@ -12,6 +12,8 @@ See `docs/pipeline-folder-layout.md` for the contract.
 
 - `rx-demo-k3s-redeploy-from-git/`: commit-triggered rx-demo redeploy example
   with k3s rollout, CloudEvents generation, and Loki/Grafana validation.
+- `ns1-provisioning-network-prepare/`: graph-driven scaffold for preparing an
+  isolated ns1 provisioning NIC before DHCP/PXE is enabled.
 - `auzix-installed-root-recovery/`: scaffold for installed-root repair and
   validation gates.
 

@@ -1,0 +1,8 @@
+{
+  "id": "apply-provisioning-address",
+  "name": "Apply Provisioning Address",
+  "action": "ssh.network.address.ensure",
+  "risk": "medium",
+  "description": "Apply the provisioning address without changing ns1's default route."
+}
+
