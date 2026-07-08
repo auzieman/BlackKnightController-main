@@ -1,0 +1,326 @@
+{
+  "version": "bkc.node-graph.v1",
+  "nodes": [
+    {
+      "id": "node:location:lab",
+      "name": "lab",
+      "type": "location",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "location": {
+          "name": "AuzieTek Lab"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network:lab-mgmt",
+      "name": "lab-mgmt",
+      "type": "network",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "management"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "network": {
+          "cidr": "192.168.1.0/24",
+          "gateway": "192.168.1.1",
+          "dns": ["192.168.1.1"],
+          "role": "management"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network:lab-provisioning",
+      "name": "lab-provisioning",
+      "type": "network",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "planned",
+      "current_state": "planned",
+      "desired_state": "available",
+      "tags": ["lab", "provisioning", "pxe"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "network": {
+          "cidr": "10.20.0.0/24",
+          "gateway": "10.20.0.1",
+          "dhcp_range_start": "10.20.0.100",
+          "dhcp_range_end": "10.20.0.199",
+          "role": "provisioning"
+        },
+        "pxe": {
+          "enabled": true,
+          "boot_server": "10.20.0.10",
+          "ipxe_script": "http://10.20.0.10/boot.ipxe"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network_switch:core-sw1",
+      "name": "core-sw1",
+      "type": "network_switch",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "network"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "cisco"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "core-sw1"
+        },
+        "hardware": {
+          "vendor": "cisco",
+          "ports": 48
+        },
+        "management": {
+          "primary_ip": "192.168.1.2"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:bare_metal:pve1",
+      "name": "pve1",
+      "type": "bare_metal",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "proxmox"],
+      "labels": {
+        "environment": "lab",
+        "role": "hypervisor"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "pve1"
+        },
+        "network": {
+          "primary_ip": "192.168.1.10",
+          "observed_ips": ["192.168.1.10"]
+        },
+        "platform": {
+          "provider": "proxmox"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "proxmox",
+        "method": "discovered"
+      }
+    },
+    {
+      "id": "node:vm:kube1",
+      "name": "kube1",
+      "type": "vm",
+      "actionable": true,
+      "structural": false,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "k3s"],
+      "labels": {
+        "environment": "lab",
+        "role": "k3s-control"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "kube1",
+          "fqdn": "kube1.lab.auzietek.com"
+        },
+        "network": {
+          "primary_ip": "192.168.1.14",
+          "observed_ips": ["192.168.1.14"]
+        },
+        "proxmox": {
+          "vmid": 101,
+          "host": "pve1"
+        },
+        "os": {
+          "name": "Fedora"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "merged"
+      }
+    },
+    {
+      "id": "node:boot_image:debian-stable-amd64-netboot",
+      "name": "debian-stable-amd64-netboot",
+      "type": "boot_image",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "cached",
+      "desired_state": "cached",
+      "tags": ["debian", "netboot", "pxe"],
+      "labels": {
+        "architecture": "amd64"
+      },
+      "facts": {
+        "boot_image": {
+          "distribution": "debian",
+          "version": "stable",
+          "architecture": "amd64",
+          "kernel_path": "/srv/netboot/debian/stable/amd64/linux",
+          "initrd_path": "/srv/netboot/debian/stable/amd64/initrd.gz",
+          "source_url": "https://deb.debian.org/debian/dists/stable/main/installer-amd64/current/images/netboot/"
+        }
+      },
+      "owners": [],
+      "security_classification": "public",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:service:rx-ui",
+      "name": "rx-ui",
+      "type": "service",
+      "actionable": true,
+      "structural": false,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["rx-demo", "k3s"],
+      "labels": {
+        "environment": "lab",
+        "application": "rx-demo"
+      },
+      "facts": {
+        "service": {
+          "protocol": "http",
+          "port": 8081,
+          "health_path": "/healthz"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "kubernetes",
+        "method": "discovered"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source_id": "node:network:lab-mgmt",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network:lab-provisioning",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_switch:core-sw1",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_switch:core-sw1",
+      "type": "provides_network",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bare_metal:pve1",
+      "type": "connects_to",
+      "target_id": "node:network_switch:core-sw1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bare_metal:pve1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:kube1",
+      "type": "runs_on",
+      "target_id": "node:bare_metal:pve1",
+      "source": "proxmox",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:kube1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "ssh",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:service:rx-ui",
+      "type": "runs_on",
+      "target_id": "node:vm:kube1",
+      "source": "kubernetes",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:network:lab-provisioning",
+      "type": "uses",
+      "target_id": "node:boot_image:debian-stable-amd64-netboot",
+      "source": "bkc",
+      "confidence": "declared"
+    }
+  ]
+}
