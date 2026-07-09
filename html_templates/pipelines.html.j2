@@ -152,6 +152,44 @@
                                 </div>
                             </div>
                         {% endif %}
+                        {% if selected_dictionary %}
+                            <div class="resource-panel wide top-gap-sm">
+                                <div class="pipeline-card-top">
+                                    <div>
+                                        <p class="eyebrow">Resolved dictionary</p>
+                                        <h4>{{ selected_dictionary.values|length }} values</h4>
+                                    </div>
+                                    {% if selected_dictionary.missing %}
+                                        <span class="status-pill failed">{{ selected_dictionary.missing|length }} missing</span>
+                                    {% else %}
+                                        <span class="status-pill muted">ready</span>
+                                    {% endif %}
+                                </div>
+                                {% if selected_dictionary.layers %}
+                                    <div class="constraint-list top-gap-sm">
+                                        {% for layer in selected_dictionary.layers %}
+                                            <span>{{ layer.name }} · {{ layer.keys|length }} keys</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                {% if selected_dictionary.missing %}
+                                    <div class="workflow-empty top-gap-sm">Missing required values: {{ selected_dictionary.missing|join(', ') }}</div>
+                                {% endif %}
+                                <dl class="fact-list top-gap-sm">
+                                    {% for key, value in selected_dictionary.values.items()|sort %}
+                                        <div>
+                                            <dt>{{ key }}</dt>
+                                            <dd>{{ value if value not in [true, false] else ('true' if value else 'false') }}</dd>
+                                        </div>
+                                    {% else %}
+                                        <div>
+                                            <dt>status</dt>
+                                            <dd>No dictionary values resolved.</dd>
+                                        </div>
+                                    {% endfor %}
+                                </dl>
+                            </div>
+                        {% endif %}
                     </section>
 
                     <section id="pipeline-run-map" class="pipeline-console-section">

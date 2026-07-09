@@ -474,6 +474,70 @@ def test_runtime_dictionary_folder_can_overlay_repo_pipeline_without_pipeline_js
         "runtime-folder",
     ]
 
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["values"]["target_node_id"] == "node:vm:ns1"
+    assert resolved["values"]["provisioning_interface"] == "ens19"
+    assert [layer["name"] for layer in resolved["layers"]] == [
+        "runtime dictionary",
+    ]
+
+
+def test_pipeline_dictionary_resolution_merges_repo_defaults_and_runtime(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Ns1_Recipe"
+    runtime_dir = tmp_path / "runtime-pipelines" / "NS1_Runtime"
+    repo_dir.mkdir(parents=True)
+    runtime_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "ns1-provisioning-network-prepare",
+  "name": "ns1 Provisioning Network Prepare",
+  "repo": "BlackKnightController",
+  "workflow": "ns1-provisioning-network-prepare",
+  "description": "Portable recipe.",
+  "stages": ["discover-current-network"],
+  "inputs": {
+    "target_host": {"required": true},
+    "provisioning_interface": {"required": true},
+    "required_later": {"required": true}
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    (repo_dir / "defaults.json").write_text(
+        """{
+  "target_host": "ns1.lab.auzietek.com",
+  "provisioning_interface": "",
+  "provisioning_address": "10.20.0.10/24"
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dictionary.json").write_text(
+        """{
+  "pipeline_id": "ns1-provisioning-network-prepare",
+  "provisioning_interface": "ens19"
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("ns1-provisioning-network-prepare")
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+
+    assert resolved["values"]["target_host"] == "ns1.lab.auzietek.com"
+    assert resolved["values"]["provisioning_interface"] == "ens19"
+    assert resolved["values"]["provisioning_address"] == "10.20.0.10/24"
+    assert resolved["missing"] == ["required_later"]
+    assert [layer["name"] for layer in resolved["layers"]] == [
+        "repo defaults",
+        "runtime dictionary",
+    ]
+
 
 def test_auzix_installer_pipeline_is_non_destructive():
     pipeline = pipeline_by_id("auzix-installer-foundation")

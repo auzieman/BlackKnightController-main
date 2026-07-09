@@ -839,6 +839,17 @@ def _source_layer(source_type: str, path: Path, folder: Path) -> dict:
     }
 
 
+def _load_json_file(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return dict(payload) if isinstance(payload, dict) else {}
+
+
 def _load_catalog_state() -> dict:
     path = _definitions_path()
     if not path.exists():
@@ -1018,6 +1029,81 @@ def pipeline_by_id(pipeline_id: str) -> dict | None:
         if pipeline["id"] == pipeline_id:
             return pipeline
     return None
+
+
+def resolve_pipeline_dictionary(pipeline: dict | None, run_inputs: dict | None = None) -> dict:
+    if not pipeline:
+        return {"values": {}, "layers": [], "missing": []}
+
+    values: dict = {}
+    layers: list[dict] = []
+
+    for layer in pipeline.get("source_layers", []):
+        source_type = str(layer.get("source_type", "")).strip()
+        folder = Path(str(layer.get("source_folder", "")))
+        if source_type == "repo-folder":
+            defaults_path = folder / "defaults.json"
+            defaults = _load_json_file(defaults_path)
+            if defaults:
+                values.update(defaults)
+                layers.append(
+                    {
+                        "name": "repo defaults",
+                        "source_type": source_type,
+                        "source_path": str(defaults_path),
+                        "keys": sorted(defaults.keys()),
+                    }
+                )
+        if source_type == "runtime-folder":
+            dictionary_path = folder / "dictionary.json"
+            dictionary = _load_json_file(dictionary_path)
+            if dictionary:
+                values.update(dictionary)
+                layers.append(
+                    {
+                        "name": "runtime dictionary",
+                        "source_type": source_type,
+                        "source_path": str(dictionary_path),
+                        "keys": sorted(dictionary.keys()),
+                    }
+                )
+
+    embedded_dictionary = pipeline.get("dictionary")
+    if isinstance(embedded_dictionary, dict):
+        embedded = dict(embedded_dictionary)
+        if embedded:
+            values.update(embedded)
+            source_path = str(pipeline.get("source_path") or "")
+            if not any(layer.get("source_path") == source_path for layer in layers):
+                layers.append(
+                    {
+                        "name": "embedded dictionary",
+                        "source_type": str(pipeline.get("source_type") or "pipeline"),
+                        "source_path": source_path,
+                        "keys": sorted(embedded.keys()),
+                    }
+                )
+
+    inputs = dict(run_inputs or {})
+    if inputs:
+        values.update(inputs)
+        layers.append(
+            {
+                "name": "run inputs",
+                "source_type": "run-inputs",
+                "source_path": "",
+                "keys": sorted(inputs.keys()),
+            }
+        )
+
+    missing = []
+    for name, spec in dict(pipeline.get("inputs", {})).items():
+        if not isinstance(spec, dict) or not spec.get("required"):
+            continue
+        if values.get(name) in ("", None, [], {}):
+            missing.append(name)
+
+    return {"values": values, "layers": layers, "missing": sorted(missing)}
 
 
 def save_pipeline_override(
