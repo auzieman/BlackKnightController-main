@@ -348,6 +348,131 @@ def test_pipeline_folder_loader_can_use_runtime_mount(monkeypatch, tmp_path):
     pipeline = pipeline_catalog.pipeline_by_id("runtime-folder-pipeline")
     assert pipeline is not None
     assert pipeline["source_path"].endswith("Runtime_Pipeline/pipeline.json")
+    assert pipeline["source_type"] == "runtime-folder"
+
+
+def test_pipeline_loader_merges_repo_and_runtime_folder_layers(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Shared_Pipeline"
+    runtime_dir = tmp_path / "runtime-pipelines" / "Shared_Pipeline"
+    repo_dir.mkdir(parents=True)
+    runtime_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "shared-folder-pipeline",
+  "name": "Shared Folder Pipeline",
+  "repo": "Portable",
+  "workflow": "candidate-import",
+  "description": "Portable recipe.",
+  "stages": ["repo-stage"],
+  "tags": ["repo"]
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "pipeline.json").write_text(
+        """{
+  "id": "shared-folder-pipeline",
+  "name": "Shared Folder Pipeline Runtime",
+  "repo": "Runtime",
+  "workflow": "candidate-import",
+  "description": "Runtime override.",
+  "stages": ["runtime-stage"],
+  "tags": ["runtime"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("shared-folder-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "runtime-folder"
+    assert pipeline["repo"] == "Runtime"
+    assert pipeline["stages"] == ["runtime-stage"]
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+
+def test_repo_folder_pipeline_loads_without_runtime_override(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Repo_Only"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "repo-only-pipeline",
+  "name": "Repo Only",
+  "repo": "Portable",
+  "workflow": "candidate-import",
+  "description": "Portable recipe.",
+  "stages": ["preflight"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("repo-only-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "repo-folder"
+    assert pipeline["source_layers"][0]["source_path"].endswith("Repo_Only/pipeline.json")
+
+
+def test_runtime_dictionary_folder_can_overlay_repo_pipeline_without_pipeline_json(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Ns1_Recipe"
+    runtime_dir = tmp_path / "runtime-pipelines" / "NS1_Runtime"
+    items_dir = runtime_dir / "items"
+    repo_dir.mkdir(parents=True)
+    items_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "ns1-provisioning-network-prepare",
+  "name": "ns1 Provisioning Network Prepare",
+  "repo": "BlackKnightController",
+  "workflow": "ns1-provisioning-network-prepare",
+  "description": "Portable recipe.",
+  "stages": ["discover-current-network"]
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dictionary.json").write_text(
+        """{
+  "pipeline_id": "ns1-provisioning-network-prepare",
+  "target_node_id": "node:vm:ns1",
+  "provisioning_interface": "ens19"
+}
+""",
+        encoding="utf-8",
+    )
+    (items_dir / "10-discover-current-network.json").write_text(
+        """{
+  "name": "Discover Current Network",
+  "action": "ssh.network.discover"
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("ns1-provisioning-network-prepare")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "runtime-folder"
+    assert pipeline["source_path"].endswith("NS1_Runtime/dictionary.json")
+    assert pipeline["dictionary"]["provisioning_interface"] == "ens19"
+    assert pipeline["items"][0]["id"] == "10-discover-current-network"
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
 
 
 def test_auzix_installer_pipeline_is_non_destructive():

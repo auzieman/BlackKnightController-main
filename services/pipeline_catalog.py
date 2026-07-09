@@ -824,6 +824,21 @@ def _pipeline_folders_path() -> Path:
     return BASE_DIR / "dictionaries" / "pipelines"
 
 
+def _repo_pipeline_folders_path() -> Path:
+    override = os.environ.get("BKC_REPO_PIPELINE_FOLDERS_PATH", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return BASE_DIR / "pipelines"
+
+
+def _source_layer(source_type: str, path: Path, folder: Path) -> dict:
+    return {
+        "source_type": source_type,
+        "source_path": str(path),
+        "source_folder": str(folder),
+    }
+
+
 def _load_catalog_state() -> dict:
     path = _definitions_path()
     if not path.exists():
@@ -847,7 +862,7 @@ def _load_custom_pipelines() -> list[dict]:
     return _load_catalog_state()["custom_pipelines"]
 
 
-def _load_pipeline_items(folder: Path) -> list[dict]:
+def _load_pipeline_items(folder: Path, source_type: str) -> list[dict]:
     items_dir = folder / "items"
     if not items_dir.is_dir():
         return []
@@ -862,34 +877,59 @@ def _load_pipeline_items(folder: Path) -> list[dict]:
             continue
         item = dict(payload)
         item.setdefault("id", path.stem)
+        item.setdefault("source_type", source_type)
         item.setdefault("source_path", str(path))
+        item.setdefault("source_folder", str(folder))
         items.append(item)
     return items
 
 
-def _load_folder_pipelines() -> list[dict]:
-    root = _pipeline_folders_path()
+def _load_folder_pipelines(root: Path, source_type: str) -> list[dict]:
     if not root.is_dir():
         return []
     pipelines: list[dict] = []
     for folder in sorted(path for path in root.iterdir() if path.is_dir()):
         path = folder / "pipeline.json"
-        if not path.exists():
+        dictionary_path = folder / "dictionary.json"
+        if not path.exists() and not (source_type == "runtime-folder" and dictionary_path.exists()):
             continue
         try:
-            with path.open("r", encoding="utf-8") as handle:
+            with (path if path.exists() else dictionary_path).open("r", encoding="utf-8") as handle:
                 payload = json.load(handle)
         except (OSError, json.JSONDecodeError):
             continue
-        if not isinstance(payload, dict) or not payload.get("id"):
+        if not isinstance(payload, dict):
             continue
-        pipeline = dict(payload)
+        if not path.exists():
+            pipeline_id = str(payload.get("pipeline_id") or payload.get("id") or "").strip()
+            if not pipeline_id:
+                continue
+            pipeline = {
+                "id": pipeline_id,
+                "dictionary": dict(payload),
+            }
+            path = dictionary_path
+        elif not payload.get("id"):
+            continue
+        else:
+            pipeline = dict(payload)
+        pipeline.setdefault("source_type", source_type)
         pipeline.setdefault("source_path", str(path))
-        items = _load_pipeline_items(folder)
+        pipeline.setdefault("source_folder", str(folder))
+        pipeline.setdefault("source_layers", [_source_layer(source_type, path, folder)])
+        items = _load_pipeline_items(folder, source_type)
         if items:
             pipeline["items"] = items
         pipelines.append(pipeline)
     return pipelines
+
+
+def _load_repo_folder_pipelines() -> list[dict]:
+    return _load_folder_pipelines(_repo_pipeline_folders_path(), "repo-folder")
+
+
+def _load_runtime_folder_pipelines() -> list[dict]:
+    return _load_folder_pipelines(_pipeline_folders_path(), "runtime-folder")
 
 
 def _save_catalog_state(state: dict) -> None:
@@ -929,6 +969,12 @@ def _merge_pipeline(base: dict, override: dict) -> dict:
     for key, value in override.items():
         if key in {"actions", "dashboards", "gates", "items", "links", "stages", "tags"} and isinstance(value, list):
             merged[key] = deepcopy(value)
+        elif key == "source_layers" and isinstance(value, list):
+            existing_layers = list(merged.get("source_layers", []))
+            for layer in value:
+                if layer not in existing_layers:
+                    existing_layers.append(deepcopy(layer))
+            merged["source_layers"] = existing_layers
         else:
             merged[key] = value
     return merged
@@ -936,16 +982,35 @@ def _merge_pipeline(base: dict, override: dict) -> dict:
 
 def demo_pipelines() -> list[dict]:
     overrides = _load_overrides()
-    folder_pipelines = {pipeline["id"]: pipeline for pipeline in _load_folder_pipelines()}
+    repo_folder_pipelines = {pipeline["id"]: pipeline for pipeline in _load_repo_folder_pipelines()}
+    runtime_folder_pipelines = {pipeline["id"]: pipeline for pipeline in _load_runtime_folder_pipelines()}
     builtins = []
     for pipeline in BUILTIN_PIPELINES:
-        merged = _merge_pipeline(pipeline, overrides.get(pipeline["id"], {}))
-        folder_pipeline = folder_pipelines.pop(pipeline["id"], None)
-        if folder_pipeline:
-            merged = _merge_pipeline(merged, folder_pipeline)
+        merged = _merge_pipeline(pipeline, {"source_type": "legacy-catalog", "source_layers": []})
+        repo_folder_pipeline = repo_folder_pipelines.pop(pipeline["id"], None)
+        if repo_folder_pipeline:
+            merged = _merge_pipeline(merged, repo_folder_pipeline)
+        if pipeline["id"] in overrides:
+            override = deepcopy(overrides[pipeline["id"]])
+            override.setdefault("source_type", "local-override")
+            merged = _merge_pipeline(merged, override)
+        runtime_folder_pipeline = runtime_folder_pipelines.pop(pipeline["id"], None)
+        if runtime_folder_pipeline:
+            merged = _merge_pipeline(merged, runtime_folder_pipeline)
         builtins.append(merged)
     customs = [dict(item) for item in _load_custom_pipelines()]
-    return builtins + customs + list(folder_pipelines.values())
+    for custom in customs:
+        custom.setdefault("source_type", "custom")
+        custom.setdefault("source_layers", [])
+
+    folder_only = []
+    for pipeline_id, pipeline in sorted(repo_folder_pipelines.items()):
+        runtime_folder_pipeline = runtime_folder_pipelines.pop(pipeline_id, None)
+        if runtime_folder_pipeline:
+            pipeline = _merge_pipeline(pipeline, runtime_folder_pipeline)
+        folder_only.append(pipeline)
+
+    return builtins + customs + folder_only + list(runtime_folder_pipelines.values())
 
 
 def pipeline_by_id(pipeline_id: str) -> dict | None:

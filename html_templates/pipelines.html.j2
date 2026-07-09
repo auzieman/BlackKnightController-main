@@ -122,6 +122,10 @@
                                     <div><dt>repo</dt><dd>{{ selected_pipeline.repo }}</dd></div>
                                     <div><dt>stage count</dt><dd>{{ selected_pipeline.stages|length }}</dd></div>
                                     <div><dt>executor</dt><dd>{{ 'wired' if supported else 'planned' }}</dd></div>
+                                    <div><dt>source</dt><dd>{{ selected_pipeline.source_type or 'legacy-catalog' }}</dd></div>
+                                    {% if selected_pipeline.source_path %}
+                                        <div><dt>source path</dt><dd>{{ selected_pipeline.source_path }}</dd></div>
+                                    {% endif %}
                                 </dl>
                             </div>
                             <div>
@@ -138,6 +142,16 @@
                                 {% endif %}
                             </div>
                         </div>
+                        {% if selected_pipeline.source_layers %}
+                            <div class="resource-panel wide top-gap-sm">
+                                <p class="eyebrow">Source layers</p>
+                                <div class="constraint-list">
+                                    {% for layer in selected_pipeline.source_layers %}
+                                        <span>{{ layer.source_type }} · {{ layer.source_path }}</span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
                     </section>
 
                     <section id="pipeline-run-map" class="pipeline-console-section">
