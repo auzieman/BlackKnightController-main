@@ -180,3 +180,7 @@ For each pipeline:
 
 The first good candidates are demo pipelines because they already have clear
 lab-local values and visible validation output.
+
+Folder-backed pipelines should also expose enough resolved state for graph
+projection. See [`cytoscape-run-state-ui.md`](cytoscape-run-state-ui.md) for the
+proposed read-only run-state graph view.

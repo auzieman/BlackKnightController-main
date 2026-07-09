@@ -263,3 +263,8 @@ Current concept to node model:
 
 The first implementation should adapt existing resource graph output into this
 shape before replacing storage internals.
+
+Interactive graph UI work should consume this model through projections rather
+than becoming a second source of truth. See
+[`cytoscape-run-state-ui.md`](cytoscape-run-state-ui.md) for the first proposed
+read-only run-state graph slice.
