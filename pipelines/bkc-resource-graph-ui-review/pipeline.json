@@ -1,0 +1,116 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "bkc-resource-graph-ui-review",
+  "name": "BKC Resource Graph UI Review",
+  "status": "review",
+  "owner": "bkc",
+  "summary": "Review and validate the Cytoscape-backed Resource Graph canvas, filtering, context actions, and persisted layout positions.",
+  "tags": [
+    "bkc",
+    "ui",
+    "resource-graph",
+    "cytoscape",
+    "inventory",
+    "review"
+  ],
+  "targets": {
+    "webui": "route:/resources",
+    "graph_api": "route:/api/v1/tenant/<tenant_slug>/graph",
+    "position_api": "route:/api/v1/tenant/graph/save-positions",
+    "session_action_api": "route:/resources/graph/context-action"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": false,
+      "default": "default"
+    },
+    "review_url": {
+      "required": false,
+      "default": "http://swarm1.lab.auzietek.com:5000/resources"
+    }
+  },
+  "stages": [
+    {
+      "id": "graph-api-contract",
+      "action": "flask.route.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "routes": [
+          "/api/v1/tenant/<tenant_slug>/graph",
+          "/api/v1/tenant/graph/save-positions",
+          "/api/v1/tenant/<tenant_slug>/graph/save-positions",
+          "/resources/graph/save-positions",
+          "/resources/graph/context-action"
+        ]
+      },
+      "produces": [
+        "contract:cytoscape-elements",
+        "contract:graph-position-save",
+        "contract:graph-context-action"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "canvas-assets-present",
+      "action": "static.assets.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "assets": [
+          "static/js/resource_graph_cytoscape.js",
+          "static/main.css",
+          "html_templates/resource_graph.html.j2"
+        ],
+        "markers": [
+          "initBkcCytoscapeGraph",
+          "installFilterControls",
+          "installContextMenu",
+          "runFlowLayout"
+        ]
+      },
+      "produces": [
+        "asset:resource-graph-cytoscape-js",
+        "asset:resource-graph-controls-css"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "graph-interaction-review",
+      "action": "ui.review.checklist",
+      "transport": "human-review",
+      "risk": "low",
+      "with": {
+        "url": "${inputs.review_url}",
+        "checks": [
+          "Resource Graph page loads without full-page errors.",
+          "Selected, Compute, Pipelines, and All filters reduce clutter.",
+          "Fit, zoom in, and zoom out controls update the canvas viewport.",
+          "Map and Flow layout controls are visibly selectable.",
+          "Right-click host and pipeline nodes opens the dark context menu.",
+          "Dragging nodes posts saved positions without disrupting the page."
+        ]
+      },
+      "produces": [
+        "review:resource-graph-ui"
+      ],
+      "timeout_seconds": 600
+    },
+    {
+      "id": "deployment-review",
+      "action": "swarm.service.verify",
+      "transport": "bkc-deploy",
+      "risk": "low",
+      "with": {
+        "service": "blackknight_bkc",
+        "image": "blackknightcontroller:swarm-lab",
+        "health": "/api/v1/health"
+      },
+      "produces": [
+        "fact:bkc_webui_review_ready"
+      ],
+      "timeout_seconds": 120
+    }
+  ],
+  "notes": "This is a review/story lane for the first Cytoscape Resource Graph implementation. Runtime deployment is still handled by the normal BKC image build and Swarm service update path until this lane receives an executor."
+}

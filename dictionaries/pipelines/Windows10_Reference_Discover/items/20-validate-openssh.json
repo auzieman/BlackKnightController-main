@@ -1,0 +1,7 @@
+{
+  "id": "validate-openssh",
+  "name": "Validate OpenSSH",
+  "action": "ssh.command.check",
+  "risk": "low",
+  "description": "Validate BKC key-based SSH access to the Windows reference VM."
+}

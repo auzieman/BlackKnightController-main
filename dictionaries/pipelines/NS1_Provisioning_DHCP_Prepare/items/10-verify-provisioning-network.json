@@ -1,0 +1,7 @@
+{
+  "id": "verify-provisioning-network",
+  "name": "Verify Provisioning Network",
+  "action": "ssh.network.validate_management",
+  "risk": "low",
+  "description": "Confirm DHCP preparation is scoped to ens19 and the 10.20 provisioning network."
+}

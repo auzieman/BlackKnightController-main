@@ -1,0 +1,7 @@
+{
+  "id": "publish-winpe-if-enabled",
+  "name": "Publish WinPE If Enabled",
+  "action": "windows.winpe.publish",
+  "risk": "medium",
+  "description": "Reserved opt-in stage for publishing the BKC WinPE artifact to ns1."
+}

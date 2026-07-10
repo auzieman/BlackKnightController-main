@@ -1,0 +1,5 @@
+{
+  "id": "install-workstation-packages",
+  "action": "proxmox.guest.exec",
+  "summary": "Install the base workstation package set: LibreOffice, MATE, Enlightenment, Terminology, and developer tools."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "build-winpe-if-enabled",
+  "name": "Build WinPE If Enabled",
+  "action": "windows.winpe.build",
+  "risk": "medium",
+  "description": "Reserved opt-in stage for building the BKC WinPE artifact."
+}

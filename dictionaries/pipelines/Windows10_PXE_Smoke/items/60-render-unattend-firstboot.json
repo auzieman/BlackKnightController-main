@@ -1,0 +1,7 @@
+{
+  "id": "render-unattend-firstboot",
+  "name": "Render Unattend Firstboot",
+  "action": "template.render",
+  "risk": "medium",
+  "description": "Render Autounattend.xml and firstboot PowerShell with a generated admin password and BKC SSH public key."
+}

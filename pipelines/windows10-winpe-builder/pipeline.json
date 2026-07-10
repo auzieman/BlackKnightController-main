@@ -1,0 +1,193 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "windows10-winpe-builder",
+  "name": "Windows 10 WinPE Builder",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Prepare VMID 113 as the Windows-native ADK/WinPE artifact builder for BKC PXE lanes.",
+  "tags": [
+    "bkc",
+    "windows",
+    "winpe",
+    "adk",
+    "builder",
+    "pxe",
+    "runnable"
+  ],
+  "targets": {
+    "builder_vm": "node:vm:win10-reference-113",
+    "publisher": "node:vm:ns1",
+    "boot_image": "node:boot_image:bkc-winpe-amd64"
+  },
+  "inputs": {
+    "builder_vm_ip": {
+      "required": true,
+      "default": "192.168.1.90"
+    },
+    "builder_vm_user": {
+      "required": true,
+      "default": "depadmin"
+    }
+  },
+  "gates": [
+    {
+      "id": "reference-builder-only",
+      "kind": "manual.approval",
+      "with": {
+        "intent": "Use VMID 113 as a builder/reference host. Do not rebuild it."
+      }
+    },
+    {
+      "id": "adk-build-publish-opt-in",
+      "kind": "dictionary.flags",
+      "with": {
+        "enable_adk_install": "${dictionary.enable_adk_install}",
+        "enable_build": "${dictionary.enable_build}",
+        "enable_publish": "${dictionary.enable_publish}"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-builder-context",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "builder": "${dictionary.builder_node_id}",
+        "publisher": "node:vm:ns1",
+        "artifact": "node:boot_image:bkc-winpe-amd64"
+      },
+      "produces": [
+        "fact:winpe_builder_context"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "inspect-vm113",
+      "action": "proxmox.vm.inspect",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "vmid": "${dictionary.builder_vmid}",
+        "name": "${dictionary.builder_vm_name}"
+      },
+      "produces": [
+        "fact:vm113_config"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "validate-builder-ssh",
+      "action": "ssh.command.check",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.builder_vm_ip}",
+        "user": "${dictionary.builder_vm_user}",
+        "command": "hostname"
+      },
+      "produces": [
+        "fact:windows_builder_ssh_ready"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "inspect-adk-tooling",
+      "action": "windows.adk.inspect",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "adk_root": "${dictionary.adk_root}"
+      },
+      "produces": [
+        "fact:adk_tooling"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "stage-builder-scripts",
+      "action": "artifact.stage",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "build_script": "${dictionary.build_script}",
+        "publish_script": "${dictionary.publish_script}",
+        "artifact_root": "${dictionary.artifact_root}"
+      },
+      "produces": [
+        "artifact:build-bkc-winpe.ps1",
+        "artifact:publish-bkc-winpe.ps1"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "install-adk-if-enabled",
+      "action": "windows.adk.install",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "enabled": "${dictionary.enable_adk_install}"
+      },
+      "produces": [
+        "fact:adk_install_status"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "build-winpe-if-enabled",
+      "action": "windows.winpe.build",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "enabled": "${dictionary.enable_build}",
+        "script": "${dictionary.build_script}"
+      },
+      "produces": [
+        "artifact:bkc-winpe-amd64"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "publish-winpe-if-enabled",
+      "action": "windows.winpe.publish",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "enabled": "${dictionary.enable_publish}",
+        "target": "${dictionary.target_host}"
+      },
+      "produces": [
+        "artifact:ns1-bkc-winpe"
+      ],
+      "timeout_seconds": 600
+    },
+    {
+      "id": "record-winpe-builder-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${dictionary.builder_node_id}",
+            "type": "builds",
+            "target_id": "node:boot_image:bkc-winpe-amd64",
+            "confidence": "planned"
+          },
+          {
+            "source_id": "node:vm:ns1",
+            "type": "serves",
+            "target_id": "node:boot_image:bkc-winpe-amd64",
+            "confidence": "planned"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:vm113-builds-winpe",
+        "relationship:ns1-serves-bkc-winpe"
+      ],
+      "timeout_seconds": 15
+    }
+  ]
+}

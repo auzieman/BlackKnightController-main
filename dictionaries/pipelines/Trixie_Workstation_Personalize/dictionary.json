@@ -1,0 +1,28 @@
+{
+  "pipeline_id": "trixie-workstation-personalize",
+  "target_vmid": 132,
+  "target_vm_node_id": "node:vm:trixie-smoke-132",
+  "target_vm_name": "trixie-smoke-132",
+  "target_install_user": "auzieman",
+  "desktop_packages": [
+    "libreoffice",
+    "mate-desktop-environment-core",
+    "mate-terminal",
+    "lightdm",
+    "enlightenment",
+    "terminology"
+  ],
+  "developer_packages": [
+    "git",
+    "curl",
+    "wget",
+    "gpg",
+    "apt-transport-https",
+    "ca-certificates"
+  ],
+  "enable_vscode": true,
+  "enable_rustdesk": false,
+  "rustdesk_deb_url": "",
+  "graphical_target": "graphical.target",
+  "notes": "Post-install personalization for VMID 132. Uses Proxmox guest agent so it can run before management networking is finalized."
+}

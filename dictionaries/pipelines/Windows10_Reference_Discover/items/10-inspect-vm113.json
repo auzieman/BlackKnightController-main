@@ -1,0 +1,7 @@
+{
+  "id": "inspect-vm113",
+  "name": "Inspect VM113",
+  "action": "proxmox.vm.inspect",
+  "risk": "low",
+  "description": "Review the current VMID 113 Proxmox shape as the Windows reference target."
+}

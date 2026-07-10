@@ -1,0 +1,7 @@
+{
+  "id": "render-preseed-profile",
+  "name": "Render Preseed Profile",
+  "action": "template.render",
+  "risk": "low",
+  "description": "Render the first unattended Trixie smoke install profile with SSH, facter, curl, git, and sudo."
+}

@@ -619,3 +619,155 @@ def related_to(graph: dict, resource_id: str) -> list[dict]:
         for relationship in graph["relationships"]
         if relationship["source_id"] == resource_id or relationship["target_id"] == resource_id
     ]
+
+
+CYTOSCAPE_NODE_TYPES = {"host", "vm", "container", "pipeline"}
+
+
+def _cytoscape_status(state: str) -> str:
+    normalized = str(state or "").strip().lower()
+    if normalized in {"failed", "failure", "error", "blocked", "needs setup", "unreachable"}:
+        return "failed"
+    if normalized in {"running", "active", "queued", "planned", "in_progress", "pending"}:
+        return "running"
+    return "success"
+
+
+def _cytoscape_edge_type(relation_type: str) -> str:
+    normalized = str(relation_type or "").strip().lower()
+    if normalized == "authenticates":
+        return "ssh"
+    if normalized in {"composes", "created"}:
+        return "pipeline_flow"
+    return "dependency"
+
+
+def _ensure_cytoscape_parent_host(nodes_by_id: dict[str, dict], host_name: str) -> str:
+    label = str(host_name or "").strip()
+    parent_id = f"host:{label}"
+    if parent_id not in nodes_by_id:
+        nodes_by_id[parent_id] = {
+            "data": {
+                "id": parent_id,
+                "label": label,
+                "type": "host",
+                "status": "success",
+            }
+        }
+    return parent_id
+
+
+def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
+    """Return Cytoscape.js elements split into nodes and edges.
+
+    The output intentionally keeps a small public contract:
+    ``nodes[].data`` has ``id``, ``label``, ``type``, ``status``, and optional
+    ``parent``. ``edges[].data`` has ``id``, ``source``, ``target``, and
+    normalized ``type``.
+    """
+
+    nodes_by_id: dict[str, dict] = {}
+    parent_by_child: dict[str, str] = {}
+
+    for resource in graph.get("resources", []):
+        kind = str(resource.get("kind") or "").strip().lower()
+        if kind not in CYTOSCAPE_NODE_TYPES:
+            continue
+        resource_id = str(resource.get("id") or "").strip()
+        if not resource_id:
+            continue
+        facts = resource.get("facts") if isinstance(resource.get("facts"), dict) else {}
+        data = {
+            "id": resource_id,
+            "label": str(resource.get("name") or resource_id),
+            "type": kind,
+            "status": _cytoscape_status(str(resource.get("state") or facts.get("status") or "")),
+        }
+        if kind in {"vm", "container"}:
+            proxmox_node = str(facts.get("proxmox node") or "").strip()
+            if proxmox_node and proxmox_node != "unset":
+                data["parent"] = _ensure_cytoscape_parent_host(nodes_by_id, proxmox_node)
+        nodes_by_id[resource_id] = {"data": data}
+
+    for relationship in graph.get("relationships", []):
+        source_id = str(relationship.get("source_id") or "").strip()
+        target_id = str(relationship.get("target_id") or "").strip()
+        if not source_id or not target_id:
+            continue
+        source = graph.get("resources_by_id", {}).get(source_id, {})
+        target = graph.get("resources_by_id", {}).get(target_id, {})
+        if (
+            str(source.get("kind") or "").strip().lower() == "host"
+            and str(target.get("kind") or "").strip().lower() in {"vm", "container"}
+            and target_id in nodes_by_id
+        ):
+            parent_by_child.setdefault(target_id, source_id)
+
+    for child_id, parent_id in parent_by_child.items():
+        if parent_id in nodes_by_id and child_id in nodes_by_id:
+            nodes_by_id[child_id]["data"]["parent"] = parent_id
+
+    edges = []
+    seen_edges = set()
+    for node in nodes_by_id.values():
+        data = node.get("data", {})
+        parent_id = str(data.get("parent") or "").strip()
+        child_id = str(data.get("id") or "").strip()
+        if not parent_id or not child_id or parent_id not in nodes_by_id:
+            continue
+        edge_id = f"edge:{parent_id}:dependency:{child_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": parent_id,
+                    "target": child_id,
+                    "type": "dependency",
+                }
+            }
+        )
+
+    for relationship in graph.get("relationships", []):
+        source_id = str(relationship.get("source_id") or "").strip()
+        target_id = str(relationship.get("target_id") or "").strip()
+        if source_id not in nodes_by_id or target_id not in nodes_by_id:
+            continue
+        edge_type = _cytoscape_edge_type(str(relationship.get("type") or "dependency"))
+        edge_id = f"edge:{source_id}:{edge_type}:{target_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": source_id,
+                    "target": target_id,
+                    "type": edge_type,
+                }
+            }
+        )
+
+    nodes = sorted(nodes_by_id.values(), key=lambda item: (item["data"].get("type", ""), item["data"].get("label", "")))
+    edges = sorted(edges, key=lambda item: item["data"]["id"])
+    return {"nodes": nodes, "edges": edges}
+
+
+def apply_cytoscape_positions(elements: dict, positions: dict[str, dict[str, float]]) -> dict:
+    """Attach saved Cytoscape positions without changing the public data contract."""
+
+    if not positions:
+        return elements
+    for node in elements.get("nodes", []):
+        node_id = str(node.get("data", {}).get("id") or "")
+        position = positions.get(node_id)
+        if position is None:
+            continue
+        try:
+            node["position"] = {"x": float(position["x"]), "y": float(position["y"])}
+        except (KeyError, TypeError, ValueError):
+            continue
+    return elements

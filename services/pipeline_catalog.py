@@ -924,6 +924,12 @@ def _load_folder_pipelines(root: Path, source_type: str) -> list[dict]:
             continue
         else:
             pipeline = dict(payload)
+        if pipeline.get("id") and not pipeline.get("workflow"):
+            pipeline["workflow"] = str(pipeline["id"])
+        if pipeline.get("summary") and not pipeline.get("description"):
+            pipeline["description"] = str(pipeline["summary"])
+        if not pipeline.get("repo"):
+            pipeline["repo"] = "BlackKnightController"
         pipeline.setdefault("source_type", source_type)
         pipeline.setdefault("source_path", str(path))
         pipeline.setdefault("source_folder", str(folder))

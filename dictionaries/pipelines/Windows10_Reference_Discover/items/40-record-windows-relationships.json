@@ -1,0 +1,7 @@
+{
+  "id": "record-windows-relationships",
+  "name": "Record Windows Relationships",
+  "action": "node.relationships.record",
+  "risk": "low",
+  "description": "Record the Windows reference VM, ISO, and OpenSSH control channel relationships."
+}

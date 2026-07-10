@@ -13,6 +13,7 @@ from services.health_checks import readiness_report
 from services.job_queue import enqueue_job, job_queue_enabled
 from services.pipeline_executor import workflow_is_supported, workflow_job_timeout, workflow_supports_undeploy
 from services.rate_limit import limiter
+from services.resource_graph import apply_cytoscape_positions, build_resource_graph, cytoscape_elements_from_resource_graph
 from services.rules_store import load_rules
 from services.tenant_context import set_request_tenant
 
@@ -152,6 +153,74 @@ def me():
 @limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
 def inventory():
     return jsonify(load_rules())
+
+
+@api_blueprint.get("/tenant/<tenant_slug>/graph")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def tenant_graph(tenant_slug: str):
+    requested_slug = str(tenant_slug or "").strip().lower()
+    api_row = g.get("bkc_api_key_row") or {}
+    effective_slug = str(api_row.get("tenant_slug") or "default").strip().lower()
+    if not requested_slug:
+        return jsonify({"error": "tenant_slug_required"}), 400
+    if requested_slug != effective_slug:
+        return jsonify({"error": "tenant_mismatch", "tenant_slug": requested_slug}), 403
+    try:
+        elements = cytoscape_elements_from_resource_graph(build_resource_graph())
+        tenant_id = api_row.get("tenant_id")
+        if tenant_id is not None:
+            elements = apply_cytoscape_positions(elements, bkc_db.load_graph_positions(int(tenant_id)))
+    except Exception:
+        current_app.logger.exception("Failed to build Cytoscape graph for tenant %s", requested_slug)
+        return jsonify({"error": "graph_build_failed"}), 500
+    return jsonify(elements)
+
+
+def _positions_from_payload(payload: dict) -> list[dict]:
+    if not isinstance(payload, dict):
+        return []
+    raw_positions = payload.get("positions")
+    if raw_positions is None and payload.get("id"):
+        raw_positions = [payload]
+    if not isinstance(raw_positions, list):
+        return []
+    positions = []
+    for item in raw_positions:
+        if not isinstance(item, dict):
+            continue
+        node_id = str(item.get("id") or item.get("node_id") or "").strip()
+        if not node_id:
+            continue
+        try:
+            x = float(item["x"])
+            y = float(item["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        positions.append({"id": node_id, "x": x, "y": y})
+    return positions
+
+
+@api_blueprint.post("/tenant/graph/save-positions", defaults={"tenant_slug": ""})
+@api_blueprint.post("/tenant/<tenant_slug>/graph/save-positions")
+@limiter.limit(_api_bearer_limit, key_func=_api_bearer_rate_key)
+def tenant_graph_save_positions(tenant_slug: str):
+    api_row = g.get("bkc_api_key_row") or {}
+    effective_slug = str(api_row.get("tenant_slug") or "default").strip().lower()
+    requested_slug = str(tenant_slug or effective_slug).strip().lower()
+    if requested_slug != effective_slug:
+        return jsonify({"error": "tenant_mismatch", "tenant_slug": requested_slug}), 403
+    tenant_id = api_row.get("tenant_id")
+    if tenant_id is None:
+        return jsonify({"error": "tenant_required"}), 403
+    positions = _positions_from_payload(request.get_json(silent=True) or {})
+    if not positions:
+        return jsonify({"error": "positions_required"}), 400
+    try:
+        saved = bkc_db.save_graph_positions(int(tenant_id), positions)
+    except Exception:
+        current_app.logger.exception("Failed to save Cytoscape graph positions for tenant %s", effective_slug)
+        return jsonify({"error": "position_save_failed"}), 500
+    return jsonify({"status": "ok", "saved": saved, "tenant_slug": effective_slug})
 
 
 @api_blueprint.get("/automation/runs")

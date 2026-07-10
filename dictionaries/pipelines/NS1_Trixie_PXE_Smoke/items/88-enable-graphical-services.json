@@ -1,0 +1,5 @@
+{
+  "id": "enable-graphical-services",
+  "action": "proxmox.guest.exec",
+  "description": "Enable graphical boot, SSH, and qemu-guest-agent services."
+}

@@ -1,0 +1,5 @@
+{
+  "id": "discover-installed-trixie",
+  "action": "proxmox.guest.exec",
+  "summary": "Verify the installed Trixie guest is reachable through the Proxmox guest agent."
+}

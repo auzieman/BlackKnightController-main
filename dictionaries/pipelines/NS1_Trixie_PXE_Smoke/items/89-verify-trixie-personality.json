@@ -1,0 +1,5 @@
+{
+  "id": "verify-trixie-personality",
+  "action": "proxmox.guest.exec",
+  "description": "Verify the final Trixie workstation package and service state."
+}

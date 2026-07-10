@@ -157,26 +157,26 @@
                                 <div class="pipeline-card-top">
                                     <div>
                                         <p class="eyebrow">Resolved dictionary</p>
-                                        <h4>{{ selected_dictionary.values|length }} values</h4>
+                                        <h4>{{ selected_dictionary['values']|length }} values</h4>
                                     </div>
-                                    {% if selected_dictionary.missing %}
-                                        <span class="status-pill failed">{{ selected_dictionary.missing|length }} missing</span>
+                                    {% if selected_dictionary['missing'] %}
+                                        <span class="status-pill failed">{{ selected_dictionary['missing']|length }} missing</span>
                                     {% else %}
                                         <span class="status-pill muted">ready</span>
                                     {% endif %}
                                 </div>
-                                {% if selected_dictionary.layers %}
+                                {% if selected_dictionary['layers'] %}
                                     <div class="constraint-list top-gap-sm">
-                                        {% for layer in selected_dictionary.layers %}
-                                            <span>{{ layer.name }} · {{ layer.keys|length }} keys</span>
+                                        {% for layer in selected_dictionary['layers'] %}
+                                            <span>{{ layer['name'] }} · {{ layer['keys']|length }} keys</span>
                                         {% endfor %}
                                     </div>
                                 {% endif %}
-                                {% if selected_dictionary.missing %}
-                                    <div class="workflow-empty top-gap-sm">Missing required values: {{ selected_dictionary.missing|join(', ') }}</div>
+                                {% if selected_dictionary['missing'] %}
+                                    <div class="workflow-empty top-gap-sm">Missing required values: {{ selected_dictionary['missing']|join(', ') }}</div>
                                 {% endif %}
                                 <dl class="fact-list top-gap-sm">
-                                    {% for key, value in selected_dictionary.values.items()|sort %}
+                                    {% for key, value in selected_dictionary['values'].items()|sort %}
                                         <div>
                                             <dt>{{ key }}</dt>
                                             <dd>{{ value if value not in [true, false] else ('true' if value else 'false') }}</dd>

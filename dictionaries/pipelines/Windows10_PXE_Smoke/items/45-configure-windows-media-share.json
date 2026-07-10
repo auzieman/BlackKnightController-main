@@ -1,0 +1,7 @@
+{
+  "id": "configure-windows-media-share",
+  "name": "Configure Windows Media Share",
+  "action": "ssh.samba.share",
+  "risk": "medium",
+  "description": "Expose the staged Windows install media as a read-only SMB share on the isolated provisioning network."
+}

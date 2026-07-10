@@ -720,10 +720,14 @@ def pipelines():
 
     all_pipelines = demo_pipelines()
     tenant_runs = [run for run in load_runs() if run.get("tenant_slug") == tenant_slug]
-    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in all_pipelines}
+    supported_workflows = {
+        str(item.get("workflow") or item.get("id") or ""): workflow_is_supported(str(item.get("workflow") or item.get("id") or ""))
+        for item in all_pipelines
+    }
     visible_pipelines = []
     for item in all_pipelines:
-        supported = supported_workflows.get(item["workflow"], False)
+        workflow = str(item.get("workflow") or item.get("id") or "")
+        supported = supported_workflows.get(workflow, False)
         tags = _pipeline_tags(item, supported=supported)
         if selected_tag and selected_tag not in tags:
             continue

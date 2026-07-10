@@ -1,0 +1,18 @@
+{
+  "pipeline_id": "windows10-reference-discover",
+  "windows_iso_path": "/home/auzieman/Projects/Windows10_iso/Win10_22H2_English_x64v1.iso",
+  "windows_iso_name": "Win10_22H2_English_x64v1.iso",
+  "proxmox_iso_volume": "local:iso/Win10_22H2_English_x64.iso",
+  "windows_iso_node_id": "node:boot_image:windows10-22h2-english-x64",
+  "reference_vmid": 113,
+  "reference_vm_name": "win10",
+  "reference_vm_ip": "192.168.1.90",
+  "reference_vm_user": "depadmin",
+  "reference_vm_node_id": "node:vm:win10-reference-113",
+  "target_version": "Windows 10 22H2",
+  "target_architecture": "amd64",
+  "bootstrap_script": "scripts/install-bkc-openssh-key.ps1",
+  "diet_script": "scripts/windows10-base-diet.ps1",
+  "control_channel": "openssh",
+  "notes": "Preflight only. VMID 113 is a reference target, not a rebuild target."
+}

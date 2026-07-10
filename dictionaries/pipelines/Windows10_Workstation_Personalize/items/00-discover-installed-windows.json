@@ -1,0 +1,5 @@
+{
+  "id": "discover-installed-windows",
+  "action": "ssh.command.check",
+  "summary": "Verify the installed Windows guest is reachable over BKC SSH."
+}

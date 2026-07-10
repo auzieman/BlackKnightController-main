@@ -8,6 +8,8 @@ DEFAULT_SCOPES = ("read:me", "read:inventory")
 ENDPOINT_REQUIRED_SCOPE: dict[str, str] = {
     "api_v1.me": "read:me",
     "api_v1.inventory": "read:inventory",
+    "api_v1.tenant_graph": "read:inventory",
+    "api_v1.tenant_graph_save_positions": "write:inventory",
     "api_v1.automation_runs": "read:automation",
     "api_v1.automation_run_detail": "read:automation",
     "api_v1.automation_trigger": "write:automation",

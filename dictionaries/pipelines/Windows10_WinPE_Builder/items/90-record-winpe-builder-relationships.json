@@ -1,0 +1,7 @@
+{
+  "id": "record-winpe-builder-relationships",
+  "name": "Record WinPE Builder Relationships",
+  "action": "node.relationships.record",
+  "risk": "low",
+  "description": "Record that VMID 113 builds the BKC WinPE image and ns1 serves it."
+}

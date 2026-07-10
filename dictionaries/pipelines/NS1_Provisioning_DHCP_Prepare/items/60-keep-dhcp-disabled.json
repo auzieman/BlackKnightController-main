@@ -1,0 +1,7 @@
+{
+  "id": "keep-dhcp-disabled",
+  "name": "Keep DHCP Disabled",
+  "action": "ssh.service.disabled",
+  "risk": "low",
+  "description": "Ensure the DHCP service remains disabled unless the runtime dictionary explicitly enables it."
+}

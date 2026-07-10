@@ -1,0 +1,7 @@
+{
+  "id": "render-dhcp-fragment",
+  "name": "Render DHCP Fragment",
+  "action": "template.render",
+  "risk": "low",
+  "description": "Render only the BKC-managed provisioning subnet fragment under dhcpd.d."
+}

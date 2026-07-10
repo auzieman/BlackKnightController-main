@@ -1,0 +1,7 @@
+{
+  "id": "post-install-ssh-check",
+  "name": "Post Install SSH Check",
+  "action": "ssh.command.check",
+  "risk": "low",
+  "description": "Future post-install validation once Windows reaches first boot and OpenSSH is ready."
+}

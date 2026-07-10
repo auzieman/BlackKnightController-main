@@ -1,0 +1,7 @@
+{
+  "id": "verify-iso",
+  "name": "Verify Windows ISO",
+  "action": "artifact.iso.verify",
+  "risk": "low",
+  "description": "Record the local Windows 10 ISO path, size, and hash for reproducible unattended install work."
+}

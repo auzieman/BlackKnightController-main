@@ -1,0 +1,18 @@
+{
+  "pipeline_id": "windows10-workstation-personalize",
+  "target_vmid": 136,
+  "target_vm_node_id": "node:vm:win10-pxe-smoke-136",
+  "target_vm_name": "win10-pxe-smoke-136",
+  "target_host": "win10-pxe-136.lab.auzietek.com",
+  "target_admin_user": "depadmin",
+  "package_names": [
+    "libreoffice-fresh",
+    "vscode",
+    "rustdesk"
+  ],
+  "enable_chocolatey": true,
+  "enable_libreoffice": true,
+  "enable_vscode": true,
+  "enable_rustdesk": true,
+  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE."
+}

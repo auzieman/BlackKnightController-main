@@ -1,0 +1,5 @@
+{
+  "id": "record-trixie-personality",
+  "action": "node.relationships.record",
+  "summary": "Record the validated Trixie workstation profile relationship."
+}

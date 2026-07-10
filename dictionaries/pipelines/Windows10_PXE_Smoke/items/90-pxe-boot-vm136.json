@@ -1,0 +1,7 @@
+{
+  "id": "pxe-boot-vm136",
+  "name": "PXE Boot VM136",
+  "action": "proxmox.vm.boot",
+  "risk": "high",
+  "description": "Boot VMID 136 from the provisioning NIC."
+}

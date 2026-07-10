@@ -1,0 +1,7 @@
+{
+  "id": "fetch-trixie-netboot",
+  "name": "Fetch Trixie Netboot",
+  "action": "ssh.netboot.cache",
+  "risk": "medium",
+  "description": "Cache Debian Trixie linux and initrd.gz netboot assets under ns1's netboot root."
+}

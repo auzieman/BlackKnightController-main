@@ -1,0 +1,366 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "ns1-trixie-pxe-smoke",
+  "name": "ns1 Trixie PXE Smoke",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Prepare a guarded Debian Trixie netboot smoke lane using ns1 provisioning services and disposable VMID 132.",
+  "tags": [
+    "bkc",
+    "node-model",
+    "provisioning",
+    "pxe",
+    "netboot",
+    "debian",
+    "trixie",
+    "ns1",
+    "runnable"
+  ],
+  "targets": {
+    "controller": "node:vm:ns1",
+    "provisioning_network": "node:network:lab-provisioning",
+    "boot_image": "node:boot_image:debian-trixie-amd64-netboot",
+    "target_vm": "node:vm:trixie-smoke-132"
+  },
+  "inputs": {
+    "target_node_id": {
+      "required": true,
+      "default": "node:vm:ns1"
+    },
+    "target_host": {
+      "required": true,
+      "default": "ns1.lab.auzietek.com"
+    },
+    "boot_image_node_id": {
+      "required": true,
+      "default": "node:boot_image:debian-trixie-amd64-netboot"
+    },
+    "target_vmid": {
+      "required": true,
+      "default": 132
+    },
+    "enable_vm_create": {
+      "required": false,
+      "default": false
+    },
+    "enable_pxe_boot": {
+      "required": false,
+      "default": false
+    },
+    "enable_install": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-prepared-provisioning-network",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-network-prepare",
+        "network": "${dictionary.provisioning_network_cidr}",
+        "interface": "${dictionary.provisioning_interface}"
+      }
+    },
+    {
+      "id": "requires-dhcp-boundary",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-dhcp-prepare",
+        "dhcp_service": "${dictionary.dhcp_service_node_id}"
+      }
+    },
+    {
+      "id": "destructive-vm-actions-disabled",
+      "kind": "manual.approval",
+      "with": {
+        "enable_vm_create": "${dictionary.enable_vm_create}",
+        "enable_pxe_boot": "${dictionary.enable_pxe_boot}",
+        "enable_install": "${dictionary.enable_install}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-provisioning-context",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "controller": "${inputs.target_node_id}",
+        "network": "${dictionary.provisioning_network_node_id}",
+        "boot_image": "${inputs.boot_image_node_id}",
+        "target_vm": "${dictionary.target_vm_node_id}"
+      },
+      "produces": [
+        "fact:provisioning_context"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "verify-ns1-pxe-prereqs",
+      "action": "ssh.pxe.prereqs",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "interface": "${dictionary.provisioning_interface}",
+        "network": "${dictionary.provisioning_network_cidr}",
+        "check": "checks/validate-trixie-pxe-prereqs.sh"
+      },
+      "produces": [
+        "fact:pxe_prereqs"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "fetch-trixie-netboot",
+      "action": "ssh.netboot.cache",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${inputs.target_host}",
+        "source_url": "${dictionary.netboot_source_url}",
+        "target_root": "${dictionary.netboot_root}",
+        "kernel_path": "${dictionary.netboot_kernel_path}",
+        "initrd_path": "${dictionary.netboot_initrd_path}"
+      },
+      "produces": [
+        "artifact:trixie-linux",
+        "artifact:trixie-initrd"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "render-ipxe-entry",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "template": "templates/debian-trixie.ipxe.tpl",
+        "target_path": "${dictionary.ipxe_script_path}"
+      },
+      "produces": [
+        "artifact:debian-trixie-ipxe"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "render-preseed-profile",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "template": "templates/trixie-smoke-preseed.cfg.tpl",
+        "target_path": "${dictionary.preseed_path}"
+      },
+      "produces": [
+        "artifact:trixie-smoke-preseed"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "prepare-vm132-pxe-target",
+      "action": "proxmox.vm.ensure",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "vmid": "${inputs.target_vmid}",
+        "name": "${dictionary.target_vm_name}",
+        "host": "${dictionary.target_vm_host}",
+        "memory_mb": "${dictionary.target_vm_memory_mb}",
+        "cores": "${dictionary.target_vm_cores}",
+        "disk_gb": "${dictionary.target_vm_disk_gb}",
+        "storage": "${dictionary.target_vm_storage}",
+        "nics": [
+          {
+            "id": "${dictionary.target_vm_boot_nic}",
+            "guest_interface": "${dictionary.target_vm_boot_interface}",
+            "bridge": "${dictionary.target_vm_boot_bridge}",
+            "purpose": "pxe-install",
+            "network": "${dictionary.target_vm_boot_network_node_id}"
+          },
+          {
+            "id": "${dictionary.target_vm_management_nic}",
+            "guest_interface": "${dictionary.target_vm_management_interface}",
+            "bridge": "${dictionary.target_vm_management_bridge}",
+            "purpose": "management",
+            "network": "${dictionary.target_vm_management_network_node_id}",
+            "addressing": "${dictionary.target_vm_management_addressing}"
+          }
+        ],
+        "unless": "${dictionary.enable_vm_create}"
+      },
+      "produces": [
+        "fact:vm132_target"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "pxe-boot-vm132",
+      "action": "proxmox.vm.boot",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "vmid": "${inputs.target_vmid}",
+        "boot": "${dictionary.target_vm_boot_nic}",
+        "unless": "${dictionary.enable_pxe_boot}"
+      },
+      "produces": [
+        "fact:vm132_pxe_boot_requested"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "observe-installer-handoff",
+      "action": "proxmox.vm.console.observe",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "vmid": "${inputs.target_vmid}",
+        "expected": [
+          "Debian GNU/Linux installer",
+          "trixie"
+        ]
+      },
+      "produces": [
+        "fact:installer_handoff"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "post-boot-recollect",
+      "action": "ssh.facter.recollect",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
+        "user": "${dictionary.post_boot_probe_user}",
+        "package_profile": "${dictionary.target_package_profile}"
+      },
+      "produces": [
+        "fact:trixie_os",
+        "fact:trixie_packages",
+        "fact:facter_snapshot"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "install-workstation-packages",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "profile": "trixie-workstation-personalize"
+      },
+      "produces": [
+        "package:libreoffice",
+        "package:mate",
+        "package:enlightenment",
+        "package:developer-tools"
+      ],
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "install-vscode-if-enabled",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "profile": "trixie-workstation-personalize"
+      },
+      "produces": [
+        "package:vscode"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "install-rustdesk-if-configured",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "profile": "trixie-workstation-personalize"
+      },
+      "produces": [
+        "package:rustdesk"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "enable-graphical-services",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "profile": "trixie-workstation-personalize"
+      },
+      "produces": [
+        "service:graphical-target",
+        "service:ssh",
+        "service:qemu-guest-agent"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "verify-trixie-personality",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "profile": "trixie-workstation-personalize"
+      },
+      "produces": [
+        "fact:trixie_workstation_ready"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "record-trixie-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${dictionary.pxe_service_node_id}",
+            "type": "serves",
+            "target_id": "${dictionary.boot_image_node_id}",
+            "confidence": "declared"
+          },
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "boots_from",
+            "target_id": "${dictionary.boot_image_node_id}",
+            "confidence": "planned"
+          },
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "connected_to",
+            "target_id": "${dictionary.target_vm_boot_network_node_id}",
+            "confidence": "planned"
+          },
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "managed_through",
+            "target_id": "${dictionary.target_vm_management_network_node_id}",
+            "confidence": "planned"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:pxe-serves-trixie",
+        "relationship:vm132-boots-trixie",
+        "relationship:vm132-on-provisioning-network",
+        "relationship:vm132-on-management-network"
+      ],
+      "timeout_seconds": 15
+    }
+  ]
+}

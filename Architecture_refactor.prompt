@@ -1,0 +1,297 @@
+# Black Knight Controller - Architecture Refactor
+## Project: Return to the Modern PowerCockpit Vision
+
+Background
+----------
+
+Black Knight Controller has evolved into an orchestration platform, but the current implementation is still somewhat deployment-centric.
+
+This refactor intentionally steps back and re-establishes the architecture around the original PowerCockpit philosophy using modern cloud-native technologies.
+
+The primary object is no longer a VM, container, or Kubernetes deployment.
+
+The fundamental object is a **Node**.
+
+A Node represents any manageable enterprise object.
+
+Examples include:
+
+- Bare metal servers
+- Virtual machines
+- Containers
+- Kubernetes Nodes
+- Kubernetes Pods
+- Services
+- Databases
+- Network devices
+- Storage
+- Applications
+- Pipelines
+- Git repositories
+
+Everything is a Node.
+
+Nodes belong to one or more Groups.
+
+Groups belong to one or more Clusters.
+
+Pipelines operate on Groups and Nodes.
+
+The objective is to create a living enterprise knowledge graph rather than simply provisioning infrastructure.
+
+
+Phase 1 - Node Model
+--------------------
+
+Create a generic Node model.
+
+Each Node should support:
+
+- Unique ID
+- Name
+- Node Type
+- Tags
+- Labels
+- Desired Role
+- Current State
+- Desired State
+- Facts
+- Relationships
+- Group Memberships
+- Cluster Memberships
+- Business Ownership
+- Security Classification
+- Lifecycle State
+
+Node Types should initially include:
+
+- VM
+- BareMetal
+- Container
+- KubernetesNode
+- KubernetesPod
+- Database
+- Service
+- Switch
+- Router
+- Storage
+- Pipeline
+- Repository
+
+
+Phase 2 - Provisioning
+----------------------
+
+Revisit provisioning.
+
+Provisioning should become procedural.
+
+Support:
+
+- DHCP management
+- PXE / iPXE
+- Network boot
+- Netboot image selection
+- VM creation
+- Bare metal provisioning
+- SSH bootstrap
+
+Provisioning is no longer "create VM."
+
+Provisioning creates a Node.
+
+The Node then progresses through lifecycle stages.
+
+
+Phase 3 - Discovery
+-------------------
+
+Immediately after provisioning:
+
+Collect host intelligence.
+
+Primary mechanisms:
+
+- SSH
+- Facter (--json)
+- Optional Black Knight native probe
+- Future PuppetDB connector
+- Future Ansible facts
+
+Normalize all discovered information into the Node model.
+
+Facts are continuously refreshed.
+
+Facts should become event-driven where practical rather than periodic snapshots.
+
+
+Phase 4 - Knowledge Graph
+-------------------------
+
+The XED Control Database becomes the enterprise knowledge graph.
+
+Relationships include:
+
+Node
+→ Group
+
+Node
+→ Cluster
+
+Node
+→ Depends On
+
+Node
+→ Runs On
+
+Node
+→ Hosts
+
+Node
+→ Uses
+
+Node
+→ Connects To
+
+Node
+→ Observed By
+
+Node
+→ Deploys
+
+Node
+→ Owned By
+
+Node
+→ Supports Business Function
+
+Everything should be queryable.
+
+
+Phase 5 - Visualization
+------------------------
+
+Automatically generate Mermaid diagrams.
+
+Examples:
+
+- Group diagrams
+- Cluster diagrams
+- Deployment diagrams
+- Dependency diagrams
+- Service flow diagrams
+- Pipeline diagrams
+
+These diagrams should be generated directly from the knowledge graph.
+
+No manually maintained diagrams.
+
+
+Example:
+
+Group: RX Demo
+
+rx-ui
+ ↓
+rx-api
+ ↓
+RabbitMQ
+ ↓
+SQL Server
+
+Telemetry
+
+OpenTelemetry
+ ↓
+Tempo
+ ↓
+Grafana
+
+
+Phase 6 - Procedural Automation
+-------------------------------
+
+Instead of static workflows:
+
+Create Procedures.
+
+Examples:
+
+Provision Kubernetes Worker
+
+Patch Linux Host
+
+Rotate Certificate
+
+Join Cluster
+
+Capture Legacy Server
+
+Generate Container Deployment
+
+Validate Application
+
+Every Procedure consumes Nodes.
+
+Every Procedure updates Nodes.
+
+Every Procedure updates the knowledge graph.
+
+
+Phase 7 - Migration Intelligence
+--------------------------------
+
+Instead of treating an existing machine as an image:
+
+Treat it as a knowledge source.
+
+Collect:
+
+- Packages
+- Services
+- Ports
+- Running Processes
+- Configurations
+- Dependencies
+- Storage
+- Certificates
+- Environment Variables
+
+Generate:
+
+- Dockerfile
+- Compose
+- Kubernetes YAML
+- Helm Values
+- ConfigMaps
+- Secrets
+- Mermaid Diagrams
+- Operational Documentation
+
+The objective is not image cloning.
+
+The objective is understanding.
+
+
+Guiding Philosophy
+------------------
+
+Black Knight is not:
+
+- a CMDB
+- a Puppet replacement
+- an Ansible replacement
+- an observability platform
+- a deployment engine
+
+Black Knight is an Enterprise Infrastructure Intelligence Platform.
+
+Provisioning, deployment, discovery, observability, migration, documentation, AI reasoning, and visualization are all different views of the same continuously evolving enterprise knowledge graph.
+
+Every feature should enrich that graph.
+
+Every visualization should be derived from that graph.
+
+Every automation should update that graph.
+
+The graph is the product.

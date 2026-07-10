@@ -1,0 +1,7 @@
+{
+  "id": "validate-builder-ssh",
+  "name": "Validate Builder SSH",
+  "action": "ssh.command.check",
+  "risk": "low",
+  "description": "Confirm BKC can reach the Windows builder through OpenSSH."
+}

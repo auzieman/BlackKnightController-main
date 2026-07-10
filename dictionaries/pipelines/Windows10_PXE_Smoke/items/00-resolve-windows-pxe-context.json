@@ -1,0 +1,7 @@
+{
+  "id": "resolve-windows-pxe-context",
+  "name": "Resolve Windows PXE Context",
+  "action": "node.resolve",
+  "risk": "low",
+  "description": "Resolve ns1, the provisioning network, the Windows WinPE image, and disposable VMID 136."
+}

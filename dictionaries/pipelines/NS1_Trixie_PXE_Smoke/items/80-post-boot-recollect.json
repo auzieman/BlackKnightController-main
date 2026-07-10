@@ -1,0 +1,7 @@
+{
+  "id": "post-boot-recollect",
+  "name": "Post Boot Recollect",
+  "action": "ssh.facter.recollect",
+  "risk": "low",
+  "description": "After install, collect OS, package, and facter state from the new Trixie VM."
+}

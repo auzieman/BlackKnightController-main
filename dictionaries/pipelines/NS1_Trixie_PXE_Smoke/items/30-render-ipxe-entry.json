@@ -1,0 +1,7 @@
+{
+  "id": "render-ipxe-entry",
+  "name": "Render iPXE Entry",
+  "action": "template.render",
+  "risk": "low",
+  "description": "Render the iPXE entry that points VMID 132 at the Trixie kernel, initrd, and preseed profile."
+}

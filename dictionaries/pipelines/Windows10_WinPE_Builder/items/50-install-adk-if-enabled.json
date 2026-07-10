@@ -1,0 +1,7 @@
+{
+  "id": "install-adk-if-enabled",
+  "name": "Install ADK If Enabled",
+  "action": "windows.adk.install",
+  "risk": "medium",
+  "description": "Reserved opt-in stage for ADK and WinPE add-on installation."
+}

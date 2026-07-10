@@ -1,0 +1,7 @@
+{
+  "id": "resolve-provisioning-context",
+  "name": "Resolve Provisioning Context",
+  "action": "node.resolve",
+  "risk": "low",
+  "description": "Resolve ns1, the provisioning network, Debian Trixie netboot image, and VMID 132 target nodes."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "stage-windows-install-media",
+  "name": "Stage Windows Install Media",
+  "action": "proxmox.iso.extract.windows-media",
+  "risk": "medium",
+  "description": "Extract the full Windows ISO tree from Proxmox and stage it on ns1 for WinPE setup over SMB."
+}

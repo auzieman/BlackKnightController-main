@@ -1,0 +1,7 @@
+{
+  "id": "pxe-boot-vm132",
+  "name": "PXE Boot VM132",
+  "action": "proxmox.vm.boot",
+  "risk": "high",
+  "description": "Boot VMID 132 from network, guarded by enable_pxe_boot."
+}
