@@ -84,10 +84,19 @@ def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
         "label": "resolve-context",
         "type": "stage",
         "status": "success",
+        "parent": "pipeline-group:ns1-trixie-pxe-smoke",
         "parentPipeline": "pipeline:ns1-trixie-pxe-smoke",
         "storyRank": 1,
         "storyLane": 0,
         "layoutRole": "stage",
+    }
+    assert nodes["pipeline:ns1-trixie-pxe-smoke"]["parent"] == "pipeline-group:ns1-trixie-pxe-smoke"
+    assert nodes["pipeline-group:ns1-trixie-pxe-smoke"] == {
+        "id": "pipeline-group:ns1-trixie-pxe-smoke",
+        "label": "ns1 Trixie PXE Smoke",
+        "type": "pipeline_group",
+        "status": "success",
+        "layoutRole": "pipeline_group",
     }
     assert "repo:rx-demo" not in nodes
     assert all(set(edge["data"]) == {"id", "source", "target", "type"} for edge in elements["edges"])

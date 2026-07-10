@@ -88,6 +88,21 @@
         },
       },
       {
+        selector: 'node[type = "pipeline_group"]',
+        style: {
+          "background-opacity": 0.1,
+          "background-color": "#1e293b",
+          "border-color": "rgba(250, 204, 21, 0.42)",
+          "border-width": 2,
+          "border-style": "dashed",
+          color: "#fde68a",
+          padding: "34px",
+          "font-size": 13,
+          "text-valign": "top",
+          "text-halign": "center",
+        },
+      },
+      {
         selector: 'node[type = "stage"]',
         style: {
           "background-color": "#fde68a",
@@ -96,6 +111,16 @@
           height: 46,
           "font-size": 11,
           "text-max-width": 170,
+        },
+      },
+      {
+        selector: 'node[type = "cluster"]',
+        style: {
+          "background-color": "#67e8f9",
+          "border-color": "rgba(165, 243, 252, 0.82)",
+          color: "#083344",
+          height: 52,
+          "text-max-width": 180,
         },
       },
       {
@@ -234,7 +259,7 @@
 
   function applyOwnershipPositions(nodes, startY) {
     const inventoryNodes = nodes.filter(function (node) {
-      return !Number.isFinite(Number(node.data.storyRank));
+      return !Number.isFinite(Number(node.data.storyRank)) && node.data.type !== "pipeline_group";
     });
     const nodesById = new Map();
     inventoryNodes.forEach(function (node) {
@@ -257,6 +282,54 @@
       loose.push(node);
     });
 
+    const handled = new Set();
+    const pve = nodesById.get("host:pve");
+    const swarmCluster = nodesById.get("cluster:docker-swarm");
+    if (pve && swarmCluster) {
+      const swarmChildren = (groups.get("cluster:docker-swarm") || []).sort(function (a, b) {
+        const stateOrder = statusSortValue(a.data.status) - statusSortValue(b.data.status);
+        if (stateOrder !== 0) {
+          return stateOrder;
+        }
+        return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+      });
+      pve.position = { x: 130, y: startY };
+      swarmCluster.position = { x: 360, y: startY };
+      handled.add("host:pve");
+      handled.add("cluster:docker-swarm");
+      const pveChildren = (groups.get("host:pve") || []).filter(function (node) {
+        return node.data.id !== "cluster:docker-swarm";
+      }).sort(function (a, b) {
+        const stateOrder = statusSortValue(a.data.status) - statusSortValue(b.data.status);
+        if (stateOrder !== 0) {
+          return stateOrder;
+        }
+        return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+      });
+      swarmChildren.forEach(function (child, index) {
+        const row = statusSortValue(child.data.status) >= 3 ? 1 : 0;
+        const activeBefore = swarmChildren.slice(0, index).filter(function (candidate) {
+          return statusSortValue(candidate.data.status) < 3;
+        }).length;
+        const inactiveBefore = swarmChildren.slice(0, index).filter(function (candidate) {
+          return statusSortValue(candidate.data.status) >= 3;
+        }).length;
+        const col = row ? inactiveBefore % 4 : activeBefore % 4;
+        child.position = {
+          x: 590 + col * 230,
+          y: startY - 58 + row * 104,
+        };
+        handled.add(String(child.data.id));
+      });
+      pveChildren.forEach(function (child, index) {
+        child.position = {
+          x: 360 + (index % 4) * 220,
+          y: startY + 210 + Math.floor(index / 4) * 96,
+        };
+        handled.add(String(child.data.id));
+      });
+    }
+
     const orderedParents = Array.from(groups.keys()).sort(function (a, b) {
       const nodeA = nodesById.get(a);
       const nodeB = nodesById.get(b);
@@ -269,6 +342,8 @@
         return 1;
       }
       return String(labelA).localeCompare(String(labelB));
+    }).filter(function (parentId) {
+      return !handled.has(parentId);
     });
 
     orderedParents.forEach(function (parentId, groupIndex) {
@@ -283,19 +358,24 @@
       const top = startY + groupIndex * 310;
       if (parent) {
         parent.position = { x: 150, y: top };
+        handled.add(String(parent.data.id));
       }
       children.forEach(function (child, index) {
+        if (handled.has(String(child.data.id))) {
+          return;
+        }
         const col = index % 4;
         const row = Math.floor(index / 4);
         child.position = {
           x: 340 + col * 220,
           y: top - 72 + row * 96,
         };
+        handled.add(String(child.data.id));
       });
     });
 
     loose.filter(function (node) {
-      return !String(node.data.parent || "") && !node.position;
+      return !String(node.data.parent || "") && !node.position && !handled.has(String(node.data.id));
     }).sort(function (a, b) {
       return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
     }).forEach(function (node, index) {
@@ -582,7 +662,23 @@
     if (!root.length) {
       return cy.collection();
     }
-    return root.union(root.neighborhood()).union(root.parent()).union(root.children());
+    return root.union(root.neighborhood()).union(root.parent()).union(root.children()).union(root.descendants());
+  }
+
+  function withLinkedPipelineStories(cy, collection) {
+    let visible = collection;
+    collection.connectedEdges().forEach(function (edge) {
+      const endpoints = edge.source().union(edge.target());
+      endpoints.forEach(function (node) {
+        const type = String(node.data("type") || "");
+        if (type === "pipeline" || type === "stage") {
+          visible = visible.union(visiblePipelineStory(cy, node.id()));
+        } else if (type === "pipeline_group") {
+          visible = visible.union(node).union(node.children());
+        }
+      });
+    });
+    return visible;
   }
 
   function visiblePipelineStory(cy, nodeId) {
@@ -615,13 +711,14 @@
       visible = selectedNode.length && ["pipeline", "stage"].includes(String(selectedNode.data("type")))
         ? visiblePipelineStory(cy, selectedId)
         : visibleNeighborhood(cy, selectedId);
+      visible = withLinkedPipelineStories(cy, visible);
       if (!visible.length) {
-        visible = cy.nodes('node[type = "host"], node[type = "vm"], node[type = "container"]');
+        visible = cy.nodes('node[type = "cluster"], node[type = "host"], node[type = "vm"], node[type = "container"]');
       }
     } else if (normalizedMode === "pipeline") {
-      visible = cy.nodes('[type = "pipeline"], node[type = "stage"]');
+      visible = cy.nodes('[type = "pipeline"], node[type = "pipeline_group"], node[type = "stage"]');
     } else if (normalizedMode === "compute") {
-      visible = cy.nodes('node[type = "host"], node[type = "vm"], node[type = "container"]');
+      visible = cy.nodes('node[type = "cluster"], node[type = "host"], node[type = "vm"], node[type = "container"]');
     }
 
     if (normalizedQuery) {
