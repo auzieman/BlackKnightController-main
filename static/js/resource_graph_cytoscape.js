@@ -715,6 +715,25 @@
     }));
   }
 
+  function relayoutVisibleTopology(cy) {
+    const visibleNodes = cy.nodes().filter(function (node) {
+      return node.visible();
+    });
+    const elements = visibleNodes.map(function (node) {
+      return node.json();
+    });
+    applyOwnershipPositions(elements, 140);
+    elements.forEach(function (element) {
+      if (!element.position || !element.data || !element.data.id) {
+        return;
+      }
+      const node = cy.getElementById(element.data.id);
+      if (node.length && node.visible()) {
+        node.animate({ position: element.position }, { duration: 220 });
+      }
+    });
+  }
+
   function applyGraphFilter(cy, options, mode, query) {
     const normalizedMode = mode || "selected";
     const normalizedQuery = String(query || "").trim().toLowerCase();
@@ -753,8 +772,11 @@
 
     if (visible.length) {
       window.setTimeout(function () {
+        if (normalizedMode === "compute" || normalizedMode === "selected") {
+          relayoutVisibleTopology(cy);
+        }
         fitGraph(cy, options.fitPadding);
-      }, 80);
+      }, 120);
     }
   }
 

@@ -920,6 +920,35 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
                 )
                 data["parent"] = manager["data"]["id"]
 
+    k3s_nodes = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
+        and any(token in str(node.get("data", {}).get("label") or "").lower() for token in ("k3s", "kube"))
+    ]
+    k3s_services = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") == "container"
+        and "/" in str(node.get("data", {}).get("label") or "")
+    ]
+    if k3s_nodes or k3s_services:
+        cluster_id = "cluster:k3s"
+        cluster_status = "running" if any(node["data"].get("status") == "running" for node in k3s_nodes) else "success"
+        nodes_by_id[cluster_id] = {
+            "data": {
+                "id": cluster_id,
+                "label": "K3s / Kubernetes",
+                "type": "cluster",
+                "status": cluster_status,
+                "layoutRole": "cluster",
+            }
+        }
+        if pve_id in nodes_by_id:
+            nodes_by_id[cluster_id]["data"]["parent"] = pve_id
+        for node in k3s_nodes + k3s_services:
+            node["data"]["parent"] = cluster_id
+
     for relationship in graph.get("relationships", []):
         source_id = str(relationship.get("source_id") or "").strip()
         target_id = str(relationship.get("target_id") or "").strip()
