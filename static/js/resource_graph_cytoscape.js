@@ -293,12 +293,16 @@
         }
         return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
       });
+      const legacyCluster = nodesById.get("cluster:legacy-proxmox-swarm");
+      const legacyChildren = (groups.get("cluster:legacy-proxmox-swarm") || []).sort(function (a, b) {
+        return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+      });
       pve.position = { x: 130, y: startY };
       swarmCluster.position = { x: 360, y: startY };
       handled.add("host:pve");
       handled.add("cluster:docker-swarm");
       const pveChildren = (groups.get("host:pve") || []).filter(function (node) {
-        return node.data.id !== "cluster:docker-swarm";
+        return !["cluster:docker-swarm", "cluster:legacy-proxmox-swarm"].includes(String(node.data.id));
       }).sort(function (a, b) {
         const stateOrder = statusSortValue(a.data.status) - statusSortValue(b.data.status);
         if (stateOrder !== 0) {
@@ -321,10 +325,21 @@
         };
         handled.add(String(child.data.id));
       });
+      if (legacyCluster) {
+        legacyCluster.position = { x: 360, y: startY + 180 };
+        handled.add("cluster:legacy-proxmox-swarm");
+        legacyChildren.forEach(function (child, index) {
+          child.position = {
+            x: 590 + (index % 4) * 210,
+            y: startY + 144 + Math.floor(index / 4) * 82,
+          };
+          handled.add(String(child.data.id));
+        });
+      }
       pveChildren.forEach(function (child, index) {
         child.position = {
           x: 360 + (index % 4) * 220,
-          y: startY + 210 + Math.floor(index / 4) * 96,
+          y: startY + 310 + Math.floor(index / 4) * 96,
         };
         handled.add(String(child.data.id));
       });

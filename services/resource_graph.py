@@ -785,11 +785,12 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
         if not resource_id:
             continue
         facts = resource.get("facts") if isinstance(resource.get("facts"), dict) else {}
+        state_source = facts.get("status") if kind in {"host", "vm", "container"} else resource.get("state")
         data = {
             "id": resource_id,
             "label": str(resource.get("name") or resource_id),
             "type": kind,
-            "status": _cytoscape_status(str(resource.get("state") or facts.get("status") or "")),
+            "status": _cytoscape_status(str(state_source or resource.get("state") or "")),
         }
         if kind == "pipeline":
             data.update({"storyRank": 0, "storyLane": 0, "layoutRole": "pipeline"})
@@ -838,12 +839,39 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
                 if data.get("parent"):
                     nodes_by_id[stage_id]["data"]["parent"] = data["parent"]
 
+    def _short_label(node: dict) -> str:
+        label = str(node.get("data", {}).get("label") or "").strip().lower()
+        return label.split(".", 1)[0]
+
     pve_id = "host:pve"
+    active_swarm_shorts = {
+        _short_label(node)
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") == "vm"
+        and str(node.get("data", {}).get("status") or "") == "running"
+        and _short_label(node).startswith("swarm")
+    }
+    for node_id, node in list(nodes_by_id.items()):
+        data = node.get("data", {})
+        if str(data.get("type") or "") != "host":
+            continue
+        short = _short_label(node)
+        if short.startswith("swarm") and short in active_swarm_shorts:
+            nodes_by_id.pop(node_id, None)
+
     swarm_nodes = [
         node
         for node in nodes_by_id.values()
         if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
         and str(node.get("data", {}).get("label") or "").lower().startswith("swarm")
+        and str(node.get("data", {}).get("status") or "") != "inactive"
+    ]
+    inactive_swarm_nodes = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
+        and str(node.get("data", {}).get("label") or "").lower().startswith("swarm")
+        and str(node.get("data", {}).get("status") or "") == "inactive"
     ]
     if swarm_nodes:
         cluster_id = "cluster:docker-swarm"
@@ -861,13 +889,36 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
             nodes_by_id[cluster_id]["data"]["parent"] = pve_id
         for node in swarm_nodes:
             node["data"]["parent"] = cluster_id
+        if inactive_swarm_nodes:
+            legacy_id = "cluster:legacy-proxmox-swarm"
+            nodes_by_id[legacy_id] = {
+                "data": {
+                    "id": legacy_id,
+                    "label": "Legacy / powered off",
+                    "type": "cluster",
+                    "status": "inactive",
+                    "layoutRole": "legacy_cluster",
+                }
+            }
+            if pve_id in nodes_by_id:
+                nodes_by_id[legacy_id]["data"]["parent"] = pve_id
+            for node in inactive_swarm_nodes:
+                node["data"]["parent"] = legacy_id
         for node in nodes_by_id.values():
             data = node.get("data", {})
             if data.get("type") != "container":
                 continue
             label = str(data.get("label") or "").lower()
             if label.startswith("blackknight") or label.startswith("registry") or label.startswith("monitoring_"):
-                data["parent"] = cluster_id
+                manager = next(
+                    (
+                        swarm_node
+                        for swarm_node in swarm_nodes
+                        if str(swarm_node.get("data", {}).get("label") or "").lower().startswith("swarm1.")
+                    ),
+                    swarm_nodes[0],
+                )
+                data["parent"] = manager["data"]["id"]
 
     for relationship in graph.get("relationships", []):
         source_id = str(relationship.get("source_id") or "").strip()
