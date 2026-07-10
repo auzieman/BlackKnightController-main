@@ -9,6 +9,19 @@ graph visualization, compound nodes, layouts, event handling, and graph updates.
 It can become a living version of the Mermaid diagrams BKC already wants to
 generate.
 
+## Current Alpha Visual
+
+The first Resource Graph implementation now renders a living topology and
+pipeline-flow canvas with compound pipeline groups, platform buckets, status
+coloring, filters, and drilldown interactions.
+
+![Living Resource Graph alpha](images/living-resource-graph-new%20visuals.png)
+
+This is still intentionally alpha. The pipeline flow layout is already useful,
+while compute/topology layout needs stronger relationship metadata such as
+`runs_on`, `member_of`, `contains`, `deployed_by`, `observed_on`, and
+`supersedes` to avoid relying on label-based inference.
+
 ## Recommendation
 
 Do not start with a full graph editor.
