@@ -177,6 +177,41 @@ def _pipeline_actions(pipeline: dict) -> list[dict]:
     ]
 
 
+def _pipeline_target_resource(target: str) -> dict | None:
+    value = str(target or "").strip()
+    if not value:
+        return None
+    if value.startswith("repo:"):
+        repo_name = value.split(":", 1)[1].strip()
+        if not repo_name:
+            return None
+        return {
+            "id": f"repo:{repo_name}",
+            "kind": "repo",
+            "name": repo_name,
+            "state": "referenced",
+            "summary": "Repository referenced by a pipeline target.",
+            "sources": ["pipeline target"],
+            "facts": {"target": value},
+            "actions": [{"label": "Open pipelines", "href": "/pipelines"}],
+        }
+    if value.startswith("service:"):
+        service_name = value.split(":", 1)[1].strip()
+        if not service_name:
+            return None
+        return {
+            "id": f"container:{service_name}",
+            "kind": "container",
+            "name": service_name,
+            "state": "referenced",
+            "summary": "Service referenced by a pipeline target.",
+            "sources": ["pipeline target"],
+            "facts": {"target": value, "provider": "service"},
+            "actions": _resource_action_links("container"),
+        }
+    return None
+
+
 def _resource_action_links(kind: str, existing: list[dict] | None = None) -> list[dict]:
     actions = list(existing or [])
     for action in actions_for_kind(kind):
@@ -536,9 +571,19 @@ def build_resource_graph() -> dict:
                 "sources": ["pipeline catalog"],
                 "facts": facts,
                 "actions": _pipeline_actions(pipeline),
-                "raw": {"stages": pipeline.get("stages", []), "notes": pipeline.get("notes", "")},
+                "raw": {
+                    "stages": pipeline.get("stages", []),
+                    "notes": pipeline.get("notes", ""),
+                    "targets": pipeline.get("targets", {}),
+                },
             },
         )
+        for target in (pipeline.get("targets") or {}).values():
+            target_resource = _pipeline_target_resource(str(target))
+            if not target_resource:
+                continue
+            existing = _add_resource(graph, target_resource)
+            _add_relationship(graph, pipeline_id, "targets", existing["id"], "Pipeline target metadata.")
         for action_name in pipeline.get("actions", []):
             action_id = f"action:{action_name}"
             if action_id in graph["resources_by_id"]:
@@ -626,6 +671,8 @@ CYTOSCAPE_NODE_TYPES = {"host", "vm", "container", "pipeline"}
 
 def _cytoscape_status(state: str) -> str:
     normalized = str(state or "").strip().lower()
+    if normalized in {"stopped", "inactive", "legacy", "template", "retired"}:
+        return "inactive"
     if normalized in {"failed", "failure", "error", "blocked", "needs setup", "unreachable"}:
         return "failed"
     if normalized in {"running", "active", "queued", "planned", "in_progress", "pending"}:
@@ -657,6 +704,23 @@ def _ensure_cytoscape_parent_host(nodes_by_id: dict[str, dict], host_name: str) 
     return parent_id
 
 
+def _cytoscape_stage_id(pipeline_id: str, stage: str, index: int) -> str:
+    clean = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in str(stage).strip().lower())
+    clean = "-".join(part for part in clean.split("-") if part)
+    return f"stage:{pipeline_id.removeprefix('pipeline:')}:{index + 1:02d}:{clean or 'stage'}"
+
+
+def _cytoscape_stage_lane(stage: str, index: int) -> int:
+    normalized = str(stage or "").strip().lower()
+    if any(token in normalized for token in ("install", "package", "chocolatey", "vscode", "rustdesk", "chrome")):
+        return -1 if index % 2 == 0 else 1
+    if any(token in normalized for token in ("verify", "validate", "check", "smoke")):
+        return 1
+    if any(token in normalized for token in ("record", "link", "inventory", "relationship")):
+        return 2
+    return 0
+
+
 def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
     """Return Cytoscape.js elements split into nodes and edges.
 
@@ -683,11 +747,36 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
             "type": kind,
             "status": _cytoscape_status(str(resource.get("state") or facts.get("status") or "")),
         }
+        if kind == "pipeline":
+            data.update({"storyRank": 0, "storyLane": 0, "layoutRole": "pipeline"})
         if kind in {"vm", "container"}:
             proxmox_node = str(facts.get("proxmox node") or "").strip()
             if proxmox_node and proxmox_node != "unset":
                 data["parent"] = _ensure_cytoscape_parent_host(nodes_by_id, proxmox_node)
         nodes_by_id[resource_id] = {"data": data}
+        if kind == "pipeline":
+            raw = resource.get("raw") if isinstance(resource.get("raw"), dict) else {}
+            stages = raw.get("stages") if isinstance(raw.get("stages"), list) else []
+            for index, stage in enumerate(stages):
+                if isinstance(stage, dict):
+                    stage_name = str(stage.get("name") or stage.get("id") or "").strip()
+                else:
+                    stage_name = str(stage).strip()
+                if not stage_name:
+                    continue
+                stage_id = _cytoscape_stage_id(resource_id, stage_name, index)
+                nodes_by_id[stage_id] = {
+                    "data": {
+                        "id": stage_id,
+                        "label": stage_name,
+                        "type": "stage",
+                        "status": data["status"],
+                        "parentPipeline": resource_id,
+                        "storyRank": index + 1,
+                        "storyLane": _cytoscape_stage_lane(stage_name, index),
+                        "layoutRole": "stage",
+                    }
+                }
 
     for relationship in graph.get("relationships", []):
         source_id = str(relationship.get("source_id") or "").strip()
@@ -709,6 +798,37 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
 
     edges = []
     seen_edges = set()
+    for node in nodes_by_id.values():
+        data = node.get("data", {})
+        if data.get("type") != "stage":
+            continue
+        stage_id = str(data.get("id") or "")
+        parent_pipeline = str(data.get("parentPipeline") or "")
+        rank = int(data.get("storyRank") or 0)
+        source_id = parent_pipeline
+        if rank > 1:
+            source_id = ""
+            prefix = f"stage:{parent_pipeline.removeprefix('pipeline:')}:{rank - 1:02d}:"
+            for candidate in nodes_by_id:
+                if candidate.startswith(prefix):
+                    source_id = candidate
+                    break
+        if not source_id or source_id not in nodes_by_id:
+            continue
+        edge_id = f"edge:{source_id}:pipeline_flow:{stage_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": source_id,
+                    "target": stage_id,
+                    "type": "pipeline_flow",
+                }
+            }
+        )
     for node in nodes_by_id.values():
         data = node.get("data", {})
         parent_id = str(data.get("parent") or "").strip()

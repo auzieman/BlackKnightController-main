@@ -5,6 +5,7 @@
     success: "#22c55e",
     failed: "#ef4444",
     running: "#f59e0b",
+    inactive: "#64748b",
   };
 
   const DEFAULT_EDGE_COLORS = {
@@ -87,6 +88,17 @@
         },
       },
       {
+        selector: 'node[type = "stage"]',
+        style: {
+          "background-color": "#fde68a",
+          "border-color": "rgba(245, 158, 11, 0.82)",
+          color: "#1f2937",
+          height: 46,
+          "font-size": 11,
+          "text-max-width": 170,
+        },
+      },
+      {
         selector: 'node[type = "host"]',
         style: {
           shape: "round-rectangle",
@@ -134,6 +146,15 @@
         style: {
           "background-color": DEFAULT_STATUS_COLORS.running,
           "border-color": "rgba(253, 230, 138, 0.86)",
+        },
+      },
+      {
+        selector: 'node[status = "inactive"]',
+        style: {
+          "background-color": DEFAULT_STATUS_COLORS.inactive,
+          "border-color": "rgba(148, 163, 184, 0.46)",
+          color: "#e2e8f0",
+          opacity: 0.56,
         },
       },
       {
@@ -194,10 +215,156 @@
     });
   }
 
+  function statusSortValue(status) {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "running") {
+      return 0;
+    }
+    if (normalized === "success") {
+      return 1;
+    }
+    if (normalized === "failed") {
+      return 2;
+    }
+    if (normalized === "inactive") {
+      return 3;
+    }
+    return 4;
+  }
+
+  function applyOwnershipPositions(nodes, startY) {
+    const inventoryNodes = nodes.filter(function (node) {
+      return !Number.isFinite(Number(node.data.storyRank));
+    });
+    const nodesById = new Map();
+    inventoryNodes.forEach(function (node) {
+      nodesById.set(String(node.data.id), node);
+    });
+
+    const groups = new Map();
+    const loose = [];
+    inventoryNodes.forEach(function (node) {
+      const parentId = String(node.data.parent || "");
+      if (parentId && nodesById.has(parentId)) {
+        const list = groups.get(parentId) || [];
+        list.push(node);
+        groups.set(parentId, list);
+        return;
+      }
+      if (!groups.has(String(node.data.id))) {
+        groups.set(String(node.data.id), []);
+      }
+      loose.push(node);
+    });
+
+    const orderedParents = Array.from(groups.keys()).sort(function (a, b) {
+      const nodeA = nodesById.get(a);
+      const nodeB = nodesById.get(b);
+      const labelA = nodeA?.data.label || a;
+      const labelB = nodeB?.data.label || b;
+      if (String(labelA).toLowerCase() === "pve") {
+        return -1;
+      }
+      if (String(labelB).toLowerCase() === "pve") {
+        return 1;
+      }
+      return String(labelA).localeCompare(String(labelB));
+    });
+
+    orderedParents.forEach(function (parentId, groupIndex) {
+      const parent = nodesById.get(parentId);
+      const children = (groups.get(parentId) || []).sort(function (a, b) {
+        const stateOrder = statusSortValue(a.data.status) - statusSortValue(b.data.status);
+        if (stateOrder !== 0) {
+          return stateOrder;
+        }
+        return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+      });
+      const top = startY + groupIndex * 310;
+      if (parent) {
+        parent.position = { x: 150, y: top };
+      }
+      children.forEach(function (child, index) {
+        const col = index % 4;
+        const row = Math.floor(index / 4);
+        child.position = {
+          x: 340 + col * 220,
+          y: top - 72 + row * 96,
+        };
+      });
+    });
+
+    loose.filter(function (node) {
+      return !String(node.data.parent || "") && !node.position;
+    }).sort(function (a, b) {
+      return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+    }).forEach(function (node, index) {
+      node.position = {
+        x: 120 + (index % 5) * 210,
+        y: startY + orderedParents.length * 310 + Math.floor(index / 5) * 96,
+      };
+    });
+  }
+
   function applyFlowPositions(elements) {
     const nodes = elements.filter(function (element) {
       return element.data && element.data.id && !element.data.source;
     });
+    const storyNodes = nodes.filter(function (node) {
+      return Number.isFinite(Number(node.data.storyRank));
+    });
+    if (storyNodes.length) {
+      const groups = new Map();
+      storyNodes.forEach(function (node) {
+        const groupId = String(node.data.parentPipeline || node.data.id || "");
+        const list = groups.get(groupId) || [];
+        list.push(node);
+        groups.set(groupId, list);
+      });
+      const sortedGroups = Array.from(groups.keys()).sort(function (a, b) {
+        const labelA = groups.get(a).find(function (node) {
+          return String(node.data.id) === a;
+        })?.data.label || a;
+        const labelB = groups.get(b).find(function (node) {
+          return String(node.data.id) === b;
+        })?.data.label || b;
+        return String(labelA).localeCompare(String(labelB));
+      });
+      sortedGroups.forEach(function (groupId, groupIndex) {
+        const columns = new Map();
+        groups.get(groupId).forEach(function (node) {
+          const rank = Number(node.data.storyRank || 0);
+          const list = columns.get(rank) || [];
+          list.push(node);
+          columns.set(rank, list);
+        });
+        const groupTop = 130 + groupIndex * 300;
+        Array.from(columns.keys()).sort(function (a, b) {
+          return a - b;
+        }).forEach(function (rank) {
+          const list = columns.get(rank).sort(function (a, b) {
+            const laneA = Number(a.data.storyLane || 0);
+            const laneB = Number(b.data.storyLane || 0);
+            if (laneA !== laneB) {
+              return laneA - laneB;
+            }
+            return String(a.data.label || a.data.id).localeCompare(String(b.data.label || b.data.id));
+          });
+          const laneCounts = new Map();
+          list.forEach(function (node) {
+            const lane = Number(node.data.storyLane || 0);
+            const count = laneCounts.get(lane) || 0;
+            laneCounts.set(lane, count + 1);
+            node.position = {
+              x: 120 + rank * 260,
+              y: groupTop + lane * 82 + count * 68,
+            };
+          });
+        });
+      });
+      applyOwnershipPositions(nodes, 190 + sortedGroups.length * 300);
+      return;
+    }
     const edges = elements.filter(function (element) {
       return element.data && element.data.source && element.data.target;
     });
@@ -258,6 +425,7 @@
         };
       });
     });
+    applyOwnershipPositions(nodes, 160 + lanes.size * 125);
   }
 
   function createLayout(elements, options) {
@@ -417,6 +585,25 @@
     return root.union(root.neighborhood()).union(root.parent()).union(root.children());
   }
 
+  function visiblePipelineStory(cy, nodeId) {
+    const root = cy.getElementById(nodeId);
+    if (!root.length) {
+      return cy.collection();
+    }
+    const pipelineId = root.data("type") === "stage" ? root.data("parentPipeline") : nodeId;
+    if (!pipelineId) {
+      return cy.collection();
+    }
+    const pipeline = cy.getElementById(String(pipelineId));
+    const stages = cy.nodes('[type = "stage"]').filter(function (node) {
+      return node.data("parentPipeline") === pipelineId;
+    });
+    const storyNodes = pipeline.union(stages);
+    return storyNodes.union(storyNodes.connectedEdges().filter(function (edge) {
+      return edge.data("type") === "pipeline_flow";
+    }));
+  }
+
   function applyGraphFilter(cy, options, mode, query) {
     const normalizedMode = mode || "selected";
     const normalizedQuery = String(query || "").trim().toLowerCase();
@@ -424,12 +611,15 @@
     let visible = cy.nodes();
 
     if (normalizedMode === "selected" && selectedId) {
-      visible = visibleNeighborhood(cy, selectedId);
+      const selectedNode = cy.getElementById(selectedId);
+      visible = selectedNode.length && ["pipeline", "stage"].includes(String(selectedNode.data("type")))
+        ? visiblePipelineStory(cy, selectedId)
+        : visibleNeighborhood(cy, selectedId);
       if (!visible.length) {
         visible = cy.nodes('node[type = "host"], node[type = "vm"], node[type = "container"]');
       }
     } else if (normalizedMode === "pipeline") {
-      visible = cy.nodes('[type = "pipeline"]');
+      visible = cy.nodes('[type = "pipeline"], node[type = "stage"]');
     } else if (normalizedMode === "compute") {
       visible = cy.nodes('node[type = "host"], node[type = "vm"], node[type = "container"]');
     }

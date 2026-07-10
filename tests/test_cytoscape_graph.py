@@ -31,6 +31,7 @@ def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
                 "name": "ns1 Trixie PXE Smoke",
                 "state": "complete",
                 "facts": {},
+                "raw": {"stages": ["resolve-context", "fetch-netboot", "pxe-boot", "verify-install"]},
             },
             {
                 "id": "repo:rx-demo",
@@ -78,6 +79,16 @@ def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
         "parent": "host:pve1",
     }
     assert nodes["container:blackknight_bkc"]["status"] == "failed"
+    assert nodes["stage:ns1-trixie-pxe-smoke:01:resolve-context"] == {
+        "id": "stage:ns1-trixie-pxe-smoke:01:resolve-context",
+        "label": "resolve-context",
+        "type": "stage",
+        "status": "success",
+        "parentPipeline": "pipeline:ns1-trixie-pxe-smoke",
+        "storyRank": 1,
+        "storyLane": 0,
+        "layoutRole": "stage",
+    }
     assert "repo:rx-demo" not in nodes
     assert all(set(edge["data"]) == {"id", "source", "target", "type"} for edge in elements["edges"])
     assert {
@@ -86,8 +97,14 @@ def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
     } >= {
         ("host:pve1", "vm:trixie-smoke-132", "dependency"),
         ("host:pve1", "container:blackknight_bkc", "dependency"),
+        ("pipeline:ns1-trixie-pxe-smoke", "stage:ns1-trixie-pxe-smoke:01:resolve-context", "pipeline_flow"),
+        (
+            "stage:ns1-trixie-pxe-smoke:01:resolve-context",
+            "stage:ns1-trixie-pxe-smoke:02:fetch-netboot",
+            "pipeline_flow",
+        ),
     }
     assert {
         edge["data"]["type"]
         for edge in elements["edges"]
-    } == {"dependency"}
+    } == {"dependency", "pipeline_flow"}
