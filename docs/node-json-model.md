@@ -198,9 +198,29 @@ Initial relationship types:
 - `targets`
 - `owned_by`
 - `supports_business_function`
+- `provides_dhcp`
+- `serves_pxe`
+- `booted_from`
+- `supersedes`
+- `ignore_updates`
 
 Prefer directional relationships with clear meaning. The UI can infer reverse
 labels when needed.
+
+For topology rendering, prefer concrete operational edges over name inference:
+
+```json
+{
+  "source_id": "node:service:ns1-dhcpd",
+  "type": "provides_dhcp",
+  "target_id": "node:network:lab-provisioning",
+  "source": "bkc",
+  "confidence": "declared"
+}
+```
+
+This lets the graph render `ns1 -> dhcpd -> lab-provisioning` without guessing
+from host names or pipeline stage labels.
 
 ## Networks And Boot Images
 
@@ -230,6 +250,79 @@ Boot image nodes should capture:
 
 This lets DHCP, PXE, VM creation, and bare metal provisioning procedures consume
 the same graph model instead of inventing a separate provisioning schema.
+
+## Update Policy
+
+Nodes can declare how BKC should treat updates from pipelines, scans, and human
+edits. This is especially important for shared infrastructure such as DHCP,
+PXE, and boot media directories.
+
+Use `facts.update_policy` for node-local rules:
+
+```json
+{
+  "facts": {
+    "update_policy": {
+      "mode": "managed-fragment-only",
+      "ignore_paths": ["/etc/dhcp/dhcpd.conf"],
+      "managed_paths": ["/etc/dhcp/dhcpd.d/bkc-provisioning.conf"],
+      "reason": "BKC owns the include fragment, not the operator-owned base file."
+    }
+  }
+}
+```
+
+Suggested modes:
+
+- `authoritative`: BKC owns the whole object.
+- `managed-fragment-only`: BKC owns only declared paths or subdocuments.
+- `additive`: BKC may add files or relationships but should not prune unknowns.
+- `ephemeral-rebuild`: the node can be destroyed/recreated; volatile fields
+  should not block matching.
+- `review-required`: writes require an explicit review or approval gate.
+
+For graph-level exceptions, use an explicit relationship:
+
+```json
+{
+  "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+  "type": "ignore_updates",
+  "target_id": "node:field:target_user_password",
+  "source": "bkc",
+  "confidence": "declared"
+}
+```
+
+The relationship form is useful when an update ignore is scoped to one
+procedure, one integration, or one volatile field rather than the node as a
+whole.
+
+## PXE And DHCP Guardrails
+
+DHCP and PXE should be modeled as services with clear authority boundaries:
+
+- management network DHCP can remain externally owned
+  (`bkc_managed: false`, authority `spectrum-router`)
+- provisioning DHCP can be BKC-managed but disabled until reviewed
+- BKC should prefer include fragments such as
+  `/etc/dhcp/dhcpd.d/bkc-provisioning.conf`
+- PXE assets should be additive, preserving operator-owned rescue media
+- target VMs should record one-shot boot intent and post-install boot order
+
+Example relationship chain:
+
+```text
+node:vm:ns1
+  <- runs_on <- node:service:ns1-dhcpd
+  <- runs_on <- node:service:ns1-pxe
+
+node:service:ns1-dhcpd -> provides_dhcp -> node:network:lab-provisioning
+node:service:ns1-pxe   -> serves_pxe    -> node:network:lab-provisioning
+node:vm:trixie-smoke-132 -> booted_from -> node:boot_image:debian-trixie-amd64-netboot
+```
+
+The Cytoscape/resource graph should eventually consume these relationships
+directly instead of relying on label-based placement heuristics.
 
 ## Procedures
 
