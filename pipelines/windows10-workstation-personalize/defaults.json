@@ -32,5 +32,7 @@
       "path": "/kanboard/"
     }
   ],
-  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE."
+  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE.",
+  "demo_lan_prefix": "192.168.1.",
+  "require_demo_lan_urls": true
 }

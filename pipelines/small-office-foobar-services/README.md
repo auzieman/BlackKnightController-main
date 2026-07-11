@@ -20,7 +20,7 @@ on full PHP application installers.
 - Service lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
 - Clean service run:
-  `http://swarm1.lab.auzietek.com:5000/pipelines/83892bb0-0979-40b3-a2b0-1b0f7476e487`
+  `http://swarm1.lab.auzietek.com:5000/pipelines/ea6853ca-a4fd-477d-ad67-28150368ae83`
 - Grafana lifecycle:
   `http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s`
 
@@ -28,15 +28,19 @@ on full PHP application installers.
 
 - Identity VM:
   `foobar-id-01.lab.foo.bar`
+- Browser-facing service IPs:
+  `configure-demo-lan` records the current `ens19` addresses for workstation
+  checkpoints. The `*.lab.foo.bar` names are inventory labels unless DNS has
+  been registered for the workstation network.
 - LDAP seed stage:
   `install-identity-packages` -> `seed-ldap-directory`
 - Shared homes stage:
   `configure-samba-homes`
 - Identity portal:
-  `http://foobar-id-01.lab.foo.bar/phpldapadmin/`
+  `http://192.168.1.244/phpldapadmin/`
 - CRM placeholder:
-  `http://foobar-crm-01.lab.foo.bar/suitecrm/`
+  `http://192.168.1.59/suitecrm/`
 - Ticket placeholder:
-  `http://foobar-tickets-01.lab.foo.bar/kanboard/`
+  `http://192.168.1.133/kanboard/`
 - Validation evidence:
-  `validate-foobar-services` in run `83892bb0-0979-40b3-a2b0-1b0f7476e487`
+  `validate-foobar-services` in run `ea6853ca-a4fd-477d-ad67-28150368ae83`

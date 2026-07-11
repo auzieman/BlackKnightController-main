@@ -46,13 +46,16 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - Service provisioning lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
 - Clean service provisioning run:
-  `http://swarm1.lab.auzietek.com:5000/pipelines/83892bb0-0979-40b3-a2b0-1b0f7476e487`
+  `http://swarm1.lab.auzietek.com:5000/pipelines/ea6853ca-a4fd-477d-ad67-28150368ae83`
+- Browser-facing service IPs:
+  recorded by `configure-demo-lan`; use those `192.168.1.x` links from the
+  workstation unless the `*.lab.foo.bar` names have been registered in DNS.
 - Identity portal checkpoint:
-  `http://foobar-id-01.lab.foo.bar/phpldapadmin/`
+  `http://192.168.1.244/phpldapadmin/`
 - CRM checkpoint:
-  `http://foobar-crm-01.lab.foo.bar/suitecrm/`
+  `http://192.168.1.59/suitecrm/`
 - Ticket checkpoint:
-  `http://foobar-tickets-01.lab.foo.bar/kanboard/`
+  `http://192.168.1.133/kanboard/`
 - Trixie PXE validation run:
   `http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463`
 - Windows PXE validation run:

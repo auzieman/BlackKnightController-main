@@ -191,6 +191,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "load-service-plan",
             "ensure-identity-vm",
             "wait-service-guests",
+            "configure-demo-lan",
             "install-identity-packages",
             "seed-ldap-directory",
             "configure-samba-homes",

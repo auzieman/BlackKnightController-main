@@ -42,5 +42,7 @@
       "path": "/kanboard/"
     }
   ],
-  "notes": "Post-install personalization for VMID 132. Uses Proxmox guest agent so it can run before management networking is finalized."
+  "notes": "Post-install personalization for VMID 132. Uses Proxmox guest agent so it can run before management networking is finalized.",
+  "demo_lan_prefix": "192.168.1.",
+  "require_demo_lan_urls": true
 }

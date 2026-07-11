@@ -3281,6 +3281,15 @@ WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
             "timeout": 600,
         },
         {
+            "name": "configure-demo-lan",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-demo-lan",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Configuring browser-reachable foo.bar service interfaces.",
+            "complete": "FooBar demo LAN service interfaces configured.",
+            "timeout": 300,
+        },
+        {
             "name": "install-identity-packages",
             "transport": "bkc-proxmox",
             "kind": "foobar-service-identity-packages",
@@ -7687,6 +7696,8 @@ def _service_checkpoint_urls(values: dict) -> list[dict]:
     checkpoints = values.get("service_checkpoints")
     if not isinstance(checkpoints, list) or not checkpoints:
         raise PipelineExecutionError("service_checkpoints must be configured for demo checkpoint publishing.")
+    preferred_prefix = str(values.get("demo_lan_prefix") or "192.168.1.").strip()
+    require_demo_lan = _pipeline_value_truthy(values.get("require_demo_lan_urls", True))
     urls = []
     for raw in checkpoints:
         if not isinstance(raw, dict):
@@ -7698,10 +7709,18 @@ def _service_checkpoint_urls(values: dict) -> list[dict]:
             path = f"/{path}"
         if not label or not vmid:
             raise PipelineExecutionError("Each service checkpoint requires label and vmid.")
-        output = _foobar_guest_exec(vmid, "hostname -I | awk '{print $1}'", timeout=60).strip()
-        ip = output.split()[0] if output.split() else ""
+        output = _foobar_guest_exec(
+            vmid,
+            "ip -4 -o addr show | awk '{split($4,a,\"/\"); print a[1]}'",
+            timeout=60,
+        ).strip()
+        candidates = output.split()
+        ip = next((candidate for candidate in candidates if preferred_prefix and candidate.startswith(preferred_prefix)), "")
+        if not ip and not require_demo_lan:
+            ip = candidates[0] if candidates else ""
         if not ip:
-            raise PipelineExecutionError(f"Could not resolve IP for service checkpoint {label} VMID {vmid}.")
+            detail = f" with prefix {preferred_prefix}" if preferred_prefix else ""
+            raise PipelineExecutionError(f"Could not resolve browser-reachable IP{detail} for service checkpoint {label} VMID {vmid}.")
         urls.append({"label": label, "vmid": vmid, "ip": ip, "url": f"http://{ip}{path}"})
     return urls
 
@@ -8424,6 +8443,36 @@ def _run_foobar_service_guest_wait(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "FooBar service guests are command-ready.")
 
 
+def _run_foobar_service_demo_lan(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    interface = str(values.get("demo_lan_interface") or "ens19").strip()
+    prefix = str(values.get("demo_lan_prefix") or "192.168.1.").strip()
+    if not interface:
+        raise PipelineExecutionError("demo_lan_interface is required.")
+    evidence = []
+    for target in _foobar_service_targets(values):
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        command = (
+            "set -e; "
+            f"iface={shlex.quote(interface)}; "
+            "ip link show \"$iface\" >/dev/null; "
+            "ip link set \"$iface\" up; "
+            "command -v dhclient >/dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get -o DPkg::Lock::Timeout=600 update; apt-get -o DPkg::Lock::Timeout=600 install -y isc-dhcp-client; }; "
+            "dhclient -1 -v \"$iface\" 2>/tmp/bkc-demo-lan-dhclient.log || cat /tmp/bkc-demo-lan-dhclient.log; "
+            "ip -4 -o addr show dev \"$iface\" | awk '{split($4,a,\"/\"); print a[1]}'"
+        )
+        output = _foobar_guest_exec(vmid, command, timeout=240)
+        ips = [line.strip() for line in output.splitlines() if line.strip() and line.strip()[0].isdigit()]
+        selected = next((ip for ip in ips if not prefix or ip.startswith(prefix)), ips[-1] if ips else "")
+        if not selected:
+            raise PipelineExecutionError(f"{name} VMID {vmid} did not receive a demo LAN IPv4 address on {interface}.")
+        evidence.append({"vmid": vmid, "name": name, "interface": interface, "ip": selected})
+    _store_run_extra(run_id, {"foobar_demo_lan_ips": evidence})
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service demo LAN interfaces configured.")
+
+
 def _foobar_usernames(values: dict) -> list[str]:
     users = values.get("users")
     if not isinstance(users, list):
@@ -8520,8 +8569,8 @@ def _run_foobar_service_ldap_seed(run_id: str, stage_name: str) -> None:
         "-b ou=People,dc=foo,dc=bar -s base dn >/dev/null 2>&1 || "
         f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -f /tmp/bkc-foobar-base.ldif; "
         "while IFS= read -r dn; do "
-        "uid=${dn#dn: uid=}; uid=${uid%%,*}; "
-        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b \"$dn\" -s base dn >/dev/null 2>&1 || "
+        "actual_dn=${dn#dn: }; "
+        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b \"$actual_dn\" -s base dn >/dev/null 2>&1 || "
         "awk -v start=\"$dn\" 'BEGIN{p=0} $0==start{p=1} p{print} p && $0==\"\"{exit}' /tmp/bkc-foobar-users.ldif | "
         f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)}; "
         "done <<'DNS'\n"
@@ -8830,6 +8879,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "foobar-service-guest-wait":
             _run_foobar_service_guest_wait(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-demo-lan":
+            _run_foobar_service_demo_lan(run_id, stage_name)
             continue
 
         if kind == "foobar-service-identity-packages":

@@ -103,6 +103,24 @@
       "timeout_seconds": 600
     },
     {
+      "id": "configure-demo-lan",
+      "action": "debian.demo_lan.configure",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "targets": [
+          "${dictionary.identity_vm}",
+          "${dictionary.application_vms}"
+        ],
+        "interface": "${dictionary.demo_lan_interface}",
+        "prefix": "${dictionary.demo_lan_prefix}"
+      },
+      "produces": [
+        "fact:foobar_demo_lan_ips"
+      ],
+      "timeout_seconds": 300
+    },
+    {
       "id": "install-identity-packages",
       "action": "debian.identity.packages.install",
       "transport": "bkc-proxmox",

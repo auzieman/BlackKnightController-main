@@ -14,5 +14,25 @@
   "enable_libreoffice": true,
   "enable_vscode": true,
   "enable_rustdesk": true,
-  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE."
+  "enable_full_personalization": false,
+  "service_checkpoints": [
+    {
+      "label": "FooBar Identity",
+      "vmid": 139,
+      "path": "/phpldapadmin/"
+    },
+    {
+      "label": "FooBar CRM",
+      "vmid": 137,
+      "path": "/suitecrm/"
+    },
+    {
+      "label": "FooBar Tickets",
+      "vmid": 138,
+      "path": "/kanboard/"
+    }
+  ],
+  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE.",
+  "demo_lan_prefix": "192.168.1.",
+  "require_demo_lan_urls": true
 }
