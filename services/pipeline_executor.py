@@ -8564,7 +8564,7 @@ def _run_foobar_service_identity_packages(run_id: str, stage_name: str) -> None:
         f"hostnamectl set-hostname {shlex.quote(hostname)}; "
         f"printf '%s\n' {shlex.quote(slapd_seed)} | debconf-set-selections; "
         "apt-get -o DPkg::Lock::Timeout=600 update; "
-        "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php libapache2-mod-php curl; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php php-ldap libapache2-mod-php phpldapadmin python3 curl; "
         "systemctl enable --now slapd; "
         "systemctl is-active slapd; "
         "ldapsearch -x -H ldap://localhost -b dc=foo,dc=bar -s base dn"
@@ -8670,20 +8670,43 @@ def _run_foobar_service_samba_homes(run_id: str, stage_name: str) -> None:
 def _run_foobar_service_identity_portal(run_id: str, stage_name: str) -> None:
     _, _, values = _foobar_services_context()
     _, vmid, _, _, _, users = _foobar_identity_values(values)
+    base_dn = str(values.get("ldap_base_dn") or "dc=foo,dc=bar").strip()
+    admin_dn = str(values.get("ldap_admin_dn") or "cn=admin,dc=foo,dc=bar").strip()
     user_labels = ", ".join(users)
     command = (
         "set -e; "
-        "install -d -m 0755 /var/www/html/phpldapadmin; "
-        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin placeholder are provisioned.</p><p>Users: {user_labels}</p>' > /var/www/html/index.html; "
-        "printf '%s\\n' '<!doctype html><title>phpLDAPadmin</title><h1>FooBar phpLDAPadmin placeholder</h1><p>LDAP admin UI handoff target.</p>' > /var/www/html/phpldapadmin/index.html; "
+        "test -f /etc/phpldapadmin/config.php; "
+        "cp /etc/phpldapadmin/config.php /etc/phpldapadmin/config.php.bkc-pre-foobar 2>/dev/null || true; "
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "path = Path('/etc/phpldapadmin/config.php')\n"
+        "text = path.read_text()\n"
+        "marker = '// bkc_foobar_configured'\n"
+        "if marker not in text:\n"
+        "    block = \"\\n\".join([\n"
+        "        marker,\n"
+        "        \"$servers->setValue('server','host','127.0.0.1');\",\n"
+        f"        \"$servers->setValue('server','base',array({base_dn!r}));\",\n"
+        f"        \"$servers->setValue('login','bind_id',{admin_dn!r});\",\n"
+        "        \"$config->custom->appearance['hide_template_warning'] = true;\",\n"
+        "    ]) + \"\\n\"\n"
+        "    stripped = text.rstrip()\n"
+        "    if stripped.endswith('?>'):\n"
+        "        text = stripped[:-2].rstrip() + \"\\n\" + block + \"?>\\n\"\n"
+        "    else:\n"
+        "        text = text.rstrip() + \"\\n\" + block\n"
+        "path.write_text(text)\n"
+        "PY\n"
+        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin are provisioned.</p><p>Users: {user_labels}</p><p>Admin DN: {admin_dn}</p><p><a href=\"/phpldapadmin/\">Open phpLDAPadmin</a></p>' > /var/www/html/index.html; "
         "systemctl enable --now apache2; "
         "systemctl restart apache2; "
         "systemctl is-active apache2; "
-        "curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-foobar-identity.html"
+        "curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-foobar-identity.html; "
+        "grep -Ei 'phpLDAPadmin|Authenticate|Login|Username' /tmp/bkc-foobar-identity.html | head -n 5"
     )
     output = _foobar_guest_exec(vmid, command, timeout=180)
-    _set_stage(run_id, stage_name, "complete", "FooBar identity portal published.")
-    append_event(run_id, "info", stage_name, output[-1800:] if output else "identity portal published")
+    _set_stage(run_id, stage_name, "complete", "FooBar phpLDAPadmin portal published.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else "phpLDAPadmin portal published")
 
 
 def _foobar_app_target_by_role(values: dict, role: str) -> dict:
@@ -8775,7 +8798,7 @@ def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
     checks = [
         (
             identity,
-            "set -e; systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-validate-identity.html; head -n 2 /tmp/bkc-validate-identity.html",
+            "set -e; systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; test -f /etc/phpldapadmin/config.php; curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-validate-identity.html; grep -Ei 'phpLDAPadmin|Authenticate|Login|Username' /tmp/bkc-validate-identity.html | head -n 5",
         ),
         (
             crm,

@@ -132,13 +132,17 @@
           "ldap-utils",
           "samba",
           "apache2",
-          "php"
+          "php",
+          "php-ldap",
+          "phpldapadmin",
+          "python3"
         ]
       },
       "produces": [
         "package:slapd",
         "package:samba",
-        "package:apache2"
+        "package:apache2",
+        "package:phpldapadmin"
       ],
       "timeout_seconds": 2400
     },
@@ -175,12 +179,14 @@
     },
     {
       "id": "publish-identity-portal",
-      "action": "apache.site.publish",
+      "action": "debian.identity.phpldapadmin.configure",
       "transport": "bkc-proxmox",
       "risk": "low",
       "with": {
         "target": "${dictionary.identity_vm}",
-        "path": "/phpldapadmin/"
+        "path": "/phpldapadmin/",
+        "base_dn": "${dictionary.ldap_base_dn}",
+        "admin_dn": "${dictionary.ldap_admin_dn}"
       },
       "produces": [
         "service:openldap",

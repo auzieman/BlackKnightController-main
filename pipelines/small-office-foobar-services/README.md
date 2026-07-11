@@ -5,7 +5,7 @@ Runnable service layer for the `foo.bar` small-office demo.
 This lane follows `small-office-foobar-app-vms`. It creates the identity/storage
 VM from the prepared Trixie source, then provisions the current service layer:
 
-- `foobar-id-01`: OpenLDAP, Samba homes, and a phpLDAPadmin placeholder.
+- `foobar-id-01`: OpenLDAP, Samba homes, and a real phpLDAPadmin portal.
 - `foobar-crm-01`: Apache/PHP/MariaDB with a SuiteCRM placeholder endpoint.
 - `foobar-tickets-01`: Apache/PHP/SQLite with a real Kanboard service.
 
@@ -35,6 +35,8 @@ loop.
   been registered for the workstation network.
 - LDAP seed stage:
   `install-identity-packages` -> `seed-ldap-directory`
+- phpLDAPadmin stage:
+  `publish-identity-portal`
 - Shared homes stage:
   `configure-samba-homes`
 - Identity portal:
