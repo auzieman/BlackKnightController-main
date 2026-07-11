@@ -162,6 +162,21 @@
   ],
   "dashboards": [
     {
+      "name": "BKC FooBar Pipeline List",
+      "summary": "Filtered BKC list for the FooBar reference, reset, app VM, PXE, and personalization lanes.",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar"
+    },
+    {
+      "name": "Trixie PXE Validation Run",
+      "summary": "Clean Trixie PXE handoff run used as source evidence for the app VM clone lane.",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463"
+    },
+    {
+      "name": "Windows PXE Validation Run",
+      "summary": "Clean Windows PXE handoff run used as workstation provisioning evidence.",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines/06c3157f-91dc-4a6f-819e-12a324b77759"
+    },
+    {
       "name": "Small Office Lifecycle",
       "summary": "Show the foo.bar application VM shells before SuiteCRM and Kanboard package installation.",
       "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"

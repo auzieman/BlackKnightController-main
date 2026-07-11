@@ -10,7 +10,8 @@ This recipe intentionally stays boring:
 - helpdesk users: `joe.user`, `jill.user`
 - developer users: `bob.dev1`, `bob.dev2`
 - identity/storage node: `foobar-id-01`
-- intranet/CRM node: `foobar-crm-01`
+- CRM node: `foobar-crm-01`
+- ticket board node: `foobar-tickets-01`
 - Windows helpdesk workstations: `foobar-helpdesk-win-01`,
   `foobar-helpdesk-win-02`
 - Linux developer workstations: `foobar-dev-linux-01`,
@@ -40,3 +41,11 @@ The recipe should produce evidence that is useful on video:
   `http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s&kiosk`
 - Grafana playlist kiosk:
   `http://swarm1.lab.auzietek.com:3000/playlists/play/dfrsvccecc074d?kiosk`
+- BKC FooBar pipeline list:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar`
+- BKC app VM clone lane:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-app-vms`
+- Trixie PXE validation run:
+  `http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463`
+- Windows PXE validation run:
+  `http://swarm1.lab.auzietek.com:5000/pipelines/06c3157f-91dc-4a6f-819e-12a324b77759`
