@@ -103,22 +103,72 @@
       "timeout_seconds": 600
     },
     {
-      "id": "provision-identity-storage",
-      "action": "debian.identity.storage.configure",
+      "id": "install-identity-packages",
+      "action": "debian.identity.packages.install",
       "transport": "bkc-proxmox",
       "risk": "medium",
       "with": {
         "target": "${dictionary.identity_vm}",
-        "ldap_base_dn": "${dictionary.ldap_base_dn}",
+        "packages": [
+          "slapd",
+          "ldap-utils",
+          "samba",
+          "apache2",
+          "php"
+        ]
+      },
+      "produces": [
+        "package:slapd",
+        "package:samba",
+        "package:apache2"
+      ],
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "seed-ldap-directory",
+      "action": "ldap.ldif.apply",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "base_dn": "${dictionary.ldap_base_dn}",
         "users": "${dictionary.users}",
         "groups": "${dictionary.groups}"
       },
       "produces": [
-        "service:openldap",
+        "directory:foo.bar"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "configure-samba-homes",
+      "action": "samba.share.configure",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "share": "foobar-homes"
+      },
+      "produces": [
         "service:samba",
+        "share:foobar-homes"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "publish-identity-portal",
+      "action": "apache.site.publish",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "path": "/phpldapadmin/"
+      },
+      "produces": [
+        "service:openldap",
         "service:phpldapadmin"
       ],
-      "timeout_seconds": 2400
+      "timeout_seconds": 180
     },
     {
       "id": "provision-crm-mock",

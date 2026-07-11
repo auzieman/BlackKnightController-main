@@ -3263,13 +3263,40 @@ WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
             "timeout": 600,
         },
         {
-            "name": "provision-identity-storage",
+            "name": "install-identity-packages",
             "transport": "bkc-proxmox",
-            "kind": "foobar-service-identity-provision",
+            "kind": "foobar-service-identity-packages",
             "pipeline_id": "small-office-foobar-services",
-            "active": "Provisioning foo.bar LDAP, Samba, and identity portal services.",
-            "complete": "FooBar identity and storage services provisioned.",
+            "active": "Installing foo.bar LDAP, Samba, and web packages.",
+            "complete": "FooBar identity packages installed.",
             "timeout": 2400,
+        },
+        {
+            "name": "seed-ldap-directory",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-ldap-seed",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Applying foo.bar LDAP base, groups, and users.",
+            "complete": "FooBar LDAP directory seeded.",
+            "timeout": 300,
+        },
+        {
+            "name": "configure-samba-homes",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-samba-homes",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Configuring foo.bar Samba shared homes.",
+            "complete": "FooBar Samba shared homes configured.",
+            "timeout": 300,
+        },
+        {
+            "name": "publish-identity-portal",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-portal",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Publishing foo.bar identity portal placeholder.",
+            "complete": "FooBar identity portal published.",
+            "timeout": 180,
         },
         {
             "name": "provision-crm-mock",
@@ -8266,16 +8293,19 @@ def _foobar_usernames(values: dict) -> list[str]:
     return [str(user.get("username") or "").strip() for user in users if isinstance(user, dict) and str(user.get("username") or "").strip()]
 
 
-def _run_foobar_service_identity_provision(run_id: str, stage_name: str) -> None:
-    _, _, values = _foobar_services_context()
+def _foobar_identity_values(values: dict) -> tuple[dict, int, str, str, str, list[str]]:
     target = _foobar_service_identity_target(values)
     vmid = int(target["vmid"])
     hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
     domain = str(values.get("domain") or "foo.bar").strip()
     password = str(values.get("default_password") or "changeme123").strip()
     users = _foobar_usernames(values)
-    user_dirs = " ".join(shlex.quote(f"/srv/foobar/homes/{username}") for username in users)
-    user_labels = ", ".join(users)
+    return target, vmid, hostname, domain, password, users
+
+
+def _run_foobar_service_identity_packages(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, hostname, domain, password, _ = _foobar_identity_values(values)
     slapd_seed = "\n".join(
         [
             "slapd slapd/no_configuration boolean false",
@@ -8295,22 +8325,125 @@ def _run_foobar_service_identity_provision(run_id: str, stage_name: str) -> None
         f"printf '%s\n' {shlex.quote(slapd_seed)} | debconf-set-selections; "
         "apt-get -o DPkg::Lock::Timeout=600 update; "
         "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php libapache2-mod-php curl; "
-        "install -d -m 0755 /srv/foobar/homes /var/www/html/phpldapadmin; "
+        "systemctl enable --now slapd; "
+        "systemctl is-active slapd; "
+        "ldapsearch -x -H ldap://localhost -b dc=foo,dc=bar -s base dn"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=2400)
+    _set_stage(run_id, stage_name, "complete", "FooBar identity packages installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "identity packages installed")
+
+
+def _run_foobar_service_ldap_seed(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, password, users = _foobar_identity_values(values)
+    user_ldif_parts = []
+    uid_base = 10000
+    for offset, username in enumerate(users, start=1):
+        cn = username.replace(".", " ").title()
+        user_ldif_parts.append(
+            "\n".join(
+                [
+                    f"dn: uid={username},ou=People,dc=foo,dc=bar",
+                    "objectClass: inetOrgPerson",
+                    "objectClass: posixAccount",
+                    f"cn: {cn}",
+                    f"sn: {cn.split()[-1]}",
+                    f"uid: {username}",
+                    f"uidNumber: {uid_base + offset}",
+                    "gidNumber: 10000",
+                    f"homeDirectory: /srv/foobar/homes/{username}",
+                    "loginShell: /bin/bash",
+                    "userPassword: ${USER_PASSWORD_HASH}",
+                ]
+            )
+        )
+    user_ldif = "\n\n".join(user_ldif_parts)
+    command = (
+        "set -e; "
+        f"USER_PASSWORD_HASH=$(slappasswd -s {shlex.quote(password)}); "
+        "cat >/tmp/bkc-foobar-base.ldif <<'LDIF'\n"
+        "dn: ou=People,dc=foo,dc=bar\n"
+        "objectClass: organizationalUnit\n"
+        "ou: People\n\n"
+        "dn: ou=Groups,dc=foo,dc=bar\n"
+        "objectClass: organizationalUnit\n"
+        "ou: Groups\n\n"
+        "dn: cn=foobar_users,ou=Groups,dc=foo,dc=bar\n"
+        "objectClass: posixGroup\n"
+        "cn: foobar_users\n"
+        "gidNumber: 10000\n"
+        "LDIF\n"
+        "sed \"s|${USER_PASSWORD_HASH}|$USER_PASSWORD_HASH|g\" >/tmp/bkc-foobar-users.ldif <<'LDIF'\n"
+        f"{user_ldif}\n"
+        "LDIF\n"
+        "ldapsearch -x -D cn=admin,dc=foo,dc=bar -w "
+        f"{shlex.quote(password)} "
+        "-b ou=People,dc=foo,dc=bar -s base dn >/dev/null 2>&1 || "
+        f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -f /tmp/bkc-foobar-base.ldif; "
+        "while IFS= read -r dn; do "
+        "uid=${dn#dn: uid=}; uid=${uid%%,*}; "
+        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b \"$dn\" -s base dn >/dev/null 2>&1 || "
+        "awk -v start=\"$dn\" 'BEGIN{p=0} $0==start{p=1} p{print} p && $0==\"\"{exit}' /tmp/bkc-foobar-users.ldif | "
+        f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)}; "
+        "done <<'DNS'\n"
+        + "\n".join(f"dn: uid={username},ou=People,dc=foo,dc=bar" for username in users)
+        + "\nDNS\n"
+        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b ou=People,dc=foo,dc=bar uid | sed -n '1,80p'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "FooBar LDAP directory seeded.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "ldap directory seeded")
+
+
+def _run_foobar_service_samba_homes(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, _, users = _foobar_identity_values(values)
+    user_dirs = " ".join(shlex.quote(f"/srv/foobar/homes/{username}") for username in users)
+    command = (
+        "set -e; "
+        "install -d -m 0755 /srv/foobar/homes; "
         f"install -d -m 0750 {user_dirs}; "
         "chown -R root:root /srv/foobar; "
         "cp /etc/samba/smb.conf /etc/samba/smb.conf.bkc-pre-foobar 2>/dev/null || true; "
-        "printf '\\n[foobar-homes]\\n   path = /srv/foobar/homes\\n   browseable = yes\\n   read only = no\\n   guest ok = yes\\n   force user = root\\n' > /etc/samba/smb.conf.d/foobar-homes.conf 2>/dev/null || "
-        "printf '\\n[foobar-homes]\\n   path = /srv/foobar/homes\\n   browseable = yes\\n   read only = no\\n   guest ok = yes\\n   force user = root\\n' >> /etc/samba/smb.conf; "
-        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin placeholder are provisioned.</p><p>Users: {user_labels}</p>' > /var/www/html/index.html; "
-        "printf '%s\\n' '<!doctype html><title>phpLDAPadmin</title><h1>FooBar phpLDAPadmin placeholder</h1><p>LDAP admin UI handoff target.</p>' > /var/www/html/phpldapadmin/index.html; "
-        "systemctl enable --now slapd apache2 smbd; "
-        "systemctl restart slapd apache2 smbd; "
-        "systemctl is-active slapd apache2 smbd; "
+        "sed -i '/# BKC FooBar homes start/,/# BKC FooBar homes end/d' /etc/samba/smb.conf; "
+        "cat >>/etc/samba/smb.conf <<'SMB'\n"
+        "# BKC FooBar homes start\n"
+        "[foobar-homes]\n"
+        "   path = /srv/foobar/homes\n"
+        "   browseable = yes\n"
+        "   read only = no\n"
+        "   guest ok = yes\n"
+        "   force user = root\n"
+        "# BKC FooBar homes end\n"
+        "SMB\n"
+        "systemctl enable --now smbd; "
+        "systemctl restart smbd; "
+        "systemctl is-active smbd; "
         "testparm -s >/tmp/bkc-foobar-testparm.out"
     )
-    output = _foobar_guest_exec(vmid, command, timeout=2400)
-    _set_stage(run_id, stage_name, "complete", "FooBar identity and storage services provisioned.")
-    append_event(run_id, "info", stage_name, output[-2400:] if output else "identity services provisioned")
+    output = _foobar_guest_exec(vmid, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "FooBar Samba shared homes configured.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else "samba homes configured")
+
+
+def _run_foobar_service_identity_portal(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, _, users = _foobar_identity_values(values)
+    user_labels = ", ".join(users)
+    command = (
+        "set -e; "
+        "install -d -m 0755 /var/www/html/phpldapadmin; "
+        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin placeholder are provisioned.</p><p>Users: {user_labels}</p>' > /var/www/html/index.html; "
+        "printf '%s\\n' '<!doctype html><title>phpLDAPadmin</title><h1>FooBar phpLDAPadmin placeholder</h1><p>LDAP admin UI handoff target.</p>' > /var/www/html/phpldapadmin/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        "curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-foobar-identity.html"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=180)
+    _set_stage(run_id, stage_name, "complete", "FooBar identity portal published.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else "identity portal published")
 
 
 def _foobar_app_target_by_role(values: dict, role: str) -> dict:
@@ -8561,8 +8694,20 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_foobar_service_guest_wait(run_id, stage_name)
             continue
 
-        if kind == "foobar-service-identity-provision":
-            _run_foobar_service_identity_provision(run_id, stage_name)
+        if kind == "foobar-service-identity-packages":
+            _run_foobar_service_identity_packages(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-ldap-seed":
+            _run_foobar_service_ldap_seed(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-samba-homes":
+            _run_foobar_service_samba_homes(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-portal":
+            _run_foobar_service_identity_portal(run_id, stage_name)
             continue
 
         if kind == "foobar-service-crm-provision":
