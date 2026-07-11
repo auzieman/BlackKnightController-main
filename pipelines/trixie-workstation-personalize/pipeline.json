@@ -39,12 +39,28 @@
       "timeout_seconds": 60
     },
     {
+      "id": "publish-demo-checkpoints",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "checkpoints": "${dictionary.service_checkpoints}"
+      },
+      "produces": [
+        "desktop-file:foobar-demo-checkpoints",
+        "evidence:foobar-service-urls"
+      ],
+      "timeout_seconds": 180
+    },
+    {
       "id": "install-workstation-packages",
       "action": "proxmox.guest.exec",
       "transport": "bkc-proxmox",
       "risk": "medium",
       "with": {
         "vmid": "${dictionary.target_vmid}",
+        "enabled": "${dictionary.enable_full_personalization}",
         "packages": [
           "${dictionary.desktop_packages}",
           "${dictionary.developer_packages}"

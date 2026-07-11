@@ -44,6 +44,21 @@
       "timeout_seconds": 120
     },
     {
+      "id": "publish-demo-checkpoints",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "checkpoints": "${dictionary.service_checkpoints}"
+      },
+      "produces": [
+        "desktop-file:foobar-demo-checkpoints",
+        "evidence:foobar-service-urls"
+      ],
+      "timeout_seconds": 180
+    },
+    {
       "id": "ensure-chocolatey",
       "action": "ssh.powershell",
       "transport": "bkc-ssh",

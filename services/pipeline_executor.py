@@ -2848,6 +2848,15 @@ WORKFLOW_DEFINITIONS["trixie-workstation-personalize"] = {
             "timeout": 60,
         },
         {
+            "name": "publish-demo-checkpoints",
+            "transport": "internal",
+            "kind": "trixie-personalize-checkpoints",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Publishing FooBar demo checkpoint links on the Trixie desktop.",
+            "complete": "FooBar demo checkpoint links published on Trixie.",
+            "timeout": 180,
+        },
+        {
             "name": "install-workstation-packages",
             "transport": "internal",
             "kind": "trixie-personalize-packages",
@@ -2916,6 +2925,15 @@ WORKFLOW_DEFINITIONS["windows10-workstation-personalize"] = {
             "active": "Verifying installed Windows guest SSH reachability.",
             "complete": "Installed Windows guest is reachable.",
             "timeout": 120,
+        },
+        {
+            "name": "publish-demo-checkpoints",
+            "transport": "internal",
+            "kind": "windows10-personalize-checkpoints",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Publishing FooBar demo checkpoint links on the Windows desktop.",
+            "complete": "FooBar demo checkpoint links published on Windows.",
+            "timeout": 180,
         },
         {
             "name": "ensure-chocolatey",
@@ -7612,14 +7630,39 @@ def _trixie_personalize_context() -> tuple[dict, dict, dict]:
     return _folder_pipeline_context("trixie-workstation-personalize")
 
 
+def _pipeline_value_truthy(values: dict, key: str) -> bool:
+    return str(values.get(key) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _trixie_guest_exec(values: dict, command: str, *, timeout: int = 120) -> str:
     vmid = int(values.get("target_vmid") or 132)
-    remote = f"qm guest exec {vmid} -- /bin/sh -lc {shlex.quote(command)}"
+    host_timeout = max(10, int(timeout) - 5)
+    encoded_command = b64encode(command.encode("utf-8")).decode("ascii")
+    wrapper = f"printf %s {shlex.quote(encoded_command)} | base64 -d | /bin/sh"
+    remote = f"timeout {host_timeout}s qm guest exec {vmid} -- /bin/sh -c {shlex.quote(wrapper)}"
     output = _run_proxmox_ssh_command(remote, timeout=timeout)
     try:
         payload = json.loads(output)
     except json.JSONDecodeError:
         return output
+    pid = payload.get("pid")
+    if pid is not None and "exitcode" not in payload:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status_output = _run_proxmox_ssh_command(
+                f"timeout 10s qm guest exec-status {vmid} {int(pid)}",
+                timeout=15,
+            )
+            try:
+                status = json.loads(status_output)
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"Could not parse guest exec-status for VMID {vmid}: {status_output}") from exc
+            if status.get("exited"):
+                payload = status
+                break
+            time.sleep(2)
+        else:
+            raise PipelineExecutionError(f"guest command on VMID {vmid} did not exit within {timeout} seconds")
     out = str(payload.get("out-data") or "")
     err = str(payload.get("err-data") or "")
     exit_code = int(payload.get("exitcode") or 0)
@@ -7640,8 +7683,70 @@ def _run_trixie_personalize_discover(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie guest ready")
 
 
+def _service_checkpoint_urls(values: dict) -> list[dict]:
+    checkpoints = values.get("service_checkpoints")
+    if not isinstance(checkpoints, list) or not checkpoints:
+        raise PipelineExecutionError("service_checkpoints must be configured for demo checkpoint publishing.")
+    urls = []
+    for raw in checkpoints:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each service checkpoint must be an object.")
+        label = str(raw.get("label") or "").strip()
+        vmid = int(raw.get("vmid") or 0)
+        path = str(raw.get("path") or "/").strip() or "/"
+        if not path.startswith("/"):
+            path = f"/{path}"
+        if not label or not vmid:
+            raise PipelineExecutionError("Each service checkpoint requires label and vmid.")
+        output = _foobar_guest_exec(vmid, "hostname -I | awk '{print $1}'", timeout=60).strip()
+        ip = output.split()[0] if output.split() else ""
+        if not ip:
+            raise PipelineExecutionError(f"Could not resolve IP for service checkpoint {label} VMID {vmid}.")
+        urls.append({"label": label, "vmid": vmid, "ip": ip, "url": f"http://{ip}{path}"})
+    return urls
+
+
+def _checkpoint_text(urls: list[dict]) -> str:
+    lines = [
+        "FooBar Small Office Demo Checkpoints",
+        "",
+        "Use these IP-based URLs from lab workstations; local DNS may not resolve foo.bar names.",
+        "",
+    ]
+    lines.extend(f"{item['label']}: {item['url']}" for item in urls)
+    lines.extend(["", "Generated by BlackKnightController."])
+    return "\n".join(lines)
+
+
+def _run_trixie_personalize_checkpoints(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    urls = _service_checkpoint_urls(values)
+    text = _checkpoint_text(urls)
+    install_user = str(values.get("target_install_user") or "auzieman").strip()
+    quoted_text = shlex.quote(text)
+    command = (
+        "set -e; "
+        f"user={shlex.quote(install_user)}; "
+        "home=$(getent passwd \"$user\" | cut -d: -f6); "
+        "test -n \"$home\"; "
+        "install -d -m 0755 \"$home/Desktop\"; "
+        f"printf '%s\n' {quoted_text} > \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        "chown \"$user:$user\" \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        "cat \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        + " ".join(f"curl -fsS {shlex.quote(item['url'])} >/dev/null;" for item in urls)
+    )
+    output = _trixie_guest_exec(values, command, timeout=180)
+    _store_run_extra(run_id, {"foobar_demo_checkpoints": urls})
+    _set_stage(run_id, stage_name, "complete", "FooBar demo checkpoint links published on Trixie.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else json.dumps(urls, sort_keys=True))
+
+
 def _run_trixie_personalize_packages(run_id: str, stage_name: str) -> None:
     _, _, values = _trixie_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization"):
+        _set_stage(run_id, stage_name, "complete", "Skipped full Trixie package profile because enable_full_personalization is false.")
+        append_event(run_id, "info", stage_name, "Lightweight demo checkpoint mode is active.")
+        return
     packages = _flatten_package_values(values.get("desktop_packages"), values.get("developer_packages"))
     if not packages:
         raise PipelineExecutionError("No Trixie workstation packages are configured.")
@@ -7658,7 +7763,7 @@ def _run_trixie_personalize_packages(run_id: str, stage_name: str) -> None:
 
 def _run_trixie_personalize_vscode(run_id: str, stage_name: str) -> None:
     _, _, values = _trixie_personalize_context()
-    if str(values.get("enable_vscode")).strip().lower() != "true":
+    if not _pipeline_value_truthy(values, "enable_full_personalization") or str(values.get("enable_vscode")).strip().lower() != "true":
         _set_stage(run_id, stage_name, "complete", "Skipped VS Code because enable_vscode is false.")
         append_event(run_id, "info", stage_name, "VS Code install remains opt-in.")
         return
@@ -7678,7 +7783,7 @@ def _run_trixie_personalize_vscode(run_id: str, stage_name: str) -> None:
 
 def _run_trixie_personalize_rustdesk(run_id: str, stage_name: str) -> None:
     _, _, values = _trixie_personalize_context()
-    enabled = str(values.get("enable_rustdesk")).strip().lower() == "true"
+    enabled = _pipeline_value_truthy(values, "enable_full_personalization") and str(values.get("enable_rustdesk")).strip().lower() == "true"
     url = str(values.get("rustdesk_deb_url") or "").strip()
     if not enabled or not url:
         _set_stage(run_id, stage_name, "complete", "Skipped RustDesk because enable_rustdesk is false or rustdesk_deb_url is blank.")
@@ -7747,9 +7852,30 @@ def _run_windows10_personalize_discover(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-1600:] if output else "windows ssh ready")
 
 
+def _run_windows10_personalize_checkpoints(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    urls = _service_checkpoint_urls(values)
+    text = _checkpoint_text(urls)
+    ps_urls = "@(" + ",".join("'" + item["url"].replace("'", "''") + "'" for item in urls) + ")"
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$desktop = [Environment]::GetFolderPath('Desktop'); "
+        "if (-not $desktop) { $desktop = Join-Path $env:USERPROFILE 'Desktop' }; "
+        "New-Item -ItemType Directory -Force -Path $desktop | Out-Null; "
+        f"@'\n{text}\n'@ | Set-Content -Encoding UTF8 -Path (Join-Path $desktop 'FooBar Demo Checkpoints.txt'); "
+        f"$urls = {ps_urls}; "
+        "foreach ($url in $urls) { Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 15 | Out-Null }; "
+        "Get-Content (Join-Path $desktop 'FooBar Demo Checkpoints.txt')"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=180)
+    _store_run_extra(run_id, {"foobar_demo_checkpoints": urls})
+    _set_stage(run_id, stage_name, "complete", "FooBar demo checkpoint links published on Windows.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else json.dumps(urls, sort_keys=True))
+
+
 def _run_windows10_personalize_chocolatey(run_id: str, stage_name: str) -> None:
     _, _, values = _windows10_personalize_context()
-    if str(values.get("enable_chocolatey")).strip().lower() != "true":
+    if not _pipeline_value_truthy(values, "enable_full_personalization") or str(values.get("enable_chocolatey")).strip().lower() != "true":
         _set_stage(run_id, stage_name, "complete", "Skipped Chocolatey because enable_chocolatey is false.")
         append_event(run_id, "info", stage_name, "Chocolatey remains opt-in.")
         return
@@ -7769,6 +7895,10 @@ def _run_windows10_personalize_chocolatey(run_id: str, stage_name: str) -> None:
 
 def _run_windows10_personalize_packages(run_id: str, stage_name: str) -> None:
     _, _, values = _windows10_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization"):
+        _set_stage(run_id, stage_name, "complete", "Skipped full Windows package profile because enable_full_personalization is false.")
+        append_event(run_id, "info", stage_name, "Lightweight demo checkpoint mode is active.")
+        return
     packages = _flatten_package_values(values.get("package_names"))
     if not packages:
         raise PipelineExecutionError("No Windows workstation packages are configured.")
@@ -7785,13 +7915,21 @@ def _run_windows10_personalize_packages(run_id: str, stage_name: str) -> None:
 
 def _run_windows10_personalize_verify(run_id: str, stage_name: str) -> None:
     _, _, values = _windows10_personalize_context()
-    script = (
-        "$ErrorActionPreference = 'Stop'; "
-        "hostname; "
-        "choco list --local-only; "
-        "Get-Service sshd | Select-Object Name,Status,StartType | Format-List; "
-        "Get-Command code -ErrorAction SilentlyContinue | Select-Object Source"
-    )
+    if _pipeline_value_truthy(values, "enable_full_personalization"):
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            "hostname; "
+            "choco list --local-only; "
+            "Get-Service sshd | Select-Object Name,Status,StartType | Format-List; "
+            "Get-Command code -ErrorAction SilentlyContinue | Select-Object Source"
+        )
+    else:
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            "hostname; "
+            "Test-Path (Join-Path ([Environment]::GetFolderPath('Desktop')) 'FooBar Demo Checkpoints.txt'); "
+            "Get-Service sshd | Select-Object Name,Status,StartType | Format-List"
+        )
     output = _windows10_personalize_powershell(values, script, timeout=120)
     _set_stage(run_id, stage_name, "complete", "Windows workstation personality verified.")
     append_event(run_id, "info", stage_name, output[-2400:] if output else "windows workstation verified")
@@ -8730,6 +8868,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_trixie_personalize_discover(run_id, stage_name)
             continue
 
+        if kind == "trixie-personalize-checkpoints":
+            _run_trixie_personalize_checkpoints(run_id, stage_name)
+            continue
+
         if kind == "trixie-personalize-packages":
             _run_trixie_personalize_packages(run_id, stage_name)
             continue
@@ -8752,6 +8894,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "windows10-personalize-discover":
             _run_windows10_personalize_discover(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-checkpoints":
+            _run_windows10_personalize_checkpoints(run_id, stage_name)
             continue
 
         if kind == "windows10-personalize-chocolatey":

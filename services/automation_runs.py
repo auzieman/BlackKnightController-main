@@ -360,6 +360,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     if normalized == "trixie-workstation-personalize":
         return [
             "discover-installed-trixie",
+            "publish-demo-checkpoints",
             "install-workstation-packages",
             "install-vscode-if-enabled",
             "install-rustdesk-if-configured",
@@ -370,6 +371,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     if normalized == "windows10-workstation-personalize":
         return [
             "discover-installed-windows",
+            "publish-demo-checkpoints",
             "ensure-chocolatey",
             "install-workstation-packages",
             "verify-windows-personality",

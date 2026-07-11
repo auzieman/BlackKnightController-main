@@ -22,7 +22,25 @@
   ],
   "enable_vscode": true,
   "enable_rustdesk": false,
+  "enable_full_personalization": false,
   "rustdesk_deb_url": "",
   "graphical_target": "graphical.target",
+  "service_checkpoints": [
+    {
+      "label": "FooBar Identity",
+      "vmid": 139,
+      "path": "/phpldapadmin/"
+    },
+    {
+      "label": "FooBar CRM",
+      "vmid": 137,
+      "path": "/suitecrm/"
+    },
+    {
+      "label": "FooBar Tickets",
+      "vmid": 138,
+      "path": "/kanboard/"
+    }
+  ],
   "notes": "Post-install personalization for VMID 132. Uses Proxmox guest agent so it can run before management networking is finalized."
 }

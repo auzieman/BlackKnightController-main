@@ -766,6 +766,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     ]
     assert [stage["name"] for stage in trixie_personalize_stages] == [
         "discover-installed-trixie",
+        "publish-demo-checkpoints",
         "install-workstation-packages",
         "install-vscode-if-enabled",
         "install-rustdesk-if-configured",
@@ -775,6 +776,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     ]
     assert [stage["name"] for stage in windows_personalize_stages] == [
         "discover-installed-windows",
+        "publish-demo-checkpoints",
         "ensure-chocolatey",
         "install-workstation-packages",
         "verify-windows-personality",
@@ -828,6 +830,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     assert {stage["kind"] for stage in trixie_personalize_stages} == {
         "folder-pipeline-review",
         "trixie-personalize-discover",
+        "trixie-personalize-checkpoints",
         "trixie-personalize-packages",
         "trixie-personalize-vscode",
         "trixie-personalize-rustdesk",
@@ -837,6 +840,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     assert {stage["kind"] for stage in windows_personalize_stages} == {
         "folder-pipeline-review",
         "windows10-personalize-discover",
+        "windows10-personalize-checkpoints",
         "windows10-personalize-chocolatey",
         "windows10-personalize-packages",
         "windows10-personalize-verify",
