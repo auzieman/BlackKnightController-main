@@ -7,11 +7,12 @@ VM from the prepared Trixie source, then provisions the current service layer:
 
 - `foobar-id-01`: OpenLDAP, Samba homes, and a phpLDAPadmin placeholder.
 - `foobar-crm-01`: Apache/PHP/MariaDB with a SuiteCRM placeholder endpoint.
-- `foobar-tickets-01`: Apache/PHP/SQLite with a Kanboard placeholder endpoint.
+- `foobar-tickets-01`: Apache/PHP/SQLite with a real Kanboard service.
 
-The placeholders are intentional for the first demo loop. They give BKC clear
-service targets, health checks, and relationships without blocking the recording
-on full PHP application installers.
+SuiteCRM remains intentionally lightweight for the first demo loop. Kanboard is
+small enough to install as a real service and gives the helpdesk workstation a
+credible ticket board target without adding a long application configuration
+loop.
 
 ## Links
 
@@ -40,7 +41,7 @@ on full PHP application installers.
   `http://192.168.1.244/phpldapadmin/`
 - CRM placeholder:
   `http://192.168.1.59/suitecrm/`
-- Ticket placeholder:
+- Kanboard:
   `http://192.168.1.133/kanboard/`
 - Validation evidence:
   `validate-foobar-services` in run `ea6853ca-a4fd-477d-ad67-28150368ae83`

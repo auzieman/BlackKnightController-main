@@ -197,7 +197,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "configure-samba-homes",
             "publish-identity-portal",
             "provision-crm-mock",
-            "provision-ticket-mock",
+            "provision-kanboard-service",
             "validate-foobar-services",
             "record-service-relationships",
         ]

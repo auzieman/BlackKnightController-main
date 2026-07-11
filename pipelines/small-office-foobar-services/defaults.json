@@ -13,6 +13,7 @@
   "default_password": "changeme123",
   "ldap_base_dn": "dc=foo,dc=bar",
   "ldap_admin_dn": "cn=admin,dc=foo,dc=bar",
+  "kanboard_version": "1.2.52",
   "identity_vm": {
     "role": "identity-storage",
     "vmid": 139,

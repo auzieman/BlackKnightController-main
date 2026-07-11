@@ -203,16 +203,18 @@
       "timeout_seconds": 1800
     },
     {
-      "id": "provision-ticket-mock",
-      "action": "debian.intranet.tickets.configure",
+      "id": "provision-kanboard-service",
+      "action": "debian.intranet.kanboard.install",
       "transport": "bkc-proxmox",
       "risk": "medium",
       "with": {
         "target": "node:vm:foobar-tickets-01",
-        "application": "kanboard"
+        "application": "kanboard",
+        "version": "${dictionary.kanboard_version}"
       },
       "produces": [
-        "service:kanboard-mock"
+        "service:kanboard",
+        "application:kanboard"
       ],
       "timeout_seconds": 1800
     },
@@ -285,5 +287,5 @@
       "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"
     }
   ],
-  "notes": "This lane intentionally uses lightweight CRM and ticket mock endpoints first. Full SuiteCRM/Kanboard installers can replace those stages once the service topology is repeatable."
+  "notes": "This lane keeps SuiteCRM lightweight for the first demo loop and installs a real Kanboard service for the helpdesk board."
 }

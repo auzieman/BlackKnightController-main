@@ -3344,12 +3344,12 @@ WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
             "timeout": 1800,
         },
         {
-            "name": "provision-ticket-mock",
+            "name": "provision-kanboard-service",
             "transport": "bkc-proxmox",
-            "kind": "foobar-service-tickets-provision",
+            "kind": "foobar-service-kanboard-provision",
             "pipeline_id": "small-office-foobar-services",
-            "active": "Provisioning the foo.bar ticket board endpoint.",
-            "complete": "FooBar ticket board endpoint provisioned.",
+            "active": "Installing the foo.bar Kanboard ticket service.",
+            "complete": "FooBar Kanboard ticket service installed.",
             "timeout": 1800,
         },
         {
@@ -8728,6 +8728,45 @@ def _run_foobar_service_app_provision(run_id: str, stage_name: str, *, role: str
     append_event(run_id, "info", stage_name, output[-2400:] if output else f"{app} endpoint provisioned")
 
 
+def _run_foobar_service_kanboard(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, "tickets")
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    version = str(values.get("kanboard_version") or "1.2.52").strip().lstrip("v")
+    if not version:
+        raise PipelineExecutionError("kanboard_version is required.")
+    archive_url = f"https://github.com/kanboard/kanboard/archive/refs/tags/v{version}.tar.gz"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y "
+        "apache2 libapache2-mod-php php php-cli php-sqlite3 php-mbstring php-xml php-gd php-curl php-zip "
+        "sqlite3 curl wget ca-certificates tar; "
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; "
+        f"wget -qO \"$tmp/kanboard.tar.gz\" {shlex.quote(archive_url)}; "
+        "rm -rf /var/www/html/kanboard; "
+        "install -d -m 0755 /var/www/html/kanboard; "
+        "tar -xzf \"$tmp/kanboard.tar.gz\" -C /var/www/html/kanboard --strip-components=1; "
+        "install -d -m 0775 /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "chown -R www-data:www-data /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "find /var/www/html/kanboard -type d -exec chmod 0755 {} +; "
+        "find /var/www/html/kanboard -type f -exec chmod 0644 {} +; "
+        "chmod -R u+rwX,g+rwX /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "printf '%s\\n' '<!doctype html><title>FooBar Tickets</title><h1>FooBar Tickets</h1><p>Kanboard is installed at <a href=\"/kanboard/\">/kanboard/</a>.</p><p>Initial login: admin / admin</p>' > /var/www/html/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        "curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; "
+        "grep -Ei 'Kanboard|Username|Password' /tmp/bkc-validate-kanboard.html | head -n 5; "
+        f"printf '%s\\n' 'kanboard_version={version}'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar Kanboard v{version} installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"kanboard v{version} installed")
+
+
 def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
     _, _, values = _foobar_services_context()
     identity = _foobar_service_identity_target(values)
@@ -8744,7 +8783,7 @@ def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
         ),
         (
             tickets,
-            "set -e; systemctl is-active apache2; curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; head -n 2 /tmp/bkc-validate-kanboard.html",
+            "set -e; systemctl is-active apache2; test -d /var/www/html/kanboard/data; curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; grep -Ei 'Kanboard|Username|Password' /tmp/bkc-validate-kanboard.html | head -n 5",
         ),
     ]
     evidence = []
@@ -8958,8 +8997,8 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_foobar_service_app_provision(run_id, stage_name, role="crm")
             continue
 
-        if kind == "foobar-service-tickets-provision":
-            _run_foobar_service_app_provision(run_id, stage_name, role="tickets")
+        if kind == "foobar-service-kanboard-provision":
+            _run_foobar_service_kanboard(run_id, stage_name)
             continue
 
         if kind == "foobar-service-validate":

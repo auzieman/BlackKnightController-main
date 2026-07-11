@@ -112,7 +112,7 @@ def test_small_office_foobar_services_pipeline_is_runnable():
         "configure-samba-homes",
         "publish-identity-portal",
         "provision-crm-mock",
-        "provision-ticket-mock",
+        "provision-kanboard-service",
         "validate-foobar-services",
         "record-service-relationships",
     ]
@@ -126,7 +126,7 @@ def test_small_office_foobar_services_pipeline_is_runnable():
         "configure-samba-homes",
         "publish-identity-portal",
         "provision-crm-mock",
-        "provision-ticket-mock",
+        "provision-kanboard-service",
         "validate-foobar-services",
         "record-service-relationships",
     ]
