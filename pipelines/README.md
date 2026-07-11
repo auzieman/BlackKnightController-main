@@ -45,6 +45,14 @@ See `docs/pipeline-folder-layout.md` for the contract.
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-app-vms`
 - Service provisioning lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
+- Clean service provisioning run:
+  `http://swarm1.lab.auzietek.com:5000/pipelines/83892bb0-0979-40b3-a2b0-1b0f7476e487`
+- Identity portal checkpoint:
+  `http://foobar-id-01.lab.foo.bar/phpldapadmin/`
+- CRM checkpoint:
+  `http://foobar-crm-01.lab.foo.bar/suitecrm/`
+- Ticket checkpoint:
+  `http://foobar-tickets-01.lab.foo.bar/kanboard/`
 - Trixie PXE validation run:
   `http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463`
 - Windows PXE validation run:
