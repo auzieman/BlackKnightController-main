@@ -7697,7 +7697,7 @@ def _service_checkpoint_urls(values: dict) -> list[dict]:
     if not isinstance(checkpoints, list) or not checkpoints:
         raise PipelineExecutionError("service_checkpoints must be configured for demo checkpoint publishing.")
     preferred_prefix = str(values.get("demo_lan_prefix") or "192.168.1.").strip()
-    require_demo_lan = _pipeline_value_truthy(values.get("require_demo_lan_urls", True))
+    require_demo_lan = _pipeline_value_truthy(values, "require_demo_lan_urls")
     urls = []
     for raw in checkpoints:
         if not isinstance(raw, dict):
@@ -7862,6 +7862,9 @@ def _windows10_personalize_powershell(values: dict, script: str, *, timeout: int
 
 def _run_windows10_personalize_discover(run_id: str, stage_name: str) -> None:
     _, _, values = _windows10_personalize_context()
+    host = str(values.get("target_host") or "").strip()
+    user = str(values.get("target_admin_user") or "depadmin").strip()
+    append_event(run_id, "info", stage_name, f"Resolved Windows personalization target {user}@{host}.")
     output = _windows10_personalize_powershell(
         values,
         "hostname; Get-Service sshd | Select-Object Name,Status,StartType | Format-List",
