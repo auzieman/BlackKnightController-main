@@ -7,6 +7,8 @@
   "provisioning_network_node_id": "node:network:lab-provisioning",
   "identity_node_id": "node:vm:foobar-id-01",
   "crm_node_id": "node:vm:foobar-crm-01",
+  "tickets_node_id": "node:vm:foobar-tickets-01",
+  "app_vm_pipeline": "small-office-foobar-app-vms",
   "linux_profile_pipeline": "ns1-trixie-pxe-smoke",
   "linux_personalize_pipeline": "trixie-workstation-personalize",
   "windows_profile_pipeline": "windows10-pxe-smoke",
@@ -60,7 +62,19 @@
       "services": [
         "http",
         "php",
-        "sqlite"
+        "mariadb",
+        "suitecrm"
+      ]
+    },
+    "tickets": {
+      "id": "node:vm:foobar-tickets-01",
+      "hostname": "foobar-tickets-01.lab.foo.bar",
+      "role": "ticket-board",
+      "services": [
+        "http",
+        "php",
+        "sqlite",
+        "kanboard"
       ]
     },
     "workstations": [

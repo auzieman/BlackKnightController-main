@@ -26,6 +26,7 @@
     "tenant": "tenant:foobar",
     "identity": "node:vm:foobar-id-01",
     "crm": "node:vm:foobar-crm-01",
+    "tickets": "node:vm:foobar-tickets-01",
     "windows_helpdesk_01": "node:vm:foobar-helpdesk-win-01",
     "windows_helpdesk_02": "node:vm:foobar-helpdesk-win-02",
     "linux_dev_01": "node:vm:foobar-dev-linux-01",
@@ -122,8 +123,15 @@
       "transport": "internal",
       "risk": "low",
       "with": {
-        "node": "${dictionary.crm_node_id}",
-        "services": "${dictionary.nodes.crm.services}",
+        "pipeline_id": "${dictionary.app_vm_pipeline}",
+        "nodes": [
+          "${dictionary.crm_node_id}",
+          "${dictionary.tickets_node_id}"
+        ],
+        "services": [
+          "${dictionary.nodes.crm.services}",
+          "${dictionary.nodes.tickets.services}"
+        ],
         "users": [
           "joe.user",
           "jill.user"
@@ -131,6 +139,7 @@
       },
       "produces": [
         "event:crm.plan_declared",
+        "event:tickets.plan_declared",
         "artifact:crm-health-check"
       ],
       "timeout_seconds": 30

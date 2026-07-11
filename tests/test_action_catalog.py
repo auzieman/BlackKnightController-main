@@ -47,6 +47,8 @@ def test_small_office_foobar_recipe_is_repo_backed():
     assert pipeline["source_type"] == "repo-folder"
     assert workflow_is_supported("small-office-foobar-reference")
     assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
     assert pipeline["targets"]["windows_helpdesk_01"] == "node:vm:foobar-helpdesk-win-01"
     assert pipeline["targets"]["linux_dev_01"] == "node:vm:foobar-dev-linux-01"
     assert "foo.bar" in pipeline["tags"]
@@ -60,6 +62,34 @@ def test_small_office_foobar_recipe_is_repo_backed():
         "validate-small-office",
         "render-demo-lifecycle",
     ]
+
+
+def test_small_office_foobar_app_vm_pipeline_is_runnable():
+    pipeline = pipeline_by_id("small-office-foobar-app-vms")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-app-vms")
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
+    assert "kanboard" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-app-vm-plan",
+        "select-trixie-source",
+        "clone-app-vms",
+        "boot-app-vms",
+        "record-app-relationships",
+    ]
+    assert default_stages("small-office-foobar-app-vms") == [
+        "load-app-vm-plan",
+        "select-trixie-source",
+        "clone-app-vms",
+        "boot-app-vms",
+        "record-app-relationships",
+    ]
+    assert [stage["name"] for stage in workflow_stage_definitions("small-office-foobar-app-vms")] == default_stages(
+        "small-office-foobar-app-vms"
+    )
 
 
 def test_small_office_foobar_reset_is_safe_by_default():

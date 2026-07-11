@@ -1,0 +1,39 @@
+{
+  "tenant_slug": "foobar",
+  "domain": "foo.bar",
+  "source_template_node": "pve",
+  "source_template_vmid": 132,
+  "source_template_name": "trixie-smoke-132",
+  "enable_replace": true,
+  "target_vms": [
+    {
+      "role": "crm",
+      "vmid": 137,
+      "name": "foobar-crm-01",
+      "node_id": "node:vm:foobar-crm-01",
+      "hostname": "foobar-crm-01.lab.foo.bar",
+      "application": "suitecrm",
+      "services": [
+        "apache",
+        "php",
+        "mariadb",
+        "suitecrm"
+      ]
+    },
+    {
+      "role": "tickets",
+      "vmid": 138,
+      "name": "foobar-tickets-01",
+      "node_id": "node:vm:foobar-tickets-01",
+      "hostname": "foobar-tickets-01.lab.foo.bar",
+      "application": "kanboard",
+      "services": [
+        "apache",
+        "php",
+        "sqlite",
+        "kanboard"
+      ]
+    }
+  ],
+  "notes": "Clone the first foo.bar business application VMs from the prepared Trixie base before SuiteCRM and Kanboard package installation is layered on."
+}

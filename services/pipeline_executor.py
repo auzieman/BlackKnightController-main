@@ -3178,6 +3178,59 @@ WORKFLOW_DEFINITIONS["small-office-foobar-reset"] = {
     "complete_message": "Small Office FooBar reset review completed.",
 }
 
+WORKFLOW_DEFINITIONS["small-office-foobar-app-vms"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-app-vm-plan",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Reviewing foo.bar application VM plan.",
+            "complete": "FooBar application VM plan reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "select-trixie-source",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-source-select",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Selecting the prepared Trixie source VM.",
+            "complete": "Prepared Trixie source VM selected.",
+            "timeout": 60,
+        },
+        {
+            "name": "clone-app-vms",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-vm-clone",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Cloning SuiteCRM and Kanboard VM shells from Trixie.",
+            "complete": "SuiteCRM and Kanboard VM shells cloned.",
+            "timeout": 2400,
+        },
+        {
+            "name": "boot-app-vms",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-vm-boot",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Starting SuiteCRM and Kanboard VM shells.",
+            "complete": "SuiteCRM and Kanboard VM shells are running.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-app-relationships",
+            "transport": "internal",
+            "kind": "foobar-app-relationships",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Recording foo.bar application VM relationships.",
+            "complete": "FooBar application VM relationships recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Small Office FooBar application VM pipeline completed.",
+}
+
 
 def workflow_is_supported(workflow: str) -> bool:
     return (workflow or "").strip().lower() in WORKFLOW_DEFINITIONS
@@ -7749,6 +7802,200 @@ def _run_windows10_winpe_publish(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-2000:] if output else "winpe publish checked")
 
 
+def _foobar_app_vm_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("small-office-foobar-app-vms")
+
+
+def _foobar_app_targets(values: dict) -> list[dict]:
+    targets = values.get("target_vms")
+    if not isinstance(targets, list) or not targets:
+        raise PipelineExecutionError("small-office-foobar-app-vms requires target_vms in defaults.json.")
+    normalized = []
+    for raw in targets:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each foo.bar app VM target must be an object.")
+        vmid = int(raw.get("vmid") or 0)
+        name = str(raw.get("name") or "").strip()
+        if not vmid or not name:
+            raise PipelineExecutionError("Each foo.bar app VM target requires vmid and name.")
+        target = dict(raw)
+        target["vmid"] = vmid
+        target["name"] = name
+        normalized.append(target)
+    return normalized
+
+
+def _find_proxmox_vm_node(client: ProxmoxClient, vmid: int, preferred_node: str = "") -> tuple[str, dict | None]:
+    preferred = str(preferred_node or "").strip()
+    if preferred:
+        try:
+            return preferred, client.vm_config(preferred, vmid)
+        except Exception:
+            pass
+    for node in client.nodes():
+        node_name = str(node.get("node") or "").strip()
+        if not node_name:
+            continue
+        try:
+            return node_name, client.vm_config(node_name, vmid)
+        except Exception:
+            continue
+    return preferred, None
+
+
+def _run_foobar_app_source_select(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_app_vm_context()
+    client = ProxmoxClient(load_proxmox_config())
+    source_vmid = int(values.get("source_template_vmid") or 0)
+    source_node_hint = str(values.get("source_template_node") or "").strip()
+    expected_name = str(values.get("source_template_name") or "").strip()
+    if not source_vmid:
+        raise PipelineExecutionError("source_template_vmid is required.")
+
+    source_node, config = _find_proxmox_vm_node(client, source_vmid, source_node_hint)
+    if not config:
+        raise PipelineExecutionError(f"Trixie source VMID {source_vmid} was not found in Proxmox.")
+    actual_name = str(config.get("name") or "").strip()
+    if expected_name and actual_name and actual_name != expected_name:
+        raise PipelineExecutionError(
+            f"Refusing to use VMID {source_vmid}: expected {expected_name!r}, found {actual_name!r}."
+        )
+    status = client.vm_status(source_node, source_vmid)
+    is_template = str(config.get("template") or "0") == "1"
+    current_status = str(status.get("status") or "").strip().lower()
+    if current_status == "running" and not is_template:
+        raise PipelineExecutionError(
+            f"Source VMID {source_vmid} is running. Shut it down or convert it to a template before cloning app VMs."
+        )
+
+    _store_run_extra(
+        run_id,
+        {
+            "foobar_app_source": {
+                "node": source_node,
+                "vmid": source_vmid,
+                "name": actual_name or expected_name,
+                "status": current_status,
+                "template": is_template,
+            }
+        },
+    )
+    _set_stage(run_id, stage_name, "complete", f"Selected Trixie source VMID {source_vmid} on {source_node}.")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        json.dumps({"source_node": source_node, "vmid": source_vmid, "status": current_status, "template": is_template}, sort_keys=True),
+    )
+
+
+def _run_foobar_app_vm_clone(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_app_vm_context()
+    client = ProxmoxClient(load_proxmox_config())
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    source = dict(extra.get("foobar_app_source") or {})
+    source_node = str(source.get("node") or values.get("source_template_node") or "").strip()
+    source_vmid = int(source.get("vmid") or values.get("source_template_vmid") or 0)
+    if not source_node or not source_vmid:
+        raise PipelineExecutionError("FooBar app VM source metadata is missing. Re-run select-trixie-source.")
+    targets = _foobar_app_targets(values)
+    enable_replace = _truthy(values.get("enable_replace"))
+    cloned = []
+
+    for target in targets:
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        existing_node, existing_config = _find_proxmox_vm_node(client, vmid, source_node)
+        if existing_config:
+            existing_name = str(existing_config.get("name") or "").strip()
+            if existing_name != name:
+                raise PipelineExecutionError(
+                    f"Refusing to replace VMID {vmid}: expected {name!r}, found {existing_name!r}."
+                )
+            if not enable_replace:
+                cloned.append({"node": existing_node or source_node, "vmid": vmid, "name": name, "status": "existing"})
+                continue
+            status = client.vm_status(existing_node or source_node, vmid)
+            if str(status.get("status") or "").strip().lower() == "running":
+                stop_upid = client.stop_vm(existing_node or source_node, vmid, timeout=60)
+                client.wait_for_task(existing_node or source_node, str(stop_upid), timeout=180)
+            destroy_upid = client.destroy_vm(existing_node or source_node, vmid, purge=True)
+            client.wait_for_task(existing_node or source_node, str(destroy_upid), timeout=300)
+
+        upid = client.clone_vm(
+            node=source_node,
+            source_vmid=source_vmid,
+            new_vmid=vmid,
+            name=name,
+            full=True,
+        )
+        task = client.wait_for_task(source_node, str(upid), timeout=2400)
+        exit_status = str(task.get("exitstatus") or "")
+        if exit_status and exit_status != "OK":
+            raise PipelineExecutionError(f"Proxmox clone failed for {name}: {exit_status}")
+        cloned.append(
+            {
+                "node": source_node,
+                "vmid": vmid,
+                "name": name,
+                "role": target.get("role"),
+                "application": target.get("application"),
+                "status": "cloned",
+                "upid": str(upid),
+            }
+        )
+
+    _store_run_extra(run_id, {"foobar_app_vms": cloned})
+    _set_stage(run_id, stage_name, "complete", "FooBar SuiteCRM and Kanboard VM shells cloned.")
+    append_event(run_id, "info", stage_name, json.dumps(cloned, sort_keys=True))
+
+
+def _run_foobar_app_vm_boot(run_id: str, stage_name: str) -> None:
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    targets = list(extra.get("foobar_app_vms") or [])
+    if not targets:
+        _, _, values = _foobar_app_vm_context()
+        source_node = str((extra.get("foobar_app_source") or {}).get("node") or values.get("source_template_node") or "").strip()
+        targets = [{"node": source_node, **target} for target in _foobar_app_targets(values)]
+    client = ProxmoxClient(load_proxmox_config())
+    booted = []
+    for target in targets:
+        node = str(target.get("node") or "").strip()
+        vmid = int(target.get("vmid") or 0)
+        name = str(target.get("name") or f"vm-{vmid}").strip()
+        if not node or not vmid:
+            raise PipelineExecutionError("FooBar app VM boot target metadata is incomplete.")
+        status = client.vm_status(node, vmid)
+        if str(status.get("status") or "").strip().lower() != "running":
+            upid = client.start_vm(node, vmid)
+            task = client.wait_for_task(node, str(upid), timeout=180)
+            exit_status = str(task.get("exitstatus") or "")
+            if exit_status and exit_status != "OK":
+                raise PipelineExecutionError(f"Proxmox start failed for {name}: {exit_status}")
+        running = client.wait_for_vm_status(node, vmid, "running", timeout=120)
+        booted.append({"node": node, "vmid": vmid, "name": name, "status": running.get("status", "running")})
+    _store_run_extra(run_id, {"foobar_app_vms_running": booted})
+    _set_stage(run_id, stage_name, "complete", "FooBar application VM shells are running.")
+    append_event(run_id, "info", stage_name, json.dumps(booted, sort_keys=True))
+
+
+def _run_foobar_app_relationships(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _foobar_app_vm_context()
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    payload = {
+        "pipeline_id": pipeline.get("id"),
+        "tenant": values.get("tenant_slug"),
+        "source": extra.get("foobar_app_source"),
+        "vms": extra.get("foobar_app_vms_running") or extra.get("foobar_app_vms") or _foobar_app_targets(values),
+        "handoff": "small-office-foobar-app-install",
+    }
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar SuiteCRM and Kanboard VM relationships recorded.")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -7887,6 +8134,22 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "windows10-post-install-ssh":
             _run_windows10_post_install_ssh(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-source-select":
+            _run_foobar_app_source_select(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-vm-clone":
+            _run_foobar_app_vm_clone(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-vm-boot":
+            _run_foobar_app_vm_boot(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-relationships":
+            _run_foobar_app_relationships(run_id, stage_name)
             continue
 
         if kind == "trixie-personalize-discover":

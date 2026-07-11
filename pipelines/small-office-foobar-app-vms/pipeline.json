@@ -1,0 +1,171 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "small-office-foobar-app-vms",
+  "name": "Small Office FooBar App VMs",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "workflow": "small-office-foobar-app-vms",
+  "summary": "Clone the foo.bar SuiteCRM and Kanboard application VM shells from the prepared Debian Trixie base.",
+  "tags": [
+    "bkc",
+    "small-office",
+    "foobar",
+    "foo.bar",
+    "trixie",
+    "crm",
+    "kanboard",
+    "proxmox",
+    "runnable"
+  ],
+  "targets": {
+    "tenant": "tenant:foobar",
+    "crm": "node:vm:foobar-crm-01",
+    "tickets": "node:vm:foobar-tickets-01",
+    "source_template": "node:vm:trixie-smoke-132"
+  },
+  "inputs": {
+    "source_template_vmid": {
+      "required": true,
+      "default": 132
+    },
+    "enable_replace": {
+      "required": false,
+      "default": true
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-installed-trixie-source",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-trixie-pxe-smoke",
+        "source_vmid": "${dictionary.source_template_vmid}"
+      }
+    },
+    {
+      "id": "guard-target-vmids",
+      "kind": "vmid.boundary",
+      "with": {
+        "enable_replace": "${inputs.enable_replace}",
+        "target_vms": "${dictionary.target_vms}",
+        "refuse_name_mismatch": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-app-vm-plan",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${dictionary.tenant_slug}",
+        "domain": "${dictionary.domain}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:foobar_app_vm_plan_loaded",
+        "fact:foobar_app_vms"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "select-trixie-source",
+      "action": "proxmox.vm.source.select",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "node": "${dictionary.source_template_node}",
+        "vmid": "${inputs.source_template_vmid}",
+        "expected_name": "${dictionary.source_template_name}"
+      },
+      "produces": [
+        "fact:trixie_source_selected"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "clone-app-vms",
+      "action": "proxmox.vm.clone.batch",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "source_vmid": "${inputs.source_template_vmid}",
+        "targets": "${dictionary.target_vms}",
+        "enable_replace": "${inputs.enable_replace}"
+      },
+      "produces": [
+        "node:vm:foobar-crm-01",
+        "node:vm:foobar-tickets-01"
+      ],
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "boot-app-vms",
+      "action": "proxmox.vm.start.batch",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "targets": "${dictionary.target_vms}"
+      },
+      "produces": [
+        "fact:foobar_app_vms_running"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "record-app-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source": "tenant:foobar",
+            "target": "node:vm:foobar-crm-01",
+            "type": "contains"
+          },
+          {
+            "source": "tenant:foobar",
+            "target": "node:vm:foobar-tickets-01",
+            "type": "contains"
+          },
+          {
+            "source": "node:vm:trixie-smoke-132",
+            "target": "node:vm:foobar-crm-01",
+            "type": "clones"
+          },
+          {
+            "source": "node:vm:trixie-smoke-132",
+            "target": "node:vm:foobar-tickets-01",
+            "type": "clones"
+          },
+          {
+            "source": "node:vm:foobar-crm-01",
+            "target": "app:suitecrm",
+            "type": "will_host"
+          },
+          {
+            "source": "node:vm:foobar-tickets-01",
+            "target": "app:kanboard",
+            "type": "will_host"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:foobar-app-vms",
+        "handoff:small-office-foobar-app-install"
+      ],
+      "timeout_seconds": 30
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "Small Office Lifecycle",
+      "summary": "Show the foo.bar application VM shells before SuiteCRM and Kanboard package installation.",
+      "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"
+    }
+  ],
+  "notes": "This lane intentionally creates VM shells only. SuiteCRM and Kanboard installation should be a follow-up app provisioning lane once clone and boot are repeatable."
+}

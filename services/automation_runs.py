@@ -178,6 +178,14 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "plan-evidence-archive",
             "verify-reset-boundary",
         ]
+    if normalized == "small-office-foobar-app-vms":
+        return [
+            "load-app-vm-plan",
+            "select-trixie-source",
+            "clone-app-vms",
+            "boot-app-vms",
+            "record-app-relationships",
+        ]
     if normalized == "demo-swarm-image-registry":
         return [
             "storage-ready",
