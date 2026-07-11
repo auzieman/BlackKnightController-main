@@ -31,3 +31,12 @@ The recipe should produce evidence that is useful on video:
   access.
 - Each stage emits a normalized lifecycle event for Grafana or the Resource
   Graph.
+
+## Recording Links
+
+- Grafana lifecycle dashboard:
+  `http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s`
+- Grafana lifecycle kiosk:
+  `http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s&kiosk`
+- Grafana playlist kiosk:
+  `http://swarm1.lab.auzietek.com:3000/playlists/play/dfrsvccecc074d?kiosk`

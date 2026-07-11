@@ -233,8 +233,8 @@
   "dashboards": [
     {
       "name": "Small Office Lifecycle",
-      "summary": "Show PXE, install, enrollment, personalization, and validation stages lighting up for the foo.bar recipe.",
-      "url": "http://swarm1.lab.auzietek.com:3000"
+      "summary": "Show PXE, identity/storage, CRM, workstation, and validation stages for the foo.bar recipe.",
+      "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s&kiosk"
     }
   ],
   "notes": "This is a recipe-level orchestrator. It should remain safe to review by default; live VM creation, PXE boot, and personalization require explicit runtime enablement."
