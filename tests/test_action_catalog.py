@@ -92,6 +92,41 @@ def test_small_office_foobar_app_vm_pipeline_is_runnable():
     )
 
 
+def test_small_office_foobar_services_pipeline_is_runnable():
+    pipeline = pipeline_by_id("small-office-foobar-services")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-services")
+    assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
+    assert "ldap" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-service-plan",
+        "ensure-identity-vm",
+        "wait-service-guests",
+        "provision-identity-storage",
+        "provision-crm-mock",
+        "provision-ticket-mock",
+        "validate-foobar-services",
+        "record-service-relationships",
+    ]
+    assert default_stages("small-office-foobar-services") == [
+        "load-service-plan",
+        "ensure-identity-vm",
+        "wait-service-guests",
+        "provision-identity-storage",
+        "provision-crm-mock",
+        "provision-ticket-mock",
+        "validate-foobar-services",
+        "record-service-relationships",
+    ]
+    assert [stage["name"] for stage in workflow_stage_definitions("small-office-foobar-services")] == default_stages(
+        "small-office-foobar-services"
+    )
+
+
 def test_small_office_foobar_reset_is_safe_by_default():
     pipeline = pipeline_by_id("small-office-foobar-reset")
     assert pipeline is not None

@@ -3231,6 +3231,86 @@ WORKFLOW_DEFINITIONS["small-office-foobar-app-vms"] = {
     "complete_message": "Small Office FooBar application VM pipeline completed.",
 }
 
+WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-service-plan",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Reviewing foo.bar service provisioning plan.",
+            "complete": "FooBar service provisioning plan reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "ensure-identity-vm",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-vm",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Ensuring the foo.bar identity VM exists.",
+            "complete": "FooBar identity VM is ready to boot.",
+            "timeout": 2400,
+        },
+        {
+            "name": "wait-service-guests",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-guest-wait",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Waiting for foo.bar service guests to accept BKC guest commands.",
+            "complete": "FooBar service guests are command-ready.",
+            "timeout": 600,
+        },
+        {
+            "name": "provision-identity-storage",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-provision",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Provisioning foo.bar LDAP, Samba, and identity portal services.",
+            "complete": "FooBar identity and storage services provisioned.",
+            "timeout": 2400,
+        },
+        {
+            "name": "provision-crm-mock",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-crm-provision",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Provisioning the foo.bar CRM intranet endpoint.",
+            "complete": "FooBar CRM intranet endpoint provisioned.",
+            "timeout": 1800,
+        },
+        {
+            "name": "provision-ticket-mock",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-tickets-provision",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Provisioning the foo.bar ticket board endpoint.",
+            "complete": "FooBar ticket board endpoint provisioned.",
+            "timeout": 1800,
+        },
+        {
+            "name": "validate-foobar-services",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-validate",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Validating foo.bar identity, CRM, and ticket services.",
+            "complete": "FooBar services validated.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-service-relationships",
+            "transport": "internal",
+            "kind": "foobar-service-relationships",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Recording foo.bar service relationships.",
+            "complete": "FooBar service relationships recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Small Office FooBar service provisioning pipeline completed.",
+}
+
 
 def workflow_is_supported(workflow: str) -> bool:
     return (workflow or "").strip().lower() in WORKFLOW_DEFINITIONS
@@ -8000,6 +8080,284 @@ def _run_foobar_app_relationships(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "FooBar SuiteCRM and Kanboard VM relationships recorded.")
 
 
+def _foobar_services_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("small-office-foobar-services")
+
+
+def _foobar_service_identity_target(values: dict) -> dict:
+    target = values.get("identity_vm")
+    if not isinstance(target, dict):
+        raise PipelineExecutionError("small-office-foobar-services requires identity_vm in defaults.json.")
+    vmid = int(target.get("vmid") or 0)
+    name = str(target.get("name") or "").strip()
+    if not vmid or not name:
+        raise PipelineExecutionError("identity_vm requires vmid and name.")
+    normalized = dict(target)
+    normalized["vmid"] = vmid
+    normalized["name"] = name
+    return normalized
+
+
+def _foobar_service_app_targets(values: dict) -> list[dict]:
+    targets = values.get("application_vms")
+    if not isinstance(targets, list) or not targets:
+        raise PipelineExecutionError("small-office-foobar-services requires application_vms in defaults.json.")
+    normalized = []
+    for raw in targets:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each foo.bar service application target must be an object.")
+        vmid = int(raw.get("vmid") or 0)
+        name = str(raw.get("name") or "").strip()
+        role = str(raw.get("role") or "").strip()
+        if not vmid or not name or not role:
+            raise PipelineExecutionError("Each foo.bar service application target requires vmid, name, and role.")
+        target = dict(raw)
+        target["vmid"] = vmid
+        target["name"] = name
+        target["role"] = role
+        normalized.append(target)
+    return normalized
+
+
+def _foobar_service_targets(values: dict) -> list[dict]:
+    return [_foobar_service_identity_target(values), *_foobar_service_app_targets(values)]
+
+
+def _foobar_guest_exec(vmid: int, command: str, *, timeout: int = 120) -> str:
+    remote = f"qm guest exec {int(vmid)} -- /bin/sh -lc {shlex.quote(command)}"
+    output = _run_proxmox_ssh_command(remote, timeout=timeout)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return output
+    out = str(payload.get("out-data") or "")
+    err = str(payload.get("err-data") or "")
+    exit_code = int(payload.get("exitcode") or 0)
+    combined = "\n".join(part for part in (out.rstrip(), err.rstrip()) if part)
+    if exit_code != 0:
+        raise PipelineExecutionError(combined or f"guest command exited {exit_code}")
+    return combined
+
+
+def _foobar_wait_guest(vmid: int, name: str, *, attempts: int = 30, sleep_seconds: int = 10) -> str:
+    last_error = ""
+    for _ in range(attempts):
+        try:
+            return _foobar_guest_exec(vmid, "hostname; systemctl is-active qemu-guest-agent || true", timeout=60)
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(sleep_seconds)
+    raise PipelineExecutionError(f"{name} VMID {vmid} did not become guest-command ready: {last_error}")
+
+
+def _run_foobar_service_identity_vm(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    client = ProxmoxClient(load_proxmox_config())
+    source_vmid = int(values.get("source_template_vmid") or 0)
+    source_node_hint = str(values.get("source_template_node") or "").strip()
+    expected_source_name = str(values.get("source_template_name") or "").strip()
+    target = _foobar_service_identity_target(values)
+    target_vmid = int(target["vmid"])
+    target_name = str(target["name"])
+    if not source_vmid:
+        raise PipelineExecutionError("source_template_vmid is required for identity VM clone.")
+
+    source_node, source_config = _find_proxmox_vm_node(client, source_vmid, source_node_hint)
+    if not source_config:
+        raise PipelineExecutionError(f"Trixie source VMID {source_vmid} was not found in Proxmox.")
+    actual_source_name = str(source_config.get("name") or "").strip()
+    if expected_source_name and actual_source_name and actual_source_name != expected_source_name:
+        raise PipelineExecutionError(
+            f"Refusing to use VMID {source_vmid}: expected {expected_source_name!r}, found {actual_source_name!r}."
+        )
+
+    existing_node, existing_config = _find_proxmox_vm_node(client, target_vmid, source_node)
+    enable_replace = _foobar_truthy(values.get("enable_replace_identity"))
+    if existing_config:
+        existing_name = str(existing_config.get("name") or "").strip()
+        if existing_name != target_name:
+            raise PipelineExecutionError(
+                f"Refusing to replace VMID {target_vmid}: expected {target_name!r}, found {existing_name!r}."
+            )
+        if enable_replace:
+            status = client.vm_status(existing_node or source_node, target_vmid)
+            if str(status.get("status") or "").strip().lower() == "running":
+                stop_upid = client.stop_vm(existing_node or source_node, target_vmid, timeout=60)
+                client.wait_for_task(existing_node or source_node, str(stop_upid), timeout=180)
+            destroy_upid = client.destroy_vm(existing_node or source_node, target_vmid, purge=True)
+            client.wait_for_task(existing_node or source_node, str(destroy_upid), timeout=300)
+        else:
+            _store_run_extra(run_id, {"foobar_identity_vm": {"node": existing_node or source_node, **target, "status": "existing"}})
+            _set_stage(run_id, stage_name, "complete", f"Identity VMID {target_vmid} already exists.")
+            return
+
+    source_status = client.vm_status(source_node, source_vmid)
+    source_running = str(source_status.get("status") or "").strip().lower() == "running"
+    if source_running:
+        if not _foobar_truthy(values.get("stop_source_for_identity_clone")):
+            raise PipelineExecutionError(f"Source VMID {source_vmid} is running and stop_source_for_identity_clone is false.")
+        stop_upid = client.stop_vm(source_node, source_vmid, timeout=60)
+        client.wait_for_task(source_node, str(stop_upid), timeout=180)
+        client.wait_for_vm_status(source_node, source_vmid, "stopped", timeout=120)
+
+    upid = client.clone_vm(node=source_node, source_vmid=source_vmid, new_vmid=target_vmid, name=target_name, full=True)
+    task = client.wait_for_task(source_node, str(upid), timeout=2400)
+    exit_status = str(task.get("exitstatus") or "")
+    if exit_status and exit_status != "OK":
+        raise PipelineExecutionError(f"Proxmox clone failed for {target_name}: {exit_status}")
+    start_upid = client.start_vm(source_node, target_vmid)
+    client.wait_for_task(source_node, str(start_upid), timeout=180)
+    client.wait_for_vm_status(source_node, target_vmid, "running", timeout=120)
+    identity = {"node": source_node, **target, "status": "running", "upid": str(upid)}
+    _store_run_extra(run_id, {"foobar_identity_vm": identity})
+    append_event(run_id, "info", stage_name, json.dumps(identity, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", f"Identity VM {target_name} cloned and started.")
+
+
+def _run_foobar_service_guest_wait(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    client = ProxmoxClient(load_proxmox_config())
+    ready = []
+    for target in _foobar_service_targets(values):
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        node, config = _find_proxmox_vm_node(client, vmid, str(values.get("source_template_node") or ""))
+        if not config or not node:
+            raise PipelineExecutionError(f"{name} VMID {vmid} was not found in Proxmox.")
+        status = client.vm_status(node, vmid)
+        if str(status.get("status") or "").strip().lower() != "running":
+            upid = client.start_vm(node, vmid)
+            client.wait_for_task(node, str(upid), timeout=180)
+            client.wait_for_vm_status(node, vmid, "running", timeout=120)
+        output = _foobar_wait_guest(vmid, name)
+        ready.append({"node": node, "vmid": vmid, "name": name, "output": output[-300:]})
+    _store_run_extra(run_id, {"foobar_service_guests_ready": ready})
+    append_event(run_id, "info", stage_name, json.dumps(ready, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service guests are command-ready.")
+
+
+def _foobar_usernames(values: dict) -> list[str]:
+    users = values.get("users")
+    if not isinstance(users, list):
+        return []
+    return [str(user.get("username") or "").strip() for user in users if isinstance(user, dict) and str(user.get("username") or "").strip()]
+
+
+def _run_foobar_service_identity_provision(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_service_identity_target(values)
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    users = _foobar_usernames(values)
+    user_dirs = " ".join(shlex.quote(f"/srv/foobar/homes/{username}") for username in users)
+    user_labels = ", ".join(users)
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php libapache2-mod-php curl; "
+        "install -d -m 0755 /srv/foobar/homes /var/www/html/phpldapadmin; "
+        f"install -d -m 0750 {user_dirs}; "
+        "chown -R root:root /srv/foobar; "
+        "cp /etc/samba/smb.conf /etc/samba/smb.conf.bkc-pre-foobar 2>/dev/null || true; "
+        "printf '\\n[foobar-homes]\\n   path = /srv/foobar/homes\\n   browseable = yes\\n   read only = no\\n   guest ok = yes\\n   force user = root\\n' > /etc/samba/smb.conf.d/foobar-homes.conf 2>/dev/null || "
+        "printf '\\n[foobar-homes]\\n   path = /srv/foobar/homes\\n   browseable = yes\\n   read only = no\\n   guest ok = yes\\n   force user = root\\n' >> /etc/samba/smb.conf; "
+        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin placeholder are provisioned.</p><p>Users: {user_labels}</p>' > /var/www/html/index.html; "
+        "printf '%s\\n' '<!doctype html><title>phpLDAPadmin</title><h1>FooBar phpLDAPadmin placeholder</h1><p>LDAP admin UI handoff target.</p>' > /var/www/html/phpldapadmin/index.html; "
+        "systemctl enable --now slapd apache2 smbd; "
+        "systemctl restart slapd apache2 smbd; "
+        "systemctl is-active slapd apache2 smbd; "
+        "testparm -s >/tmp/bkc-foobar-testparm.out"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=2400)
+    _set_stage(run_id, stage_name, "complete", "FooBar identity and storage services provisioned.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "identity services provisioned")
+
+
+def _foobar_app_target_by_role(values: dict, role: str) -> dict:
+    for target in _foobar_service_app_targets(values):
+        if str(target.get("role") or "") == role:
+            return target
+    raise PipelineExecutionError(f"No foo.bar service target found for role {role!r}.")
+
+
+def _run_foobar_service_app_provision(run_id: str, stage_name: str, *, role: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, role)
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    app = str(target.get("application") or role).strip()
+    endpoint_path = str(target.get("endpoint_path") or f"/{app}/").strip()
+    packages = "apache2 php libapache2-mod-php curl"
+    if role == "crm":
+        packages += " mariadb-server"
+        title = "FooBar SuiteCRM"
+        body = "CRM placeholder endpoint for helpdesk customer records."
+    else:
+        packages += " sqlite3"
+        title = "FooBar Kanboard"
+        body = "Ticket board placeholder endpoint for helpdesk case work."
+    web_dir = f"/var/www/html/{app}"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        f"apt-get -o DPkg::Lock::Timeout=600 install -y {packages}; "
+        f"install -d -m 0755 {shlex.quote(web_dir)}; "
+        f"printf '%s\\n' '<!doctype html><title>{title}</title><h1>{title}</h1><p>{body}</p><p>BKC service lane: {stage_name}</p>' > {shlex.quote(web_dir + '/index.html')}; "
+        f"printf '%s\\n' '<!doctype html><title>{title}</title><h1>{title}</h1><p>{body}</p><p>Endpoint: {endpoint_path}</p>' > /var/www/html/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        f"curl -fsS http://localhost{shlex.quote(endpoint_path)} >/tmp/bkc-foobar-{role}.html"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar {app} intranet endpoint provisioned.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"{app} endpoint provisioned")
+
+
+def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    identity = _foobar_service_identity_target(values)
+    crm = _foobar_app_target_by_role(values, "crm")
+    tickets = _foobar_app_target_by_role(values, "tickets")
+    checks = [
+        (
+            identity,
+            "systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; curl -fsS http://localhost/phpldapadmin/ | head -n 2",
+        ),
+        (
+            crm,
+            "systemctl is-active apache2; curl -fsS http://localhost/suitecrm/ | head -n 2",
+        ),
+        (
+            tickets,
+            "systemctl is-active apache2; curl -fsS http://localhost/kanboard/ | head -n 2",
+        ),
+    ]
+    evidence = []
+    for target, command in checks:
+        output = _foobar_guest_exec(int(target["vmid"]), command, timeout=120)
+        evidence.append({"vmid": target["vmid"], "name": target["name"], "evidence": output[-700:]})
+    _store_run_extra(run_id, {"foobar_service_evidence": evidence})
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar services validated.")
+
+
+def _run_foobar_service_relationships(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _foobar_services_context()
+    payload = {
+        "pipeline_id": pipeline.get("id"),
+        "tenant": values.get("tenant_slug"),
+        "identity": _foobar_service_identity_target(values),
+        "applications": _foobar_service_app_targets(values),
+        "users": _foobar_usernames(values),
+        "handoff": "small-office-foobar-workstation-personalize",
+    }
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service relationships recorded.")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -8154,6 +8512,34 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "foobar-app-relationships":
             _run_foobar_app_relationships(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-vm":
+            _run_foobar_service_identity_vm(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-guest-wait":
+            _run_foobar_service_guest_wait(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-provision":
+            _run_foobar_service_identity_provision(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-crm-provision":
+            _run_foobar_service_app_provision(run_id, stage_name, role="crm")
+            continue
+
+        if kind == "foobar-service-tickets-provision":
+            _run_foobar_service_app_provision(run_id, stage_name, role="tickets")
+            continue
+
+        if kind == "foobar-service-validate":
+            _run_foobar_service_validate(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-relationships":
+            _run_foobar_service_relationships(run_id, stage_name)
             continue
 
         if kind == "trixie-personalize-discover":

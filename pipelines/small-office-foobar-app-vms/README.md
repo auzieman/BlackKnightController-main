@@ -7,7 +7,7 @@ Clone two Debian/Trixie application VM shells from the prepared Trixie base:
 
 This pipeline is the bridge between bare OS provisioning and business application
 deployment. It does not install SuiteCRM or Kanboard yet; it creates stable VM
-targets that the next app provisioning lane can take over.
+targets that the `small-office-foobar-services` lane can take over.
 
 ## Recording Links
 
@@ -15,6 +15,8 @@ targets that the next app provisioning lane can take over.
   `http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar`
 - This lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-app-vms`
+- Service provisioning lane:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
 - Trixie PXE validation run:
   `http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463`
 - Windows PXE validation run:

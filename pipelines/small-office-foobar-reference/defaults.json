@@ -9,6 +9,7 @@
   "crm_node_id": "node:vm:foobar-crm-01",
   "tickets_node_id": "node:vm:foobar-tickets-01",
   "app_vm_pipeline": "small-office-foobar-app-vms",
+  "services_pipeline": "small-office-foobar-services",
   "linux_profile_pipeline": "ns1-trixie-pxe-smoke",
   "linux_personalize_pipeline": "trixie-workstation-personalize",
   "windows_profile_pipeline": "windows10-pxe-smoke",

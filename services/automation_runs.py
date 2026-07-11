@@ -186,6 +186,17 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "boot-app-vms",
             "record-app-relationships",
         ]
+    if normalized == "small-office-foobar-services":
+        return [
+            "load-service-plan",
+            "ensure-identity-vm",
+            "wait-service-guests",
+            "provision-identity-storage",
+            "provision-crm-mock",
+            "provision-ticket-mock",
+            "validate-foobar-services",
+            "record-service-relationships",
+        ]
     if normalized == "demo-swarm-image-registry":
         return [
             "storage-ready",

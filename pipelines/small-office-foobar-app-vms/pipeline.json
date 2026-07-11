@@ -155,7 +155,7 @@
       },
       "produces": [
         "relationship:foobar-app-vms",
-        "handoff:small-office-foobar-app-install"
+        "handoff:small-office-foobar-services"
       ],
       "timeout_seconds": 30
     }
@@ -182,5 +182,5 @@
       "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"
     }
   ],
-  "notes": "This lane intentionally creates VM shells only. SuiteCRM and Kanboard installation should be a follow-up app provisioning lane once clone and boot are repeatable."
+  "notes": "This lane intentionally creates VM shells only. The follow-up small-office-foobar-services lane layers identity, CRM, and ticket service endpoints onto those shells."
 }

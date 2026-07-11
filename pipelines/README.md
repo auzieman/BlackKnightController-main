@@ -30,6 +30,8 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `small-office-foobar-app-vms/`: runnable SuiteCRM/Kanboard application VM
   shell lane that clones `foobar-crm-01` and `foobar-tickets-01` from the
   prepared Trixie base.
+- `small-office-foobar-services/`: runnable identity/storage, CRM endpoint,
+  and ticket endpoint service lane for the `foo.bar` small-office demo.
 - `small-office-foobar-reset/`: safe reset scaffold for wiping only `foo.bar`
   demo targets and generated evidence while preserving shared lab services.
 
@@ -41,6 +43,8 @@ See `docs/pipeline-folder-layout.md` for the contract.
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-reference`
 - App VM clone lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-app-vms`
+- Service provisioning lane:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
 - Trixie PXE validation run:
   `http://swarm1.lab.auzietek.com:5000/pipelines/12caa567-6119-4e53-97a4-4aa1acf97463`
 - Windows PXE validation run:
