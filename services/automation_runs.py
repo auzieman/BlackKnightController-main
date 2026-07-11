@@ -159,6 +159,25 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "scrape-validate",
             "dashboard-link",
         ]
+    if normalized == "small-office-foobar-reference":
+        return [
+            "load-recipe-intent",
+            "plan-identity-storage",
+            "plan-crm-intranet",
+            "provision-linux-developer-workstations",
+            "provision-windows-helpdesk-workstations",
+            "personalize-workstations",
+            "validate-small-office",
+            "render-demo-lifecycle",
+        ]
+    if normalized == "small-office-foobar-reset":
+        return [
+            "load-reset-scope",
+            "plan-demo-vm-removal",
+            "plan-pxe-route-cleanup",
+            "plan-evidence-archive",
+            "verify-reset-boundary",
+        ]
     if normalized == "demo-swarm-image-registry":
         return [
             "storage-ready",

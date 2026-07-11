@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from services import pipeline_catalog, resource_graph
 from services.action_catalog import action_by_id, actions_for_kind, list_actions
-from services.automation_runs import default_stages
+from services.automation_runs import create_run, default_stages
 from services.pipeline_catalog import pipeline_by_id
 from services.pipeline_executor import workflow_is_supported, workflow_stage_definitions
 from routes.pipelines import _run_matches_search
@@ -77,6 +77,26 @@ def test_small_office_foobar_reset_is_safe_by_default():
         "plan-evidence-archive",
         "verify-reset-boundary",
     ]
+
+
+def test_small_office_foobar_run_stages_are_recording_friendly():
+    reference = create_run(
+        tenant_slug="default",
+        requested_by="test",
+        trigger_source="test",
+        repo="BlackKnightController",
+        workflow="small-office-foobar-reference",
+    )
+    reset = create_run(
+        tenant_slug="default",
+        requested_by="test",
+        trigger_source="test",
+        repo="BlackKnightController",
+        workflow="small-office-foobar-reset",
+    )
+
+    assert [stage["name"] for stage in reference["stages"]] == default_stages("small-office-foobar-reference")
+    assert [stage["name"] for stage in reset["stages"]] == default_stages("small-office-foobar-reset")
 
 
 def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
