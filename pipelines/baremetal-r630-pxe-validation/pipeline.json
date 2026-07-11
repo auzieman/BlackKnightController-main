@@ -1,0 +1,184 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "baremetal-r630-pxe-validation",
+  "name": "Bare Metal R630 PXE Validation",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Validate the physical-first PXE provisioning model for an R630-class server without performing destructive power or install actions.",
+  "tags": [
+    "bkc",
+    "bare-metal",
+    "physical",
+    "bmc",
+    "ipmi",
+    "redfish",
+    "pxe",
+    "validation",
+    "small-office"
+  ],
+  "targets": {
+    "physical_machine": "node:physical_machine:r630-01",
+    "bmc": "node:bmc:r630-01-idrac",
+    "boot_nic": "node:network_interface:r630-01-lom1",
+    "provisioning_network": "node:network:lab-provisioning",
+    "dhcp_service": "node:service:ns1-dhcpd",
+    "pxe_service": "node:service:ns1-pxe",
+    "profile": "node:provisioning_profile:debian-trixie-server",
+    "image_asset": "node:image_asset:debian-trixie-netboot-amd64"
+  },
+  "inputs": {
+    "physical_node_id": {
+      "required": true,
+      "default": "node:physical_machine:r630-01"
+    },
+    "bmc_node_id": {
+      "required": true,
+      "default": "node:bmc:r630-01-idrac"
+    },
+    "nic_mac": {
+      "required": true,
+      "default": "b8:ca:3a:00:10:01"
+    },
+    "validation_mode": {
+      "required": false,
+      "default": "evidence-only"
+    }
+  },
+  "gates": [
+    {
+      "id": "no-destructive-actions",
+      "kind": "manual.approval",
+      "with": {
+        "target_power_action": "${dictionary.target_power_action}",
+        "allowed_default": "none",
+        "requires_explicit_true_for_power": true
+      }
+    },
+    {
+      "id": "physical-identity-required",
+      "kind": "node.identity.required",
+      "with": {
+        "node_id": "${inputs.physical_node_id}",
+        "required_facts": [
+          "hardware.serial",
+          "hardware.asset_tag"
+        ]
+      }
+    },
+    {
+      "id": "mac-identity-required",
+      "kind": "network.mac.required",
+      "with": {
+        "node_id": "${dictionary.nic_node_id}",
+        "mac": "${inputs.nic_mac}"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-physical-identity",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "physical_machine": "${inputs.physical_node_id}",
+        "bmc": "${inputs.bmc_node_id}",
+        "boot_nic": "${dictionary.nic_node_id}"
+      },
+      "produces": [
+        "fact:physical_identity",
+        "relationship:controlled_by",
+        "relationship:has_interface"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "validate-bmc-reachability",
+      "action": "bmc.reachability.validate",
+      "transport": "bkc-bmc",
+      "risk": "low",
+      "with": {
+        "bmc": "${inputs.bmc_node_id}",
+        "provider": "${dictionary.bmc_provider}",
+        "mode": "${inputs.validation_mode}"
+      },
+      "produces": [
+        "event:bmc.reachable",
+        "evidence:bmc_endpoint"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-provisioning-services",
+      "action": "provisioning.services.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "dhcp_service": "${dictionary.dhcp_service_node_id}",
+        "pxe_service": "${dictionary.pxe_service_node_id}",
+        "network": "${dictionary.provisioning_network_node_id}"
+      },
+      "produces": [
+        "event:dhcp.boundary_validated",
+        "event:pxe.service_ready"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-image-assets",
+      "action": "provisioning.image.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "image_asset": "${dictionary.image_asset_node_id}",
+        "checksum_policy": "required"
+      },
+      "produces": [
+        "event:image.checksum_validated",
+        "evidence:image_asset"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "render-boot-intent",
+      "action": "provisioning.ipxe.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "profile": "${dictionary.provisioning_profile_node_id}",
+        "boot_nic": "${dictionary.nic_node_id}",
+        "mac": "${inputs.nic_mac}",
+        "one_shot": true
+      },
+      "produces": [
+        "event:ipxe.script_rendered",
+        "artifact:boot_intent"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "record-validation-evidence",
+      "action": "provisioning.evidence.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "physical_machine": "${inputs.physical_node_id}",
+        "profile": "${dictionary.provisioning_profile_node_id}",
+        "expected_events": [
+          "discovery.detected",
+          "bmc.reachable",
+          "dhcp.lease_observed",
+          "pxe.boot_request",
+          "image.selected",
+          "image.checksum_validated"
+        ]
+      },
+      "produces": [
+        "node:validation_evidence",
+        "relationship:validates"
+      ],
+      "timeout_seconds": 15
+    }
+  ],
+  "notes": "First validation/demo lane for physical-first bare metal provisioning. This is evidence-oriented and should not power on, reboot, or install hardware until BMC and boot providers are implemented."
+}

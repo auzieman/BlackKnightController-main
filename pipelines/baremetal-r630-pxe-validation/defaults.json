@@ -1,0 +1,14 @@
+{
+  "bmc_node_id": "node:bmc:r630-01-idrac",
+  "bmc_provider": "redfish",
+  "dhcp_service_node_id": "node:service:ns1-dhcpd",
+  "image_asset_node_id": "node:image_asset:debian-trixie-netboot-amd64",
+  "nic_mac": "b8:ca:3a:00:10:01",
+  "nic_node_id": "node:network_interface:r630-01-lom1",
+  "physical_node_id": "node:physical_machine:r630-01",
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "provisioning_profile_node_id": "node:provisioning_profile:debian-trixie-server",
+  "pxe_service_node_id": "node:service:ns1-pxe",
+  "target_power_action": "none",
+  "validation_mode": "evidence-only"
+}

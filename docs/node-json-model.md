@@ -63,6 +63,9 @@ can change more freely.
 
 Infrastructure:
 
+- `physical_machine`
+- `bmc`
+- `network_interface`
 - `bare_metal`
 - `vm`
 - `container`
@@ -85,6 +88,9 @@ Application and platform:
 - `pipeline`
 - `procedure`
 - `boot_image`
+- `image_asset`
+- `provisioning_profile`
+- `validation_evidence`
 
 These are not meant to be exhaustive. New node types should add typed
 expectations without breaking the base contract.
@@ -107,6 +113,27 @@ A type profile describes how BKC should treat a node type.
 
 The UI can use type profiles to render predictable panels without hardcoding
 every node shape into each page.
+
+## Physical First Provisioning
+
+`physical_machine` is the pre-OS identity for a server. It may be known only by
+serial number, asset tag, BMC address, switch port, or NIC MAC address. It
+should not be replaced by the eventual operating system hostname.
+
+Typical pre-OS relationships:
+
+```text
+node:physical_machine:r630-01 -> controlled_by -> node:bmc:r630-01-idrac
+node:physical_machine:r630-01 -> has_interface -> node:network_interface:r630-01-lom1
+node:network_interface:r630-01-lom1 -> uses -> node:network:lab-provisioning
+node:pipeline:baremetal-r630-trixie -> applies_profile -> node:provisioning_profile:debian-trixie-server
+node:validation_evidence:r630-01-firstboot -> validates -> node:physical_machine:r630-01
+```
+
+The OS resource created later can be related back to the physical machine with
+`runs_on`, `observed_on`, or `supersedes`, depending on the provider evidence.
+See [`bare-metal-provisioning-architecture.md`](bare-metal-provisioning-architecture.md)
+for the provisioning lifecycle and event model.
 
 ## Facts
 
@@ -203,6 +230,12 @@ Initial relationship types:
 - `booted_from`
 - `supersedes`
 - `ignore_updates`
+- `controlled_by`
+- `has_interface`
+- `attached_to`
+- `applies_profile`
+- `validates`
+- `observed_on`
 
 Prefer directional relationships with clear meaning. The UI can infer reverse
 labels when needed.

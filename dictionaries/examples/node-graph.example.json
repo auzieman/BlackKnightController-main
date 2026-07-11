@@ -187,6 +187,216 @@
       }
     },
     {
+      "id": "node:physical_machine:r630-01",
+      "name": "r630-01",
+      "type": "physical_machine",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "candidate",
+      "current_state": "powered_off",
+      "desired_state": "managed",
+      "tags": ["lab", "bare-metal", "small-office"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "dell",
+        "role": "future-hypervisor"
+      },
+      "facts": {
+        "hardware": {
+          "vendor": "Dell",
+          "model": "PowerEdge R630",
+          "serial": "R630-DEMO-001",
+          "asset_tag": "lab-r630-01",
+          "cpu_sockets": 2,
+          "memory_gib": 64
+        },
+        "power": {
+          "state": "off",
+          "last_observed_by": "node:bmc:r630-01-idrac"
+        },
+        "provisioning": {
+          "allowed_profiles": ["node:provisioning_profile:debian-trixie-server"],
+          "desired_profile": "node:provisioning_profile:debian-trixie-server"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:bmc:r630-01-idrac",
+      "name": "r630-01-idrac",
+      "type": "bmc",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "reachable",
+      "desired_state": "reachable",
+      "tags": ["lab", "bmc", "ipmi", "redfish"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "dell"
+      },
+      "facts": {
+        "management": {
+          "protocols": ["ipmi", "redfish"],
+          "primary_ip": "192.168.1.41",
+          "credential_scope": "credential:bmc-lab"
+        },
+        "capabilities": {
+          "power_control": true,
+          "boot_override": true,
+          "virtual_media": true,
+          "serial_console": true
+        }
+      },
+      "owners": [],
+      "security_classification": "restricted",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network_interface:r630-01-lom1",
+      "name": "r630-01-lom1",
+      "type": "network_interface",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "link-unknown",
+      "desired_state": "pxe-capable",
+      "tags": ["lab", "nic", "pxe"],
+      "labels": {
+        "environment": "lab",
+        "boot_role": "provisioning"
+      },
+      "facts": {
+        "interface": {
+          "name": "LOM1",
+          "mac": "b8:ca:3a:00:10:01",
+          "pxe_capable": true,
+          "expected_vlan": "provisioning",
+          "switch_port": "core-sw1:1/0/12"
+        },
+        "dhcp": {
+          "last_lease_ip": "",
+          "last_lease_observed_at": ""
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:image_asset:debian-trixie-netboot-amd64",
+      "name": "debian-trixie-netboot-amd64",
+      "type": "image_asset",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "cached",
+      "desired_state": "cached",
+      "tags": ["debian", "trixie", "netboot", "linux"],
+      "labels": {
+        "architecture": "amd64"
+      },
+      "facts": {
+        "image": {
+          "family": "linux",
+          "distribution": "debian",
+          "version": "trixie",
+          "kernel_path": "/srv/pxe/debian/trixie/amd64/linux",
+          "initrd_path": "/srv/pxe/debian/trixie/amd64/initrd.gz",
+          "checksum_policy": "required"
+        }
+      },
+      "owners": [],
+      "security_classification": "public",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:provisioning_profile:debian-trixie-server",
+      "name": "debian-trixie-server",
+      "type": "provisioning_profile",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "ready",
+      "desired_state": "ready",
+      "tags": ["provisioning", "pxe", "debian", "trixie"],
+      "labels": {
+        "environment": "lab",
+        "os_family": "linux"
+      },
+      "facts": {
+        "profile": {
+          "boot_mode": "ipxe",
+          "boot_menu_label": "BKC Debian Trixie Server",
+          "installer": "debian-preseed",
+          "post_install_boot_order": "disk-first",
+          "enrollment": "ssh-bootstrap"
+        },
+        "validation": {
+          "required_layers": ["infrastructure", "installation", "enrollment"],
+          "required_events": [
+            "dhcp.lease_observed",
+            "pxe.boot_request",
+            "installer.callback",
+            "first_boot.observed",
+            "enrollment.completed"
+          ]
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:validation_evidence:r630-01-dhcp-lease",
+      "name": "r630-01-dhcp-lease",
+      "type": "validation_evidence",
+      "actionable": false,
+      "structural": false,
+      "lifecycle_state": "evidence",
+      "current_state": "observed",
+      "desired_state": "observed",
+      "tags": ["validation", "dhcp", "pxe"],
+      "labels": {
+        "event_type": "dhcp.lease_observed"
+      },
+      "facts": {
+        "event": {
+          "event_type": "dhcp.lease_observed",
+          "observed_at": "2026-07-11T12:00:00Z",
+          "run_id": "run:baremetal-r630-01-001"
+        },
+        "evidence": {
+          "mac": "b8:ca:3a:00:10:01",
+          "ip": "10.20.0.141",
+          "dhcp_server": "node:service:ns1-dhcpd"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "observed"
+      }
+    },
+    {
       "id": "node:vm:ns1",
       "name": "ns1",
       "type": "vm",
@@ -552,6 +762,62 @@
       "confidence": "observed"
     },
     {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "controlled_by",
+      "target_id": "node:bmc:r630-01-idrac",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "has_interface",
+      "target_id": "node:network_interface:r630-01-lom1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bmc:r630-01-idrac",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_interface:r630-01-lom1",
+      "type": "attached_to",
+      "target_id": "node:network_switch:core-sw1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_interface:r630-01-lom1",
+      "type": "uses",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:provisioning_profile:debian-trixie-server",
+      "type": "uses",
+      "target_id": "node:image_asset:debian-trixie-netboot-amd64",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:validation_evidence:r630-01-dhcp-lease",
+      "type": "validates",
+      "target_id": "node:network_interface:r630-01-lom1",
+      "source": "dhcp",
+      "confidence": "observed"
+    },
+    {
       "source_id": "node:vm:ns1",
       "type": "runs_on",
       "target_id": "node:bare_metal:pve1",
@@ -648,6 +914,20 @@
       "target_id": "node:vm:trixie-smoke-132",
       "source": "bkc",
       "confidence": "declared"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "targets",
+      "target_id": "node:physical_machine:r630-01",
+      "source": "bkc",
+      "confidence": "example"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "applies_profile",
+      "target_id": "node:provisioning_profile:debian-trixie-server",
+      "source": "bkc",
+      "confidence": "example"
     },
     {
       "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
