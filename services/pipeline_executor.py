@@ -8131,6 +8131,24 @@ def _foobar_guest_exec(vmid: int, command: str, *, timeout: int = 120) -> str:
         payload = json.loads(output)
     except json.JSONDecodeError:
         return output
+    pid = payload.get("pid")
+    if pid is not None and "exitcode" not in payload:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status_output = _run_proxmox_ssh_command(
+                f"timeout 10s qm guest exec-status {int(vmid)} {int(pid)}",
+                timeout=15,
+            )
+            try:
+                status = json.loads(status_output)
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"Could not parse guest exec-status for VMID {vmid}: {status_output}") from exc
+            if status.get("exited"):
+                payload = status
+                break
+            time.sleep(2)
+        else:
+            raise PipelineExecutionError(f"guest command on VMID {vmid} did not exit within {timeout} seconds")
     out = str(payload.get("out-data") or "")
     err = str(payload.get("err-data") or "")
     exit_code = int(payload.get("exitcode") or 0)
@@ -8327,15 +8345,15 @@ def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
     checks = [
         (
             identity,
-            "systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; curl -fsS http://localhost/phpldapadmin/ | head -n 2",
+            "set -e; systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-validate-identity.html; head -n 2 /tmp/bkc-validate-identity.html",
         ),
         (
             crm,
-            "systemctl is-active apache2; curl -fsS http://localhost/suitecrm/ | head -n 2",
+            "set -e; systemctl is-active apache2; curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; head -n 2 /tmp/bkc-validate-suitecrm.html",
         ),
         (
             tickets,
-            "systemctl is-active apache2; curl -fsS http://localhost/kanboard/ | head -n 2",
+            "set -e; systemctl is-active apache2; curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; head -n 2 /tmp/bkc-validate-kanboard.html",
         ),
     ]
     evidence = []
