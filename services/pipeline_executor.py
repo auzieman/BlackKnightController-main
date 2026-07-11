@@ -7947,11 +7947,21 @@ def _run_windows10_personalize_verify(run_id: str, stage_name: str) -> None:
     if _pipeline_value_truthy(values, "enable_full_personalization"):
         script = (
             "$ErrorActionPreference = 'Stop'; "
+            "$ProgressPreference = 'SilentlyContinue'; "
             "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+            "$expected = @( "
+            "'C:\\Program Files\\LibreOffice\\program\\soffice.exe', "
+            "'C:\\Program Files\\Microsoft VS Code\\Code.exe', "
+            "'C:\\Program Files\\RustDesk\\RustDesk.exe', "
+            "'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' "
+            "); "
+            "$missing = @($expected | Where-Object { -not (Test-Path $_) }); "
+            "if ($missing.Count -gt 0) { throw ('Missing expected workstation apps: ' + ($missing -join ', ')) }; "
             "hostname; "
-            "& $choco list --local-only; "
+            "if (Test-Path $choco) { & $choco list --local-only --limit-output | Out-String | Write-Output }; "
+            "$expected | ForEach-Object { Write-Output ('present: ' + $_) }; "
             "Get-Service sshd | Select-Object Name,Status,StartType | Format-List; "
-            "Get-Command code -ErrorAction SilentlyContinue | Select-Object Source"
+            "Write-Output 'Windows workstation package verification passed.'"
         )
     else:
         script = (
