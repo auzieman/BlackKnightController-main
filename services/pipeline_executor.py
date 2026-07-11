@@ -3335,12 +3335,12 @@ WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
             "timeout": 180,
         },
         {
-            "name": "provision-crm-mock",
+            "name": "provision-suitecrm-service",
             "transport": "bkc-proxmox",
-            "kind": "foobar-service-crm-provision",
+            "kind": "foobar-service-suitecrm-provision",
             "pipeline_id": "small-office-foobar-services",
-            "active": "Provisioning the foo.bar CRM intranet endpoint.",
-            "complete": "FooBar CRM intranet endpoint provisioned.",
+            "active": "Installing the foo.bar SuiteCRM service.",
+            "complete": "FooBar SuiteCRM service installed.",
             "timeout": 1800,
         },
         {
@@ -8751,6 +8751,66 @@ def _run_foobar_service_app_provision(run_id: str, stage_name: str, *, role: str
     append_event(run_id, "info", stage_name, output[-2400:] if output else f"{app} endpoint provisioned")
 
 
+def _run_foobar_service_suitecrm(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, "crm")
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    version = str(values.get("suitecrm_version") or "7.15.1").strip().lstrip("v")
+    db_password = str(values.get("default_password") or "changeme123").strip()
+    sql_password = db_password.replace("'", "''")
+    if not version:
+        raise PipelineExecutionError("suitecrm_version is required.")
+    archive_url = f"https://github.com/SuiteCRM/SuiteCRM/releases/download/v{version}/SuiteCRM-{version}.zip"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y "
+        "apache2 mariadb-server php libapache2-mod-php php-mysql php-curl php-xml php-mbstring "
+        "php-zip php-gd php-imap php-ldap php-intl php-soap unzip curl wget ca-certificates; "
+        "a2enmod rewrite >/dev/null 2>&1 || true; "
+        "systemctl enable --now mariadb apache2; "
+        "cat >/tmp/bkc-suitecrm.sql <<'SQL'\n"
+        "CREATE DATABASE IF NOT EXISTS suitecrm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n"
+        f"CREATE USER IF NOT EXISTS 'suitecrm'@'localhost' IDENTIFIED BY '{sql_password}';\n"
+        "GRANT ALL PRIVILEGES ON suitecrm.* TO 'suitecrm'@'localhost';\n"
+        "FLUSH PRIVILEGES;\n"
+        "SQL\n"
+        "mysql </tmp/bkc-suitecrm.sql; "
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; "
+        f"wget -qO \"$tmp/suitecrm.zip\" {shlex.quote(archive_url)}; "
+        "rm -rf /var/www/html/suitecrm; "
+        "install -d -m 0755 /var/www/html/suitecrm; "
+        "unzip -q \"$tmp/suitecrm.zip\" -d \"$tmp/suitecrm-src\"; "
+        "src=$(find \"$tmp/suitecrm-src\" -mindepth 1 -maxdepth 1 -type d | head -n 1); "
+        "cp -a \"$src\"/. /var/www/html/suitecrm/; "
+        "install -d -m 0775 /var/www/html/suitecrm/cache /var/www/html/suitecrm/custom "
+        "/var/www/html/suitecrm/modules /var/www/html/suitecrm/upload; "
+        "chown -R www-data:www-data /var/www/html/suitecrm; "
+        "find /var/www/html/suitecrm -type d -exec chmod 0755 {} +; "
+        "find /var/www/html/suitecrm -type f -exec chmod 0644 {} +; "
+        "chmod -R u+rwX,g+rwX /var/www/html/suitecrm/cache /var/www/html/suitecrm/custom "
+        "/var/www/html/suitecrm/modules /var/www/html/suitecrm/upload; "
+        "cat >/etc/apache2/conf-available/bkc-suitecrm.conf <<'APACHE'\n"
+        "<Directory /var/www/html/suitecrm>\n"
+        "    AllowOverride All\n"
+        "    Require all granted\n"
+        "</Directory>\n"
+        "APACHE\n"
+        "a2enconf bkc-suitecrm >/dev/null 2>&1 || true; "
+        "printf '%s\\n' '<!doctype html><title>FooBar CRM</title><h1>FooBar CRM</h1><p>SuiteCRM is staged at <a href=\"/suitecrm/\">/suitecrm/</a>.</p><p>Database: suitecrm / suitecrm / local demo password.</p>' > /var/www/html/index.html; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2 mariadb; "
+        "curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; "
+        "grep -Ei 'SuiteCRM|Install|Setup|Login' /tmp/bkc-validate-suitecrm.html | head -n 8; "
+        f"printf '%s\\n' 'suitecrm_version={version}'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar SuiteCRM v{version} staged.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"suitecrm v{version} staged")
+
+
 def _run_foobar_service_kanboard(run_id: str, stage_name: str) -> None:
     _, _, values = _foobar_services_context()
     target = _foobar_app_target_by_role(values, "tickets")
@@ -8802,7 +8862,7 @@ def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
         ),
         (
             crm,
-            "set -e; systemctl is-active apache2; curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; head -n 2 /tmp/bkc-validate-suitecrm.html",
+            "set -e; systemctl is-active apache2 mariadb; test -d /var/www/html/suitecrm/cache; curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; grep -Ei 'SuiteCRM|Install|Setup|Login' /tmp/bkc-validate-suitecrm.html | head -n 8",
         ),
         (
             tickets,
@@ -9016,8 +9076,8 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_foobar_service_identity_portal(run_id, stage_name)
             continue
 
-        if kind == "foobar-service-crm-provision":
-            _run_foobar_service_app_provision(run_id, stage_name, role="crm")
+        if kind == "foobar-service-suitecrm-provision":
+            _run_foobar_service_suitecrm(run_id, stage_name)
             continue
 
         if kind == "foobar-service-kanboard-provision":

@@ -6,13 +6,12 @@ This lane follows `small-office-foobar-app-vms`. It creates the identity/storage
 VM from the prepared Trixie source, then provisions the current service layer:
 
 - `foobar-id-01`: OpenLDAP, Samba homes, and a real phpLDAPadmin portal.
-- `foobar-crm-01`: Apache/PHP/MariaDB with a SuiteCRM placeholder endpoint.
+- `foobar-crm-01`: Apache/PHP/MariaDB with a basic real SuiteCRM service.
 - `foobar-tickets-01`: Apache/PHP/SQLite with a real Kanboard service.
 
-SuiteCRM remains intentionally lightweight for the first demo loop. Kanboard is
-small enough to install as a real service and gives the helpdesk workstation a
-credible ticket board target without adding a long application configuration
-loop.
+SuiteCRM and Kanboard are intentionally basic installs for the first demo loop.
+They provide credible app targets and health evidence without trying to model a
+full application customization lifecycle yet.
 
 ## Links
 
@@ -41,7 +40,7 @@ loop.
   `configure-samba-homes`
 - Identity portal:
   `http://192.168.1.244/phpldapadmin/`
-- CRM placeholder:
+- SuiteCRM:
   `http://192.168.1.59/suitecrm/`
 - Kanboard:
   `http://192.168.1.133/kanboard/`

@@ -195,16 +195,19 @@
       "timeout_seconds": 180
     },
     {
-      "id": "provision-crm-mock",
-      "action": "debian.intranet.crm.configure",
+      "id": "provision-suitecrm-service",
+      "action": "debian.intranet.suitecrm.install",
       "transport": "bkc-proxmox",
       "risk": "medium",
       "with": {
         "target": "node:vm:foobar-crm-01",
-        "application": "suitecrm"
+        "application": "suitecrm",
+        "version": "${dictionary.suitecrm_version}"
       },
       "produces": [
-        "service:suitecrm-mock"
+        "service:suitecrm",
+        "application:suitecrm",
+        "database:suitecrm"
       ],
       "timeout_seconds": 1800
     },
@@ -293,5 +296,5 @@
       "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"
     }
   ],
-  "notes": "This lane keeps SuiteCRM lightweight for the first demo loop and installs a real Kanboard service for the helpdesk board."
+  "notes": "This lane installs lightweight real SuiteCRM and Kanboard service endpoints for the small-office demo."
 }
