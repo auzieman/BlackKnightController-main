@@ -8125,7 +8125,9 @@ def _foobar_service_targets(values: dict) -> list[dict]:
 
 def _foobar_guest_exec(vmid: int, command: str, *, timeout: int = 120) -> str:
     host_timeout = max(10, int(timeout) - 5)
-    remote = f"timeout {host_timeout}s qm guest exec {int(vmid)} -- /bin/sh -lc {shlex.quote(command)}"
+    encoded_command = b64encode(command.encode("utf-8")).decode("ascii")
+    wrapper = f"printf %s {shlex.quote(encoded_command)} | base64 -d | /bin/sh"
+    remote = f"timeout {host_timeout}s qm guest exec {int(vmid)} -- /bin/sh -c {shlex.quote(wrapper)}"
     output = _run_proxmox_ssh_command(remote, timeout=timeout)
     try:
         payload = json.loads(output)
