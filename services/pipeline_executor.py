@@ -8269,12 +8269,28 @@ def _run_foobar_service_identity_provision(run_id: str, stage_name: str) -> None
     target = _foobar_service_identity_target(values)
     vmid = int(target["vmid"])
     hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    domain = str(values.get("domain") or "foo.bar").strip()
+    password = str(values.get("default_password") or "changeme123").strip()
     users = _foobar_usernames(values)
     user_dirs = " ".join(shlex.quote(f"/srv/foobar/homes/{username}") for username in users)
     user_labels = ", ".join(users)
+    slapd_seed = "\n".join(
+        [
+            "slapd slapd/no_configuration boolean false",
+            f"slapd slapd/domain string {domain}",
+            "slapd shared/organization string FooBar",
+            f"slapd slapd/password1 password {password}",
+            f"slapd slapd/password2 password {password}",
+            "slapd slapd/backend select MDB",
+            "slapd slapd/purge_database boolean true",
+            "slapd slapd/move_old_database boolean true",
+            "slapd slapd/allow_ldap_v2 boolean false",
+        ]
+    )
     command = (
         "set -e; export DEBIAN_FRONTEND=noninteractive; "
         f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        f"printf '%s\n' {shlex.quote(slapd_seed)} | debconf-set-selections; "
         "apt-get -o DPkg::Lock::Timeout=600 update; "
         "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php libapache2-mod-php curl; "
         "install -d -m 0755 /srv/foobar/homes /var/www/html/phpldapadmin; "
