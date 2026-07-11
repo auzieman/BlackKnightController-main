@@ -22,6 +22,11 @@ See `docs/pipeline-folder-layout.md` for the contract.
   validation gates.
 - `bkc-resource-graph-ui-review/`: review lane for the Cytoscape Resource Graph
   canvas, filters, layout controls, context menu, and position persistence.
+- `baremetal-r630-pxe-validation/`: validation-first scaffold for managing a
+  powered-off physical server through BMC, NIC/MAC, PXE image, and evidence.
+- `small-office-foobar-reference/`: recipe-level `foo.bar` small-office demo
+  scaffold for identity/storage, CRM, two Windows helpdesk workstations, and
+  two Linux developer workstations.
 
 Repository-backed examples should stay sanitized. Use selectors, variables, and
 integration references instead of lab-only hostnames, credentials, tokens, or

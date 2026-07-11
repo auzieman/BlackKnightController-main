@@ -40,6 +40,27 @@ def test_k3s_housekeeping_stage_plan_is_action_annotated():
     assert actions_by_stage["scrape-validate"] == "prometheus.targets.verify"
 
 
+def test_small_office_foobar_recipe_is_repo_backed():
+    pipeline = pipeline_by_id("small-office-foobar-reference")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
+    assert pipeline["targets"]["windows_helpdesk_01"] == "node:vm:foobar-helpdesk-win-01"
+    assert pipeline["targets"]["linux_dev_01"] == "node:vm:foobar-dev-linux-01"
+    assert "foo.bar" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-recipe-intent",
+        "plan-identity-storage",
+        "plan-crm-intranet",
+        "provision-linux-developer-workstations",
+        "provision-windows-helpdesk-workstations",
+        "personalize-workstations",
+        "validate-small-office",
+        "render-demo-lifecycle",
+    ]
+
+
 def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
     pipeline = pipeline_by_id("auzix-vm130-deploy")
     assert pipeline is not None
