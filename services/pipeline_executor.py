@@ -7928,8 +7928,10 @@ def _run_windows10_personalize_packages(run_id: str, stage_name: str) -> None:
     package_args = " ".join(packages)
     script = (
         "$ErrorActionPreference = 'Stop'; "
-        "if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) { throw 'Chocolatey is not installed.' } "
-        f"choco install {package_args} -y --no-progress --limit-output"
+        "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+        "if (-not (Test-Path $choco)) { $cmd = Get-Command choco.exe -ErrorAction SilentlyContinue; if ($cmd) { $choco = $cmd.Source } } "
+        "if (-not (Test-Path $choco)) { throw 'Chocolatey is not installed.' } "
+        f"& $choco install {package_args} -y --no-progress --limit-output"
     )
     output = _windows10_personalize_powershell(values, script, timeout=1800)
     _set_stage(run_id, stage_name, "complete", "Windows workstation package profile installed.")
@@ -7941,8 +7943,9 @@ def _run_windows10_personalize_verify(run_id: str, stage_name: str) -> None:
     if _pipeline_value_truthy(values, "enable_full_personalization"):
         script = (
             "$ErrorActionPreference = 'Stop'; "
+            "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
             "hostname; "
-            "choco list --local-only; "
+            "& $choco list --local-only; "
             "Get-Service sshd | Select-Object Name,Status,StartType | Format-List; "
             "Get-Command code -ErrorAction SilentlyContinue | Select-Object Source"
         )
