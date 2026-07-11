@@ -7904,12 +7904,16 @@ def _run_windows10_personalize_chocolatey(run_id: str, stage_name: str) -> None:
         return
     script = (
         "$ErrorActionPreference = 'Stop'; "
-        "if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) { "
+        "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+        "if ((Test-Path 'C:\\ProgramData\\chocolatey') -and -not (Test-Path $choco)) { Remove-Item -Recurse -Force 'C:\\ProgramData\\chocolatey' }; "
+        "if (-not (Test-Path $choco)) { "
         "Set-ExecutionPolicy Bypass -Scope Process -Force; "
         "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; "
         "iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); "
         "} "
-        "choco --version"
+        "if (-not (Test-Path $choco)) { $cmd = Get-Command choco.exe -ErrorAction SilentlyContinue; if ($cmd) { $choco = $cmd.Source } } "
+        "if (-not (Test-Path $choco)) { throw 'Chocolatey install did not produce choco.exe.' } "
+        "& $choco --version"
     )
     output = _windows10_personalize_powershell(values, script, timeout=600)
     _set_stage(run_id, stage_name, "complete", "Chocolatey is available on Windows.")
