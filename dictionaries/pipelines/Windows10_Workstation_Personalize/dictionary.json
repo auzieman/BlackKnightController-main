@@ -8,13 +8,14 @@
   "package_names": [
     "libreoffice-fresh",
     "vscode",
-    "rustdesk"
+    "rustdesk",
+    "googlechrome"
   ],
   "enable_chocolatey": true,
   "enable_libreoffice": true,
   "enable_vscode": true,
   "enable_rustdesk": true,
-  "enable_full_personalization": false,
+  "enable_full_personalization": true,
   "service_checkpoints": [
     {
       "label": "FooBar Identity",

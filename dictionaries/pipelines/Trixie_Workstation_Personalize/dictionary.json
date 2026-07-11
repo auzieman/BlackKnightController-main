@@ -10,7 +10,8 @@
     "mate-terminal",
     "lightdm",
     "enlightenment",
-    "terminology"
+    "terminology",
+    "firefox-esr"
   ],
   "developer_packages": [
     "git",
@@ -22,7 +23,7 @@
   ],
   "enable_vscode": true,
   "enable_rustdesk": false,
-  "enable_full_personalization": false,
+  "enable_full_personalization": true,
   "rustdesk_deb_url": "",
   "graphical_target": "graphical.target",
   "service_checkpoints": [

@@ -7824,8 +7824,9 @@ def _run_trixie_personalize_services(run_id: str, stage_name: str) -> None:
     command = (
         f"systemctl set-default {shlex.quote(target)}; "
         "systemctl enable --now ssh qemu-guest-agent; "
-        "systemctl enable lightdm 2>/dev/null || true; "
+        "systemctl enable --now lightdm 2>/dev/null || true; "
         "systemctl is-enabled ssh qemu-guest-agent; "
+        "systemctl is-active lightdm 2>/dev/null || true; "
         "systemctl get-default"
     )
     output = _trixie_guest_exec(values, command, timeout=120)
