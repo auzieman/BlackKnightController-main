@@ -45,6 +45,7 @@ def test_small_office_foobar_recipe_is_repo_backed():
     assert pipeline is not None
     assert pipeline["repo"] == "BlackKnightController"
     assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-reference")
     assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
     assert pipeline["targets"]["windows_helpdesk_01"] == "node:vm:foobar-helpdesk-win-01"
     assert pipeline["targets"]["linux_dev_01"] == "node:vm:foobar-dev-linux-01"
@@ -58,6 +59,23 @@ def test_small_office_foobar_recipe_is_repo_backed():
         "personalize-workstations",
         "validate-small-office",
         "render-demo-lifecycle",
+    ]
+
+
+def test_small_office_foobar_reset_is_safe_by_default():
+    pipeline = pipeline_by_id("small-office-foobar-reset")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-reset")
+    assert pipeline["inputs"]["enable_destroy"]["default"] is False
+    assert "destroy-disabled-by-default" in {gate["id"] for gate in pipeline["gates"]}
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-reset-scope",
+        "plan-demo-vm-removal",
+        "plan-pxe-route-cleanup",
+        "plan-evidence-archive",
+        "verify-reset-boundary",
     ]
 
 

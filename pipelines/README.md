@@ -27,6 +27,8 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `small-office-foobar-reference/`: recipe-level `foo.bar` small-office demo
   scaffold for identity/storage, CRM, two Windows helpdesk workstations, and
   two Linux developer workstations.
+- `small-office-foobar-reset/`: safe reset scaffold for wiping only `foo.bar`
+  demo targets and generated evidence while preserving shared lab services.
 
 Repository-backed examples should stay sanitized. Use selectors, variables, and
 integration references instead of lab-only hostnames, credentials, tokens, or

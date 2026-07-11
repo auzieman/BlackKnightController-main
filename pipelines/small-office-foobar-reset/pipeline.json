@@ -1,0 +1,144 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "small-office-foobar-reset",
+  "name": "Small Office FooBar Reset",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "workflow": "small-office-foobar-reset",
+  "summary": "Review and eventually perform a scoped reset of the foo.bar small-office demo targets without touching shared provisioning or observability services.",
+  "tags": [
+    "bkc",
+    "recipe",
+    "small-office",
+    "foobar",
+    "foo.bar",
+    "reset",
+    "demo",
+    "validation"
+  ],
+  "targets": {
+    "tenant": "tenant:foobar",
+    "identity": "node:vm:foobar-id-01",
+    "crm": "node:vm:foobar-crm-01",
+    "windows_helpdesk_01": "node:vm:foobar-helpdesk-win-01",
+    "windows_helpdesk_02": "node:vm:foobar-helpdesk-win-02",
+    "linux_dev_01": "node:vm:foobar-dev-linux-01",
+    "linux_dev_02": "node:vm:foobar-dev-linux-02"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "foobar"
+    },
+    "enable_destroy": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "destroy-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_destroy": "${inputs.enable_destroy}",
+        "requires_explicit_true": true
+      }
+    },
+    {
+      "id": "preserve-shared-services",
+      "kind": "scope.guard",
+      "with": {
+        "preserve_global_services": "${dictionary.preserve_global_services}",
+        "preserve_cached_media": "${dictionary.preserve_cached_media}",
+        "preserve_observability": "${dictionary.preserve_observability}"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-reset-scope",
+      "action": "recipe.reset.scope",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "demo_nodes": "${dictionary.demo_nodes}",
+        "preserved_nodes": "${dictionary.preserved_nodes}"
+      },
+      "produces": [
+        "event:reset.scope_loaded",
+        "fact:reset_demo_nodes"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "plan-demo-vm-removal",
+      "action": "proxmox.vm.destroy.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "enabled": "${inputs.enable_destroy}",
+        "targets": "${dictionary.demo_nodes}"
+      },
+      "produces": [
+        "event:reset.vm_removal_planned"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-pxe-route-cleanup",
+      "action": "provisioning.route.cleanup.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "enabled": "${inputs.enable_destroy}",
+        "domain": "${dictionary.domain}",
+        "artifacts": [
+          "dhcp-one-shot-routes",
+          "ipxe-generated-entries"
+        ]
+      },
+      "produces": [
+        "event:reset.pxe_cleanup_planned"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-evidence-archive",
+      "action": "validation.evidence.archive.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "artifacts": "${dictionary.reset_artifacts}"
+      },
+      "produces": [
+        "event:reset.evidence_archive_planned",
+        "artifact:reset-evidence-plan"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "verify-reset-boundary",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "preserved_nodes": "${dictionary.preserved_nodes}",
+        "expected": [
+          "ns1 provisioning services preserved",
+          "cached media preserved",
+          "observability preserved",
+          "only foo.bar targets selected"
+        ]
+      },
+      "produces": [
+        "event:reset.boundary_validated",
+        "node:validation_evidence"
+      ],
+      "timeout_seconds": 30
+    }
+  ],
+  "notes": "Review-only reset scaffold. Runtime dictionaries may enable destructive actions once VMIDs and generated route files are explicitly bound."
+}

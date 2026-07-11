@@ -1,0 +1,33 @@
+{
+  "run_id": "run:small-office-foobar-reset-example",
+  "tenant_slug": "foobar",
+  "status": "planned",
+  "events": [
+    {
+      "event_type": "reset.scope_loaded",
+      "node_id": "tenant:foobar",
+      "status": "success"
+    },
+    {
+      "event_type": "reset.vm_removal_planned",
+      "node_id": "tenant:foobar",
+      "status": "blocked",
+      "evidence": {
+        "reason": "enable_destroy defaults to false"
+      }
+    },
+    {
+      "event_type": "reset.boundary_validated",
+      "node_id": "tenant:foobar",
+      "status": "success",
+      "evidence": {
+        "preserved": [
+          "ns1 provisioning services",
+          "cached Debian/Windows media",
+          "Grafana/Loki/Prometheus",
+          "BKC runtime"
+        ]
+      }
+    }
+  ]
+}

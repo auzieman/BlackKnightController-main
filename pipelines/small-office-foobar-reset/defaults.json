@@ -1,0 +1,30 @@
+{
+  "tenant_slug": "foobar",
+  "domain": "foo.bar",
+  "enable_destroy": false,
+  "preserve_global_services": true,
+  "preserve_cached_media": true,
+  "preserve_observability": true,
+  "demo_nodes": [
+    "node:vm:foobar-id-01",
+    "node:vm:foobar-crm-01",
+    "node:vm:foobar-helpdesk-win-01",
+    "node:vm:foobar-helpdesk-win-02",
+    "node:vm:foobar-dev-linux-01",
+    "node:vm:foobar-dev-linux-02"
+  ],
+  "preserved_nodes": [
+    "node:vm:ns1",
+    "node:service:ns1-dhcpd",
+    "node:service:ns1-pxe",
+    "node:service:grafana",
+    "node:service:loki",
+    "node:service:prometheus"
+  ],
+  "reset_artifacts": [
+    "dhcp-one-shot-routes",
+    "ipxe-generated-entries",
+    "validation-evidence",
+    "run-local-artifacts"
+  ]
+}
