@@ -8124,7 +8124,8 @@ def _foobar_service_targets(values: dict) -> list[dict]:
 
 
 def _foobar_guest_exec(vmid: int, command: str, *, timeout: int = 120) -> str:
-    remote = f"qm guest exec {int(vmid)} -- /bin/sh -lc {shlex.quote(command)}"
+    host_timeout = max(10, int(timeout) - 5)
+    remote = f"timeout {host_timeout}s qm guest exec {int(vmid)} -- /bin/sh -lc {shlex.quote(command)}"
     output = _run_proxmox_ssh_command(remote, timeout=timeout)
     try:
         payload = json.loads(output)
@@ -8229,7 +8230,9 @@ def _run_foobar_service_guest_wait(run_id: str, stage_name: str) -> None:
             upid = client.start_vm(node, vmid)
             client.wait_for_task(node, str(upid), timeout=180)
             client.wait_for_vm_status(node, vmid, "running", timeout=120)
+        append_event(run_id, "info", stage_name, f"Waiting for guest-command readiness on {name} VMID {vmid}.")
         output = _foobar_wait_guest(vmid, name)
+        append_event(run_id, "info", stage_name, f"{name} VMID {vmid} accepted BKC guest commands.")
         ready.append({"node": node, "vmid": vmid, "name": name, "output": output[-300:]})
     _store_run_extra(run_id, {"foobar_service_guests_ready": ready})
     append_event(run_id, "info", stage_name, json.dumps(ready, sort_keys=True))
