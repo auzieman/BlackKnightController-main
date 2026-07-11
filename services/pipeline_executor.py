@@ -7825,6 +7825,10 @@ def _foobar_app_targets(values: dict) -> list[dict]:
     return normalized
 
 
+def _foobar_truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _find_proxmox_vm_node(client: ProxmoxClient, vmid: int, preferred_node: str = "") -> tuple[str, dict | None]:
     preferred = str(preferred_node or "").strip()
     if preferred:
@@ -7900,7 +7904,7 @@ def _run_foobar_app_vm_clone(run_id: str, stage_name: str) -> None:
     if not source_node or not source_vmid:
         raise PipelineExecutionError("FooBar app VM source metadata is missing. Re-run select-trixie-source.")
     targets = _foobar_app_targets(values)
-    enable_replace = _truthy(values.get("enable_replace"))
+    enable_replace = _foobar_truthy(values.get("enable_replace"))
     cloned = []
 
     for target in targets:
