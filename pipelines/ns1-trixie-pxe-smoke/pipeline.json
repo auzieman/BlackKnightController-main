@@ -231,93 +231,18 @@
     },
     {
       "id": "post-boot-recollect",
-      "action": "ssh.facter.recollect",
-      "transport": "bkc-ssh",
+      "action": "pipeline.handoff.record",
+      "transport": "internal",
       "risk": "low",
       "with": {
         "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
         "user": "${dictionary.post_boot_probe_user}",
-        "package_profile": "${dictionary.target_package_profile}"
+        "next_pipeline": "trixie-workstation-personalize",
+        "reason": "Debian installer must complete and expose SSH or QEMU guest agent before personalization."
       },
       "produces": [
-        "fact:trixie_os",
-        "fact:trixie_packages",
-        "fact:facter_snapshot"
-      ],
-      "timeout_seconds": 120
-    },
-    {
-      "id": "install-workstation-packages",
-      "action": "proxmox.guest.exec",
-      "transport": "bkc-proxmox",
-      "risk": "medium",
-      "with": {
-        "vmid": "${dictionary.target_vmid}",
-        "profile": "trixie-workstation-personalize"
-      },
-      "produces": [
-        "package:libreoffice",
-        "package:mate",
-        "package:enlightenment",
-        "package:developer-tools"
-      ],
-      "timeout_seconds": 3600
-    },
-    {
-      "id": "install-vscode-if-enabled",
-      "action": "proxmox.guest.exec",
-      "transport": "bkc-proxmox",
-      "risk": "medium",
-      "with": {
-        "vmid": "${dictionary.target_vmid}",
-        "profile": "trixie-workstation-personalize"
-      },
-      "produces": [
-        "package:vscode"
-      ],
-      "timeout_seconds": 900
-    },
-    {
-      "id": "install-rustdesk-if-configured",
-      "action": "proxmox.guest.exec",
-      "transport": "bkc-proxmox",
-      "risk": "medium",
-      "with": {
-        "vmid": "${dictionary.target_vmid}",
-        "profile": "trixie-workstation-personalize"
-      },
-      "produces": [
-        "package:rustdesk"
-      ],
-      "timeout_seconds": 900
-    },
-    {
-      "id": "enable-graphical-services",
-      "action": "proxmox.guest.exec",
-      "transport": "bkc-proxmox",
-      "risk": "medium",
-      "with": {
-        "vmid": "${dictionary.target_vmid}",
-        "profile": "trixie-workstation-personalize"
-      },
-      "produces": [
-        "service:graphical-target",
-        "service:ssh",
-        "service:qemu-guest-agent"
-      ],
-      "timeout_seconds": 120
-    },
-    {
-      "id": "verify-trixie-personality",
-      "action": "proxmox.guest.exec",
-      "transport": "bkc-proxmox",
-      "risk": "low",
-      "with": {
-        "vmid": "${dictionary.target_vmid}",
-        "profile": "trixie-workstation-personalize"
-      },
-      "produces": [
-        "fact:trixie_workstation_ready"
+        "event:post_boot_recollection_pending",
+        "handoff:trixie-workstation-personalize"
       ],
       "timeout_seconds": 120
     },

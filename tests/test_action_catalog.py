@@ -668,11 +668,6 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
         "pxe-boot-vm132",
         "observe-installer-handoff",
         "post-boot-recollect",
-        "install-workstation-packages",
-        "install-vscode-if-enabled",
-        "install-rustdesk-if-configured",
-        "enable-graphical-services",
-        "verify-trixie-personality",
         "record-trixie-relationships",
     ]
     assert [stage["name"] for stage in windows_stages] == [
@@ -696,9 +691,6 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
         "pxe-boot-vm136",
         "observe-winpe-handoff",
         "post-install-ssh-check",
-        "ensure-chocolatey",
-        "install-workstation-packages",
-        "verify-windows-personality",
         "record-windows-pxe-relationships",
     ]
     assert [stage["name"] for stage in trixie_personalize_stages] == [
@@ -739,11 +731,6 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
         "trixie-vm-boot",
         "trixie-vm-observe",
         "trixie-vm-prepare",
-        "trixie-personalize-packages",
-        "trixie-personalize-vscode",
-        "trixie-personalize-rustdesk",
-        "trixie-personalize-services",
-        "trixie-personalize-verify",
     }
     assert {stage["kind"] for stage in windows_stages} == {
         "folder-pipeline-review",
@@ -753,11 +740,11 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
         "windows10-verify-iso",
     }
     assert {stage["kind"] for stage in windows_pxe_stages} == {
+        "event-note",
         "folder-pipeline-review",
         "windows10-dhcp-route-render",
         "windows10-ipxe-render",
         "windows10-media-share",
-        "windows10-post-install-ssh",
         "windows10-pxe-prereqs",
         "windows10-pxe-verify-iso",
         "windows10-unattend-render",
@@ -766,9 +753,6 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
         "windows10-vm-prepare",
         "windows10-wimboot-fetch",
         "windows10-winpe-stage",
-        "windows10-personalize-chocolatey",
-        "windows10-personalize-packages",
-        "windows10-personalize-verify",
     }
     assert {stage["kind"] for stage in trixie_personalize_stages} == {
         "folder-pipeline-review",

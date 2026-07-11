@@ -308,11 +308,6 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "pxe-boot-vm132",
             "observe-installer-handoff",
             "post-boot-recollect",
-            "install-workstation-packages",
-            "install-vscode-if-enabled",
-            "install-rustdesk-if-configured",
-            "enable-graphical-services",
-            "verify-trixie-personality",
             "record-trixie-relationships",
         ]
     if normalized == "windows10-reference-discover":
@@ -338,9 +333,6 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "pxe-boot-vm136",
             "observe-winpe-handoff",
             "post-install-ssh-check",
-            "ensure-chocolatey",
-            "install-workstation-packages",
-            "verify-windows-personality",
             "record-windows-pxe-relationships",
         ]
     if normalized == "trixie-workstation-personalize":

@@ -260,60 +260,18 @@
     },
     {
       "id": "post-install-ssh-check",
-      "action": "ssh.command.check",
-      "transport": "bkc-ssh",
+      "action": "pipeline.handoff.record",
+      "transport": "internal",
       "risk": "low",
       "with": {
         "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
         "user": "${dictionary.post_boot_probe_user}",
-        "command": "hostname"
+        "next_pipeline": "windows10-workstation-personalize",
+        "reason": "Windows setup and firstboot bootstrap must complete before SSH-driven personalization."
       },
       "produces": [
-        "fact:windows_ssh_ready"
-      ],
-      "timeout_seconds": 120
-    },
-    {
-      "id": "ensure-chocolatey",
-      "action": "ssh.powershell",
-      "transport": "bkc-ssh",
-      "risk": "medium",
-      "with": {
-        "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
-        "profile": "windows10-workstation-personalize"
-      },
-      "produces": [
-        "package:chocolatey"
-      ],
-      "timeout_seconds": 600
-    },
-    {
-      "id": "install-workstation-packages",
-      "action": "ssh.powershell",
-      "transport": "bkc-ssh",
-      "risk": "medium",
-      "with": {
-        "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
-        "profile": "windows10-workstation-personalize"
-      },
-      "produces": [
-        "package:libreoffice",
-        "package:vscode",
-        "package:rustdesk"
-      ],
-      "timeout_seconds": 1800
-    },
-    {
-      "id": "verify-windows-personality",
-      "action": "ssh.powershell",
-      "transport": "bkc-ssh",
-      "risk": "low",
-      "with": {
-        "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
-        "profile": "windows10-workstation-personalize"
-      },
-      "produces": [
-        "fact:windows_workstation_ready"
+        "event:windows_ssh_pending",
+        "handoff:windows10-workstation-personalize"
       ],
       "timeout_seconds": 120
     },
