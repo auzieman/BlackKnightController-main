@@ -33,7 +33,7 @@
     },
     "enable_replace_identity": {
       "required": false,
-      "default": true
+      "default": false
     }
   },
   "gates": [

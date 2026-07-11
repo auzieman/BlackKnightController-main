@@ -5,7 +5,7 @@
   "source_template_node": "pve",
   "source_template_vmid": 132,
   "source_template_name": "trixie-smoke-132",
-  "enable_replace_identity": true,
+  "enable_replace_identity": false,
   "stop_source_for_identity_clone": true,
   "default_password": "changeme123",
   "ldap_base_dn": "dc=foo,dc=bar",
