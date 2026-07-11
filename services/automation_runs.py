@@ -361,6 +361,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     if normalized == "trixie-workstation-personalize":
         return [
             "discover-installed-trixie",
+            "normalize-local-login",
             "publish-demo-checkpoints",
             "install-workstation-packages",
             "install-vscode-if-enabled",

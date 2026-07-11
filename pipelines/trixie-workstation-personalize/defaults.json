@@ -4,6 +4,7 @@
   "target_vm_node_id": "node:vm:trixie-smoke-132",
   "target_vm_name": "trixie-smoke-132",
   "target_install_user": "auzieman",
+  "target_install_password": "changeme123",
   "desktop_packages": [
     "libreoffice",
     "mate-desktop-environment-core",

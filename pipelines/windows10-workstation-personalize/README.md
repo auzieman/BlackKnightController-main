@@ -12,6 +12,12 @@ Initial profile:
 - LibreOffice Fresh
 - Visual Studio Code
 - RustDesk
+- Google Chrome
+- FooBar checkpoint file on the user's desktop
 
 The target host can be changed in the dictionary if DNS does not yet resolve the
 Windows management address.
+
+Verification checks concrete installed application paths plus SSH service state
+so a missing PATH alias or noisy Chocolatey output does not fail an otherwise
+healthy workstation.

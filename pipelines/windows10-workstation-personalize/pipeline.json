@@ -84,7 +84,8 @@
       "produces": [
         "package:libreoffice",
         "package:vscode",
-        "package:rustdesk"
+        "package:rustdesk",
+        "package:googlechrome"
       ],
       "timeout_seconds": 1800
     },
@@ -96,7 +97,10 @@
       "with": {
         "target": "${dictionary.target_host}",
         "commands": [
-          "choco list --local-only",
+          "Test-Path C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+          "Test-Path C:\\Program Files\\Microsoft VS Code\\Code.exe",
+          "Test-Path C:\\Program Files\\RustDesk\\RustDesk.exe",
+          "Test-Path C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
           "Get-Service sshd"
         ]
       },

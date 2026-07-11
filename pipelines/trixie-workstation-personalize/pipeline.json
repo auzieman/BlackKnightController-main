@@ -39,6 +39,21 @@
       "timeout_seconds": 60
     },
     {
+      "id": "normalize-local-login",
+      "action": "proxmox.guest.exec",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "user": "${dictionary.target_install_user}",
+        "password": "${dictionary.target_install_password}"
+      },
+      "produces": [
+        "credential:local-workstation-login"
+      ],
+      "timeout_seconds": 60
+    },
+    {
       "id": "publish-demo-checkpoints",
       "action": "proxmox.guest.exec",
       "transport": "bkc-proxmox",

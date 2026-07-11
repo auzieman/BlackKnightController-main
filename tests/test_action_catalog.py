@@ -768,6 +768,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     ]
     assert [stage["name"] for stage in trixie_personalize_stages] == [
         "discover-installed-trixie",
+        "normalize-local-login",
         "publish-demo-checkpoints",
         "install-workstation-packages",
         "install-vscode-if-enabled",
@@ -832,6 +833,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     assert {stage["kind"] for stage in trixie_personalize_stages} == {
         "folder-pipeline-review",
         "trixie-personalize-discover",
+        "trixie-personalize-login",
         "trixie-personalize-checkpoints",
         "trixie-personalize-packages",
         "trixie-personalize-vscode",

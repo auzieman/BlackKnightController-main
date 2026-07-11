@@ -2848,6 +2848,15 @@ WORKFLOW_DEFINITIONS["trixie-workstation-personalize"] = {
             "timeout": 60,
         },
         {
+            "name": "normalize-local-login",
+            "transport": "internal",
+            "kind": "trixie-personalize-login",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Normalizing the Trixie local workstation login.",
+            "complete": "Trixie local workstation login normalized.",
+            "timeout": 60,
+        },
+        {
             "name": "publish-demo-checkpoints",
             "transport": "internal",
             "kind": "trixie-personalize-checkpoints",
@@ -7692,6 +7701,29 @@ def _run_trixie_personalize_discover(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie guest ready")
 
 
+def _run_trixie_personalize_login(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    install_user = str(values.get("target_install_user") or "auzieman").strip()
+    install_password = str(values.get("target_install_password") or "").strip()
+    if not install_user:
+        raise PipelineExecutionError("target_install_user is required for Trixie login normalization.")
+    if not install_password:
+        _set_stage(run_id, stage_name, "complete", "Skipped password normalization because target_install_password is blank.")
+        append_event(run_id, "info", stage_name, "Trixie local password normalization is opt-in.")
+        return
+    command = (
+        "set -e; "
+        f"user={shlex.quote(install_user)}; "
+        "getent passwd \"$user\" >/dev/null; "
+        f"printf '%s\n' {shlex.quote(f'{install_user}:{install_password}')} | chpasswd; "
+        "passwd -S \"$user\" | awk '{print $1, $2, $3}'; "
+        "getent passwd \"$user\""
+    )
+    output = _trixie_guest_exec(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Trixie local login normalized for {install_user}.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"{install_user} password normalized")
+
+
 def _service_checkpoint_urls(values: dict) -> list[dict]:
     checkpoints = values.get("service_checkpoints")
     if not isinstance(checkpoints, list) or not checkpoints:
@@ -8940,6 +8972,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "trixie-personalize-discover":
             _run_trixie_personalize_discover(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-login":
+            _run_trixie_personalize_login(run_id, stage_name)
             continue
 
         if kind == "trixie-personalize-checkpoints":
