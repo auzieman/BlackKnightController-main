@@ -6,6 +6,10 @@ This pipeline deliberately does not rerun WinPE or Windows setup. It waits for
 the installed Windows guest to be reachable over BKC SSH, then uses PowerShell
 and Chocolatey to install workstation tools.
 
+The PXE lane may generate a one-time bootstrap password and stage it as a
+handoff artifact. This personalization lane normalizes the human-facing console
+login from dictionary values. Current defaults are `depadmin` / `changeme123`.
+
 Initial profile:
 
 - Chocolatey

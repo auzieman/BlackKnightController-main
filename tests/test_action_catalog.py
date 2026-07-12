@@ -779,6 +779,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     ]
     assert [stage["name"] for stage in windows_personalize_stages] == [
         "discover-installed-windows",
+        "normalize-local-login",
         "publish-demo-checkpoints",
         "ensure-chocolatey",
         "install-workstation-packages",
@@ -844,6 +845,7 @@ def test_ns1_provisioning_lanes_are_supported_review_workflows():
     assert {stage["kind"] for stage in windows_personalize_stages} == {
         "folder-pipeline-review",
         "windows10-personalize-discover",
+        "windows10-personalize-login",
         "windows10-personalize-checkpoints",
         "windows10-personalize-chocolatey",
         "windows10-personalize-packages",

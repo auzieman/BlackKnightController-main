@@ -44,6 +44,21 @@
       "timeout_seconds": 120
     },
     {
+      "id": "normalize-local-login",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "user": "${dictionary.target_admin_user}",
+        "password": "${dictionary.target_demo_password}"
+      },
+      "produces": [
+        "credential:local-workstation-login"
+      ],
+      "timeout_seconds": 60
+    },
+    {
       "id": "publish-demo-checkpoints",
       "action": "ssh.powershell",
       "transport": "bkc-ssh",

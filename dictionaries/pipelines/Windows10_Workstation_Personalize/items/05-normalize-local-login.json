@@ -1,0 +1,7 @@
+{
+  "id": "normalize-local-login",
+  "name": "Normalize Local Login",
+  "summary": "Set the expected local Windows workstation password for repeatable demo console login.",
+  "owner": "bkc",
+  "status": "active"
+}

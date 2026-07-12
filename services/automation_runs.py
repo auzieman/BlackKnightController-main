@@ -373,6 +373,7 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
     if normalized == "windows10-workstation-personalize":
         return [
             "discover-installed-windows",
+            "normalize-local-login",
             "publish-demo-checkpoints",
             "ensure-chocolatey",
             "install-workstation-packages",

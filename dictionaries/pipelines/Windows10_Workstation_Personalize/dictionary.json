@@ -5,6 +5,7 @@
   "target_vm_name": "win10-pxe-smoke-136",
   "target_host": "192.168.1.183",
   "target_admin_user": "depadmin",
+  "target_demo_password": "changeme123",
   "package_names": [
     "libreoffice-fresh",
     "vscode",

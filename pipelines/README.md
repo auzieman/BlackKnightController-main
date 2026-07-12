@@ -35,6 +35,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `small-office-foobar-reset/`: safe reset scaffold for wiping only `foo.bar`
   demo targets and generated evidence while preserving shared lab services.
 
+See `docs/small-office-foobar-example.md` for the packaged architecture,
+credentials, validation evidence, and BKC SSH handoff pattern.
+
 ## FooBar Demo Links
 
 - Pipeline list:
@@ -46,7 +49,7 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - Service provisioning lane:
   `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
 - Clean service provisioning run:
-  `http://swarm1.lab.auzietek.com:5000/pipelines/ea6853ca-a4fd-477d-ad67-28150368ae83`
+  `http://swarm1.lab.auzietek.com:5000/pipelines/42ec95f7-7414-4e29-826a-325cd632f4d9`
 - Browser-facing service IPs:
   recorded by `configure-demo-lan`; use those `192.168.1.x` links from the
   workstation unless the `*.lab.foo.bar` names have been registered in DNS.

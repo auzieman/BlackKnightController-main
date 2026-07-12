@@ -2936,6 +2936,15 @@ WORKFLOW_DEFINITIONS["windows10-workstation-personalize"] = {
             "timeout": 120,
         },
         {
+            "name": "normalize-local-login",
+            "transport": "internal",
+            "kind": "windows10-personalize-login",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Normalizing the Windows local workstation login.",
+            "complete": "Windows local workstation login normalized.",
+            "timeout": 60,
+        },
+        {
             "name": "publish-demo-checkpoints",
             "transport": "internal",
             "kind": "windows10-personalize-checkpoints",
@@ -7907,6 +7916,29 @@ def _run_windows10_personalize_discover(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, output[-1600:] if output else "windows ssh ready")
 
 
+def _run_windows10_personalize_login(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    admin_user = str(values.get("target_admin_user") or "depadmin").strip()
+    demo_password = str(values.get("target_demo_password") or "").strip()
+    if not admin_user:
+        raise PipelineExecutionError("target_admin_user is required for Windows login normalization.")
+    if not demo_password:
+        _set_stage(run_id, stage_name, "complete", "Skipped password normalization because target_demo_password is blank.")
+        append_event(run_id, "info", stage_name, "Windows local password normalization is opt-in.")
+        return
+    escaped_user = admin_user.replace("'", "''")
+    escaped_password = demo_password.replace("'", "''")
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"net user '{escaped_user}' '{escaped_password}'; "
+        "Write-Output 'windows-local-login-normalized'; "
+        "whoami"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Windows local login normalized for {admin_user}.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"{admin_user} password normalized")
+
+
 def _run_windows10_personalize_checkpoints(run_id: str, stage_name: str) -> None:
     _, _, values = _windows10_personalize_context()
     urls = _service_checkpoint_urls(values)
@@ -9136,6 +9168,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "windows10-personalize-discover":
             _run_windows10_personalize_discover(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-login":
+            _run_windows10_personalize_login(run_id, stage_name)
             continue
 
         if kind == "windows10-personalize-checkpoints":
