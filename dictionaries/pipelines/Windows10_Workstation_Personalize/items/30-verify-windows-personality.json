@@ -1,0 +1,5 @@
+{
+  "id": "verify-windows-personality",
+  "action": "ssh.powershell",
+  "summary": "Verify installed Windows application paths and SSH service state."
+}

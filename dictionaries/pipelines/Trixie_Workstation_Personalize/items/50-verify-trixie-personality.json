@@ -1,0 +1,5 @@
+{
+  "id": "verify-trixie-personality",
+  "action": "proxmox.guest.exec",
+  "summary": "Verify the installed workstation profile and service state."
+}

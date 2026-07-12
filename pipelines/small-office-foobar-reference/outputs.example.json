@@ -1,0 +1,81 @@
+{
+  "run_id": "run:small-office-foobar-reference-example",
+  "tenant_slug": "foobar",
+  "status": "planned",
+  "events": [
+    {
+      "event_type": "recipe.intent_loaded",
+      "node_id": "tenant:foobar",
+      "status": "success",
+      "observed_at": "2026-07-11T12:00:00Z"
+    },
+    {
+      "event_type": "identity.users_declared",
+      "node_id": "node:vm:foobar-id-01",
+      "status": "success",
+      "evidence": {
+        "users": [
+          "joe.user",
+          "jill.user",
+          "bob.dev1",
+          "bob.dev2"
+        ],
+        "groups": [
+          "foobar_helpdesk",
+          "foobar_developers",
+          "foobar_crm_users"
+        ]
+      }
+    },
+    {
+      "event_type": "workstation.pxe_completed",
+      "node_id": "node:vm:foobar-dev-linux-01",
+      "status": "running",
+      "evidence": {
+        "profile": "ns1-trixie-pxe-smoke"
+      }
+    },
+    {
+      "event_type": "workstation.pxe_completed",
+      "node_id": "node:vm:foobar-helpdesk-win-01",
+      "status": "running",
+      "evidence": {
+        "profile": "windows10-pxe-smoke"
+      }
+    },
+    {
+      "event_type": "recipe.validation_passed",
+      "node_id": "tenant:foobar",
+      "status": "pending",
+      "evidence": {
+        "summary": "All declared checks become pass/fail evidence once the recipe is bound to live VMIDs and MAC addresses."
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source_id": "node:vm:foobar-helpdesk-win-01",
+      "type": "assigned_to",
+      "target_id": "user:foo.bar:joe.user",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:vm:foobar-dev-linux-01",
+      "type": "assigned_to",
+      "target_id": "user:foo.bar:bob.dev1",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:vm:foobar-helpdesk-win-01",
+      "type": "uses",
+      "target_id": "node:vm:foobar-crm-01",
+      "confidence": "planned"
+    },
+    {
+      "source_id": "node:vm:foobar-dev-linux-01",
+      "type": "uses_storage",
+      "target_id": "node:vm:foobar-id-01",
+      "confidence": "planned"
+    }
+  ]
+}

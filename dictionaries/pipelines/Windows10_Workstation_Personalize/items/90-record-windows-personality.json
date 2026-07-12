@@ -1,0 +1,5 @@
+{
+  "id": "record-windows-personality",
+  "action": "node.relationships.record",
+  "summary": "Record the validated Windows workstation profile relationship."
+}

@@ -1,0 +1,91 @@
+{
+  "tenant_slug": "foobar",
+  "domain": "foo.bar",
+  "lab_zone": "lab.foo.bar",
+  "source_template_node": "pve",
+  "source_template_vmid": 132,
+  "source_template_name": "trixie-smoke-132",
+  "enable_replace_identity": false,
+  "stop_source_for_identity_clone": true,
+  "demo_lan_interface": "ens19",
+  "demo_lan_prefix": "192.168.1.",
+  "require_demo_lan_urls": true,
+  "default_password": "changeme123",
+  "ldap_base_dn": "dc=foo,dc=bar",
+  "ldap_admin_dn": "cn=admin,dc=foo,dc=bar",
+  "kanboard_version": "1.2.52",
+  "suitecrm_version": "7.15.1",
+  "identity_vm": {
+    "role": "identity-storage",
+    "vmid": 139,
+    "name": "foobar-id-01",
+    "node_id": "node:vm:foobar-id-01",
+    "hostname": "foobar-id-01.lab.foo.bar",
+    "application": "identity",
+    "services": [
+      "openldap",
+      "samba",
+      "phpldapadmin"
+    ]
+  },
+  "application_vms": [
+    {
+      "role": "crm",
+      "vmid": 137,
+      "name": "foobar-crm-01",
+      "node_id": "node:vm:foobar-crm-01",
+      "hostname": "foobar-crm-01.lab.foo.bar",
+      "application": "suitecrm",
+      "endpoint_path": "/suitecrm/",
+      "services": [
+        "apache",
+        "php",
+        "mariadb",
+        "suitecrm"
+      ]
+    },
+    {
+      "role": "tickets",
+      "vmid": 138,
+      "name": "foobar-tickets-01",
+      "node_id": "node:vm:foobar-tickets-01",
+      "hostname": "foobar-tickets-01.lab.foo.bar",
+      "application": "kanboard",
+      "endpoint_path": "/kanboard/",
+      "services": [
+        "apache",
+        "php",
+        "sqlite",
+        "kanboard"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "joe.user",
+      "display_name": "Joe User",
+      "role": "helpdesk"
+    },
+    {
+      "username": "jill.user",
+      "display_name": "Jill User",
+      "role": "helpdesk"
+    },
+    {
+      "username": "bob.dev1",
+      "display_name": "Bob Dev1",
+      "role": "developer"
+    },
+    {
+      "username": "bob.dev2",
+      "display_name": "Bob Dev2",
+      "role": "developer"
+    }
+  ],
+  "groups": [
+    "foobar_helpdesk",
+    "foobar_developers",
+    "foobar_crm_users"
+  ],
+  "notes": "Provision the first foo.bar identity/storage and lightweight intranet service layer after app VM shells exist."
+}

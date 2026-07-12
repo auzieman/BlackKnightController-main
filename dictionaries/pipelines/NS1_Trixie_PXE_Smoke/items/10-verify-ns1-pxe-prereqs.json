@@ -1,0 +1,7 @@
+{
+  "id": "verify-ns1-pxe-prereqs",
+  "name": "Verify ns1 PXE Prereqs",
+  "action": "ssh.pxe.prereqs",
+  "risk": "low",
+  "description": "Confirm PXE work is scoped to ens19 and the isolated 10.20 provisioning network."
+}

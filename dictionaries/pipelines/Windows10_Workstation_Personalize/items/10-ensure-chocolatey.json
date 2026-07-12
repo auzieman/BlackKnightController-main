@@ -1,0 +1,5 @@
+{
+  "id": "ensure-chocolatey",
+  "action": "ssh.powershell",
+  "summary": "Install Chocolatey if it is missing."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "inspect-vm113",
+  "name": "Inspect VM113",
+  "action": "proxmox.vm.inspect",
+  "risk": "low",
+  "description": "Review the VMID 113 Proxmox shape without rebuilding it."
+}

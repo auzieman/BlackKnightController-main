@@ -1,0 +1,193 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "BKC FooBar Recipe",
+      "tooltip": "Open the completed BKC recipe review run",
+      "type": "link",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines/ad11afa1-5304-4edb-ac7f-6ed37aafd79a"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "BKC FooBar Reset",
+      "tooltip": "Open the completed BKC reset review run",
+      "type": "link",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines/e8bd80cb-2010-470e-a290-3a2afad04677"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "BKC FooBar Pipelines",
+      "tooltip": "Open the filtered FooBar pipeline list",
+      "type": "link",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "BKC App VM Lane",
+      "tooltip": "Open the SuiteCRM and Kanboard app VM clone lane",
+      "type": "link",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-app-vms"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "flowchart LR\n  classDef bkc fill:#111827,color:#f8fafc,stroke:#60a5fa,stroke-width:2px\n  classDef planned fill:#1f2937,color:#f8fafc,stroke:#94a3b8,stroke-width:1px\n  classDef active fill:#78350f,color:#fef3c7,stroke:#f59e0b,stroke-width:2px\n  classDef good fill:#064e3b,color:#ecfdf5,stroke:#22c55e,stroke-width:2px\n  classDef service fill:#0f172a,color:#e0f2fe,stroke:#38bdf8,stroke-width:1px\n  classDef windows fill:#1e3a8a,color:#eff6ff,stroke:#60a5fa,stroke-width:1px\n  classDef linux fill:#14532d,color:#f0fdf4,stroke:#4ade80,stroke-width:1px\n\n  reset[\"Reset review<br/>foo.bar scope\"]:::good\n  bkc[\"BlackKnightController<br/>recipe orchestrator\"]:::bkc\n  pxe[\"PXE / WinPE / Debian netboot<br/>ns1 provisioning services\"]:::active\n  appvms[\"App VM clone lane<br/>SuiteCRM + Kanboard shells\"]:::active\n  identity[\"foobar-id-01<br/>OpenLDAP + Samba homes<br/>phpLDAPadmin\"]:::service\n  crm[\"foobar-crm-01<br/>SuiteCRM\"]:::service\n  tickets[\"foobar-tickets-01<br/>Kanboard\"]:::service\n  win1[\"foobar-helpdesk-win-01<br/>joe.user\"]:::windows\n  win2[\"foobar-helpdesk-win-02<br/>jill.user\"]:::windows\n  lin1[\"foobar-dev-linux-01<br/>bob.dev1\"]:::linux\n  lin2[\"foobar-dev-linux-02<br/>bob.dev2\"]:::linux\n  validate[\"Layered validation<br/>identity + storage + apps + workstations\"]:::good\n  managed[\"Managed tiny startup<br/>foo.bar\"]:::good\n\n  reset --> bkc\n  bkc --> pxe\n  bkc --> appvms\n  bkc --> identity\n  appvms --> crm\n  appvms --> tickets\n  identity --> crm\n  identity --> tickets\n  pxe --> win1\n  pxe --> win2\n  pxe --> lin1\n  pxe --> lin2\n  identity --> win1\n  identity --> win2\n  identity --> lin1\n  identity --> lin2\n  crm --> validate\n  tickets --> validate\n  win1 --> validate\n  win2 --> validate\n  lin1 --> validate\n  lin2 --> validate\n  validate --> managed",
+        "escapeSpecialChars": false,
+        "maxDataRows": 100
+      },
+      "pluginVersion": "11.1.4",
+      "targets": [
+        {
+          "expr": "vector(1)",
+          "legendFormat": "planned",
+          "refId": "A"
+        }
+      ],
+      "title": "FooBar Small Office Provisioning Flow",
+      "type": "neildengg-grafmaid-panel"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 2,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "### Planned Server Roster\n\n| Node | Role | User / Service | Current state |\n| --- | --- | --- | --- |\n| `foobar-id-01` | Identity + shared homes | LDAP, Samba, phpLDAPadmin | Planned |\n| `foobar-crm-01` | CRM | SuiteCRM, MariaDB, PHP | App VM lane |\n| `foobar-tickets-01` | Helpdesk board | Kanboard, SQLite, PHP | App VM lane |\n| `foobar-helpdesk-win-01` | Windows helpdesk | joe.user | PXE install |\n| `foobar-helpdesk-win-02` | Windows helpdesk | jill.user | PXE install |\n| `foobar-dev-linux-01` | Linux developer workstation | bob.dev1 | Planned |\n| `foobar-dev-linux-02` | Linux developer workstation | bob.dev2 | Planned |\n\nThe app VM lane reuses the prepared Trixie base and creates stable PVE targets for later SuiteCRM/Kanboard package installation.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.1.4",
+      "title": "Server List",
+      "type": "text"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 3,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "### Recording View\n\nUse this dashboard in kiosk mode beside:\n\n- BKC FooBar pipeline list\n- BKC app VM clone lane\n- PVE/noVNC Windows helpdesk console\n- PVE/noVNC Linux developer console\n\nValidation links:\n\n- Trixie PXE: `12caa567-6119-4e53-97a4-4aa1acf97463`\n- Windows PXE: `06c3157f-91dc-4a6f-819e-12a324b77759`\n- Reset review: `e8bd80cb-2010-470e-a290-3a2afad04677`\n- Recipe review: `ad11afa1-5304-4edb-ac7f-6ed37aafd79a`\n\nNext stage: run `small-office-foobar-app-vms` after VMID 132 is shut down or converted to a template.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.1.4",
+      "title": "Demo Notes",
+      "type": "text"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": [
+    "bkc",
+    "foobar",
+    "foo.bar",
+    "small-office",
+    "demo",
+    "grafmaid"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "FooBar Small Office Lifecycle",
+  "uid": "small-office-foobar",
+  "version": 1,
+  "weekStart": ""
+}

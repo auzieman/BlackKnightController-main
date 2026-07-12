@@ -1,0 +1,7 @@
+{
+  "id": "stage-firstboot-artifacts",
+  "name": "Stage Firstboot Artifacts",
+  "action": "artifact.stage",
+  "risk": "low",
+  "description": "Declare the OpenSSH bootstrap and conservative Windows diet scripts for later unattended first boot."
+}

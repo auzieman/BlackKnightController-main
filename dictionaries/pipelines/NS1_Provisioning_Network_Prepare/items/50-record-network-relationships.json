@@ -1,0 +1,7 @@
+{
+  "id": "record-network-relationships",
+  "name": "Record Network Relationships",
+  "action": "node.relationships.record",
+  "risk": "low",
+  "description": "Record that ns1 uses the lab provisioning network."
+}

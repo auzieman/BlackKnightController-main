@@ -1,0 +1,148 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "windows10-workstation-personalize",
+  "name": "Windows 10 Workstation Personalize",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Personalize the installed Windows 10 VMID 136 through post-install SSH without rerunning WinPE.",
+  "tags": [
+    "bkc",
+    "node-model",
+    "windows",
+    "windows10",
+    "workstation",
+    "postinstall",
+    "runnable"
+  ],
+  "targets": {
+    "target_vm": "node:vm:win10-pxe-smoke-136"
+  },
+  "inputs": {
+    "target_host": {
+      "required": true,
+      "default": "win10-pxe-136.lab.auzietek.com"
+    },
+    "target_vmid": {
+      "required": true,
+      "default": 136
+    }
+  },
+  "stages": [
+    {
+      "id": "discover-installed-windows",
+      "action": "ssh.command.check",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "user": "${dictionary.target_admin_user}",
+        "command": "hostname"
+      },
+      "produces": [
+        "fact:windows_ssh_ready"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "normalize-local-login",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "user": "${dictionary.target_admin_user}",
+        "password": "${dictionary.target_demo_password}"
+      },
+      "produces": [
+        "credential:local-workstation-login"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "publish-demo-checkpoints",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "checkpoints": "${dictionary.service_checkpoints}"
+      },
+      "produces": [
+        "desktop-file:foobar-demo-checkpoints",
+        "evidence:foobar-service-urls"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "ensure-chocolatey",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "enabled": "${dictionary.enable_chocolatey}"
+      },
+      "produces": [
+        "package:chocolatey"
+      ],
+      "timeout_seconds": 600
+    },
+    {
+      "id": "install-workstation-packages",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "packages": "${dictionary.package_names}"
+      },
+      "produces": [
+        "package:libreoffice",
+        "package:vscode",
+        "package:rustdesk",
+        "package:googlechrome"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "verify-windows-personality",
+      "action": "ssh.powershell",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "commands": [
+          "Test-Path C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+          "Test-Path C:\\Program Files\\Microsoft VS Code\\Code.exe",
+          "Test-Path C:\\Program Files\\RustDesk\\RustDesk.exe",
+          "Test-Path C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "Get-Service sshd"
+        ]
+      },
+      "produces": [
+        "fact:windows_workstation_ready"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "record-windows-personality",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "has_profile",
+            "target_id": "profile:workstation:windows10-office-remote",
+            "confidence": "validated"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:windows-workstation-profile"
+      ],
+      "timeout_seconds": 15
+    }
+  ]
+}

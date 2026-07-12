@@ -3,6 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if current_user.is_authenticated %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% endif %}
     <title>{% block title %}BlackKnightController{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
     {% block head_extra %}{% endblock %}

@@ -1,0 +1,7 @@
+{
+  "id": "resolve-builder-context",
+  "name": "Resolve Builder Context",
+  "action": "node.resolve",
+  "risk": "low",
+  "description": "Resolve VMID 113 as the Windows-native WinPE builder and ns1 as the PXE publisher."
+}

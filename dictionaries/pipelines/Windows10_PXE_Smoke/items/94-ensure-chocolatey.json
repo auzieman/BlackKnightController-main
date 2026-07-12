@@ -1,0 +1,5 @@
+{
+  "id": "ensure-chocolatey",
+  "action": "ssh.powershell",
+  "description": "Install Chocolatey after Windows first boot if it is missing."
+}

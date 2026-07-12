@@ -1,0 +1,7 @@
+{
+  "id": "observe-installer-handoff",
+  "name": "Observe Installer Handoff",
+  "action": "proxmox.vm.console.observe",
+  "risk": "low",
+  "description": "Observe the VM console for Debian Trixie installer handoff evidence."
+}

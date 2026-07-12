@@ -1,0 +1,174 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "ns1-provisioning-network-prepare",
+  "name": "ns1 Provisioning Network Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Prepare and validate an isolated provisioning network interface on ns1 without enabling DHCP or PXE.",
+  "tags": [
+    "bkc",
+    "node-model",
+    "provisioning",
+    "network",
+    "ns1",
+    "pxe-prep"
+  ],
+  "targets": {
+    "controller": "node:vm:ns1",
+    "management_network": "node:network:lab-mgmt",
+    "provisioning_network": "node:network:lab-provisioning"
+  },
+  "inputs": {
+    "target_node_id": {
+      "required": true,
+      "default": "node:vm:ns1"
+    },
+    "target_host": {
+      "required": true,
+      "default": "ns1.lab.auzietek.com"
+    },
+    "provisioning_interface": {
+      "required": false,
+      "default": ""
+    },
+    "provisioning_address": {
+      "required": true,
+      "default": "10.20.0.10/24"
+    }
+  },
+  "gates": [
+    {
+      "id": "management-network-external",
+      "kind": "network.authority",
+      "with": {
+        "cidr": "${dictionary.management_network_cidr}",
+        "authority": "${dictionary.management_dhcp_authority}",
+        "bkc_managed": false
+      }
+    },
+    {
+      "id": "dhcp-disabled",
+      "kind": "service.disabled",
+      "with": {
+        "services": [
+          "dhcpd",
+          "isc-dhcp-server",
+          "tftpd-hpa"
+        ],
+        "scope": "pre-pxe"
+      }
+    },
+    {
+      "id": "no-default-route-change",
+      "kind": "network.route_policy",
+      "with": {
+        "target": "${inputs.target_host}",
+        "no_default_route": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-ns1-node",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "node_id": "${inputs.target_node_id}",
+        "fallback_host": "${inputs.target_host}"
+      },
+      "produces": [
+        "fact:target_node"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "discover-current-network",
+      "action": "ssh.network.discover",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "commands": [
+          "ip -json addr",
+          "ip -json route",
+          "hostnamectl"
+        ]
+      },
+      "produces": [
+        "fact:interfaces",
+        "fact:routes"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "select-provisioning-interface",
+      "action": "network.interface.select",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "requested_interface": "${inputs.provisioning_interface}",
+        "provisioning_cidr": "${dictionary.provisioning_network_cidr}",
+        "allow_secondary_address_on_existing_interface": "${dictionary.allow_secondary_address_on_existing_interface}"
+      },
+      "produces": [
+        "fact:provisioning_interface_candidate"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "apply-provisioning-address",
+      "action": "ssh.network.address.ensure",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${inputs.target_host}",
+        "interface": "${inputs.provisioning_interface}",
+        "address": "${inputs.provisioning_address}",
+        "no_default_route": true,
+        "template": "templates/provisioning-address.nmcli.sh"
+      },
+      "produces": [
+        "fact:provisioning_address"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "validate-management-still-reachable",
+      "action": "ssh.network.validate_management",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "management_cidr": "${dictionary.management_network_cidr}",
+        "assert_default_route_unchanged": true
+      },
+      "produces": [
+        "fact:management_route"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "record-network-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${inputs.target_node_id}",
+            "type": "uses",
+            "target_id": "${dictionary.provisioning_network_node_id}",
+            "confidence": "declared"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:ns1-uses-provisioning-network"
+      ],
+      "timeout_seconds": 15
+    }
+  ]
+}
+

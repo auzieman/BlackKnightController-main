@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from services import pipeline_catalog, resource_graph
 from services.action_catalog import action_by_id, actions_for_kind, list_actions
+from services.automation_runs import create_run, default_stages
 from services.pipeline_catalog import pipeline_by_id
-from services.pipeline_executor import workflow_stage_definitions
+from services.pipeline_executor import workflow_is_supported, workflow_stage_definitions
 from routes.pipelines import _run_matches_search
 
 
@@ -37,6 +38,138 @@ def test_k3s_housekeeping_stage_plan_is_action_annotated():
     assert actions_by_stage["verify-k3s"] == "k3s.nodes.ready"
     assert actions_by_stage["nfs-projects"] == "ssh.nfs.ensure_mounts"
     assert actions_by_stage["scrape-validate"] == "prometheus.targets.verify"
+
+
+def test_small_office_foobar_recipe_is_repo_backed():
+    pipeline = pipeline_by_id("small-office-foobar-reference")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-reference")
+    assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
+    assert pipeline["targets"]["windows_helpdesk_01"] == "node:vm:foobar-helpdesk-win-01"
+    assert pipeline["targets"]["linux_dev_01"] == "node:vm:foobar-dev-linux-01"
+    assert "foo.bar" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-recipe-intent",
+        "plan-identity-storage",
+        "plan-crm-intranet",
+        "provision-linux-developer-workstations",
+        "provision-windows-helpdesk-workstations",
+        "personalize-workstations",
+        "validate-small-office",
+        "render-demo-lifecycle",
+    ]
+
+
+def test_small_office_foobar_app_vm_pipeline_is_runnable():
+    pipeline = pipeline_by_id("small-office-foobar-app-vms")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-app-vms")
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
+    assert "kanboard" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-app-vm-plan",
+        "select-trixie-source",
+        "clone-app-vms",
+        "boot-app-vms",
+        "record-app-relationships",
+    ]
+    assert default_stages("small-office-foobar-app-vms") == [
+        "load-app-vm-plan",
+        "select-trixie-source",
+        "clone-app-vms",
+        "boot-app-vms",
+        "record-app-relationships",
+    ]
+    assert [stage["name"] for stage in workflow_stage_definitions("small-office-foobar-app-vms")] == default_stages(
+        "small-office-foobar-app-vms"
+    )
+
+
+def test_small_office_foobar_services_pipeline_is_runnable():
+    pipeline = pipeline_by_id("small-office-foobar-services")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-services")
+    assert pipeline["targets"]["identity"] == "node:vm:foobar-id-01"
+    assert pipeline["targets"]["crm"] == "node:vm:foobar-crm-01"
+    assert pipeline["targets"]["tickets"] == "node:vm:foobar-tickets-01"
+    assert "ldap" in pipeline["tags"]
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-service-plan",
+        "ensure-identity-vm",
+        "wait-service-guests",
+        "configure-demo-lan",
+        "install-identity-packages",
+        "seed-ldap-directory",
+        "configure-samba-homes",
+        "publish-identity-portal",
+        "provision-suitecrm-service",
+        "provision-kanboard-service",
+        "validate-foobar-services",
+        "record-service-relationships",
+    ]
+    assert default_stages("small-office-foobar-services") == [
+        "load-service-plan",
+        "ensure-identity-vm",
+        "wait-service-guests",
+        "configure-demo-lan",
+        "install-identity-packages",
+        "seed-ldap-directory",
+        "configure-samba-homes",
+        "publish-identity-portal",
+        "provision-suitecrm-service",
+        "provision-kanboard-service",
+        "validate-foobar-services",
+        "record-service-relationships",
+    ]
+    assert [stage["name"] for stage in workflow_stage_definitions("small-office-foobar-services")] == default_stages(
+        "small-office-foobar-services"
+    )
+
+
+def test_small_office_foobar_reset_is_safe_by_default():
+    pipeline = pipeline_by_id("small-office-foobar-reset")
+    assert pipeline is not None
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "repo-folder"
+    assert workflow_is_supported("small-office-foobar-reset")
+    assert pipeline["inputs"]["enable_destroy"]["default"] is False
+    assert "destroy-disabled-by-default" in {gate["id"] for gate in pipeline["gates"]}
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "load-reset-scope",
+        "plan-demo-vm-removal",
+        "plan-pxe-route-cleanup",
+        "plan-evidence-archive",
+        "verify-reset-boundary",
+    ]
+
+
+def test_small_office_foobar_run_stages_are_recording_friendly():
+    reference = create_run(
+        tenant_slug="default",
+        requested_by="test",
+        trigger_source="test",
+        repo="BlackKnightController",
+        workflow="small-office-foobar-reference",
+    )
+    reset = create_run(
+        tenant_slug="default",
+        requested_by="test",
+        trigger_source="test",
+        repo="BlackKnightController",
+        workflow="small-office-foobar-reset",
+    )
+
+    assert [stage["name"] for stage in reference["stages"]] == default_stages("small-office-foobar-reference")
+    assert [stage["name"] for stage in reset["stages"]] == default_stages("small-office-foobar-reset")
 
 
 def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
@@ -348,6 +481,518 @@ def test_pipeline_folder_loader_can_use_runtime_mount(monkeypatch, tmp_path):
     pipeline = pipeline_catalog.pipeline_by_id("runtime-folder-pipeline")
     assert pipeline is not None
     assert pipeline["source_path"].endswith("Runtime_Pipeline/pipeline.json")
+    assert pipeline["source_type"] == "runtime-folder"
+
+
+def test_pipeline_loader_merges_repo_and_runtime_folder_layers(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Shared_Pipeline"
+    runtime_dir = tmp_path / "runtime-pipelines" / "Shared_Pipeline"
+    repo_dir.mkdir(parents=True)
+    runtime_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "shared-folder-pipeline",
+  "name": "Shared Folder Pipeline",
+  "repo": "Portable",
+  "workflow": "candidate-import",
+  "description": "Portable recipe.",
+  "stages": ["repo-stage"],
+  "tags": ["repo"]
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "pipeline.json").write_text(
+        """{
+  "id": "shared-folder-pipeline",
+  "name": "Shared Folder Pipeline Runtime",
+  "repo": "Runtime",
+  "workflow": "candidate-import",
+  "description": "Runtime override.",
+  "stages": ["runtime-stage"],
+  "tags": ["runtime"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("shared-folder-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "runtime-folder"
+    assert pipeline["repo"] == "Runtime"
+    assert pipeline["stages"] == ["runtime-stage"]
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+
+def test_repo_folder_pipeline_loads_without_runtime_override(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Repo_Only"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "repo-only-pipeline",
+  "name": "Repo Only",
+  "repo": "Portable",
+  "workflow": "candidate-import",
+  "description": "Portable recipe.",
+  "stages": ["preflight"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("repo-only-pipeline")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "repo-folder"
+    assert pipeline["source_layers"][0]["source_path"].endswith("Repo_Only/pipeline.json")
+
+
+def test_folder_pipeline_defaults_workflow_to_id(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Draft_Recipe"
+    repo_dir.mkdir(parents=True)
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "draft-folder-pipeline",
+  "name": "Draft Folder Pipeline",
+  "description": "Draft recipe without executor wiring.",
+  "stages": ["preflight"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("draft-folder-pipeline")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "draft-folder-pipeline"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["description"] == "Draft recipe without executor wiring."
+
+
+def test_ns1_dhcp_prepare_pipeline_resolves_runtime_dictionary():
+    pipeline = pipeline_by_id("ns1-provisioning-dhcp-prepare")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "ns1-provisioning-dhcp-prepare"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "runtime-folder"
+    assert len(pipeline.get("items", [])) == 9
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["missing"] == []
+    assert resolved["values"]["provisioning_interface"] == "ens19"
+    assert resolved["values"]["dhcp_range_start"] == "10.20.0.100"
+    assert resolved["values"]["dhcp_range_end"] == "10.20.0.120"
+    assert resolved["values"]["dhcp_config_path"] == "/etc/dhcp/dhcpd.conf"
+    assert resolved["values"]["dhcp_fragment_path"] == "/etc/dhcp/dhcpd.d/bkc-provisioning.conf"
+    assert resolved["values"]["dhcp_include_line"] == 'include "/etc/dhcp/dhcpd.d/bkc-provisioning.conf";'
+    assert resolved["values"]["enable_dhcp_service"] is False
+
+
+def test_ns1_trixie_pxe_smoke_pipeline_resolves_runtime_dictionary():
+    pipeline = pipeline_by_id("ns1-trixie-pxe-smoke")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "ns1-trixie-pxe-smoke"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "runtime-folder"
+    assert len(pipeline.get("items", [])) == 15
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["missing"] == []
+    assert resolved["values"]["boot_image_name"] == "debian-trixie-amd64-netboot"
+    assert resolved["values"]["pxe_http_host"] == "10.20.0.10"
+    assert resolved["values"]["target_vmid"] == 132
+    assert resolved["values"]["target_vm_name"] == "trixie-smoke-132"
+    assert resolved["values"]["target_vm_storage"] == "local-lvm"
+    assert resolved["values"]["target_vm_boot_nic"] == "net0"
+    assert resolved["values"]["target_vm_boot_bridge"] == "vmbr20"
+    assert resolved["values"]["target_vm_management_nic"] == "net1"
+    assert resolved["values"]["target_vm_management_bridge"] == "vmbr0"
+    assert resolved["values"]["enable_vm_create"] is True
+    assert resolved["values"]["enable_pxe_boot"] is True
+    assert resolved["values"]["enable_install"] is True
+
+
+def test_windows10_reference_discover_pipeline_resolves_runtime_dictionary():
+    pipeline = pipeline_by_id("windows10-reference-discover")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "windows10-reference-discover"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "runtime-folder"
+    assert len(pipeline.get("items", [])) == 5
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["missing"] == []
+    assert resolved["values"]["windows_iso_name"] == "Win10_22H2_English_x64v1.iso"
+    assert resolved["values"]["proxmox_iso_volume"] == "local:iso/Win10_22H2_English_x64.iso"
+    assert resolved["values"]["reference_vmid"] == 113
+    assert resolved["values"]["reference_vm_ip"] == "192.168.1.90"
+    assert resolved["values"]["control_channel"] == "openssh"
+
+
+def test_windows10_pxe_smoke_pipeline_resolves_runtime_dictionary():
+    pipeline = pipeline_by_id("windows10-pxe-smoke")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "windows10-pxe-smoke"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "runtime-folder"
+    assert len(pipeline.get("items", [])) == 17
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["missing"] == []
+    assert resolved["values"]["proxmox_iso_volume"] == "local:iso/Win10_22H2_English_x64.iso"
+    assert resolved["values"]["target_vmid"] == 136
+    assert resolved["values"]["target_vm_mac"] == "02:10:20:00:01:36"
+    assert resolved["values"]["windows_ipxe_script_path"] == "/srv/pxe/windows10.ipxe"
+    assert resolved["values"]["windows_media_share"] == "win10media"
+    assert resolved["values"]["enable_install"] is True
+    assert resolved["values"]["enable_post_install_ssh_check"] is False
+
+
+def test_windows10_winpe_builder_pipeline_resolves_runtime_dictionary():
+    pipeline = pipeline_by_id("windows10-winpe-builder")
+    assert pipeline is not None
+    assert pipeline["workflow"] == "windows10-winpe-builder"
+    assert pipeline["repo"] == "BlackKnightController"
+    assert pipeline["source_type"] == "runtime-folder"
+    assert len(pipeline.get("items", [])) == 9
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["missing"] == []
+    assert resolved["values"]["builder_vmid"] == 113
+    assert resolved["values"]["builder_vm_ip"] == "192.168.1.90"
+    assert resolved["values"]["winpe_artifact_name"] == "bkc-winpe-amd64"
+    assert resolved["values"]["enable_build"] is False
+
+
+def test_ns1_provisioning_lanes_are_supported_review_workflows():
+    network_stages = workflow_stage_definitions("ns1-provisioning-network-prepare")
+    dhcp_stages = workflow_stage_definitions("ns1-provisioning-dhcp-prepare")
+    trixie_stages = workflow_stage_definitions("ns1-trixie-pxe-smoke")
+    windows_stages = workflow_stage_definitions("windows10-reference-discover")
+    windows_pxe_stages = workflow_stage_definitions("windows10-pxe-smoke")
+    winpe_builder_stages = workflow_stage_definitions("windows10-winpe-builder")
+    trixie_personalize_stages = workflow_stage_definitions("trixie-workstation-personalize")
+    windows_personalize_stages = workflow_stage_definitions("windows10-workstation-personalize")
+
+    assert workflow_is_supported("ns1-provisioning-network-prepare")
+    assert workflow_is_supported("ns1-provisioning-dhcp-prepare")
+    assert workflow_is_supported("ns1-trixie-pxe-smoke")
+    assert workflow_is_supported("windows10-reference-discover")
+    assert workflow_is_supported("windows10-pxe-smoke")
+    assert workflow_is_supported("windows10-winpe-builder")
+    assert workflow_is_supported("trixie-workstation-personalize")
+    assert workflow_is_supported("windows10-workstation-personalize")
+    assert [stage["name"] for stage in network_stages] == [
+        "resolve-ns1-node",
+        "discover-current-network",
+        "select-provisioning-interface",
+        "apply-provisioning-address",
+        "validate-management-still-reachable",
+        "record-network-relationships",
+    ]
+    assert [stage["name"] for stage in dhcp_stages] == [
+        "resolve-ns1-node",
+        "verify-provisioning-network",
+        "ensure-dhcp-include",
+        "render-dhcp-fragment",
+        "render-dhcp-defaults",
+        "install-dhcp-package",
+        "validate-dhcp-config",
+        "keep-dhcp-disabled",
+        "record-dhcp-relationships",
+    ]
+    assert [stage["name"] for stage in trixie_stages] == [
+        "resolve-provisioning-context",
+        "verify-ns1-pxe-prereqs",
+        "fetch-trixie-netboot",
+        "render-ipxe-entry",
+        "render-preseed-profile",
+        "prepare-vm132-pxe-target",
+        "pxe-boot-vm132",
+        "observe-installer-handoff",
+        "post-boot-recollect",
+        "record-trixie-relationships",
+    ]
+    assert [stage["name"] for stage in windows_stages] == [
+        "verify-iso",
+        "inspect-vm113",
+        "validate-openssh",
+        "stage-firstboot-artifacts",
+        "record-windows-relationships",
+    ]
+    assert [stage["name"] for stage in windows_pxe_stages] == [
+        "resolve-windows-pxe-context",
+        "verify-ns1-pxe-prereqs",
+        "verify-windows-iso",
+        "fetch-wimboot",
+        "stage-windows-install-media",
+        "render-windows-ipxe",
+        "configure-windows-media-share",
+        "render-unattend-firstboot",
+        "render-dhcp-windows-route",
+        "prepare-vm136-pxe-target",
+        "pxe-boot-vm136",
+        "observe-winpe-handoff",
+        "post-install-ssh-check",
+        "record-windows-pxe-relationships",
+    ]
+    assert [stage["name"] for stage in trixie_personalize_stages] == [
+        "discover-installed-trixie",
+        "normalize-local-login",
+        "publish-demo-checkpoints",
+        "install-workstation-packages",
+        "install-vscode-if-enabled",
+        "install-rustdesk-if-configured",
+        "enable-graphical-services",
+        "verify-trixie-personality",
+        "record-trixie-personality",
+    ]
+    assert [stage["name"] for stage in windows_personalize_stages] == [
+        "discover-installed-windows",
+        "normalize-local-login",
+        "publish-demo-checkpoints",
+        "ensure-chocolatey",
+        "install-workstation-packages",
+        "verify-windows-personality",
+        "record-windows-personality",
+    ]
+    assert [stage["name"] for stage in winpe_builder_stages] == [
+        "resolve-builder-context",
+        "inspect-vm113",
+        "validate-builder-ssh",
+        "inspect-adk-tooling",
+        "stage-builder-scripts",
+        "install-adk-if-enabled",
+        "build-winpe-if-enabled",
+        "publish-winpe-if-enabled",
+        "record-winpe-builder-relationships",
+    ]
+    assert {stage["kind"] for stage in network_stages + dhcp_stages} == {"folder-pipeline-review"}
+    assert {stage["kind"] for stage in trixie_stages} == {
+        "event-note",
+        "folder-pipeline-review",
+        "trixie-ipxe-render",
+        "trixie-netboot-fetch",
+        "trixie-preseed-render",
+        "trixie-pxe-prereqs",
+        "trixie-vm-boot",
+        "trixie-vm-observe",
+        "trixie-vm-prepare",
+    }
+    assert {stage["kind"] for stage in windows_stages} == {
+        "folder-pipeline-review",
+        "windows10-inspect-vm",
+        "windows10-stage-artifacts",
+        "windows10-validate-openssh",
+        "windows10-verify-iso",
+    }
+    assert {stage["kind"] for stage in windows_pxe_stages} == {
+        "event-note",
+        "folder-pipeline-review",
+        "windows10-dhcp-route-render",
+        "windows10-ipxe-render",
+        "windows10-media-share",
+        "windows10-pxe-prereqs",
+        "windows10-pxe-verify-iso",
+        "windows10-unattend-render",
+        "windows10-vm-boot",
+        "windows10-vm-observe",
+        "windows10-vm-prepare",
+        "windows10-wimboot-fetch",
+        "windows10-winpe-stage",
+    }
+    assert {stage["kind"] for stage in trixie_personalize_stages} == {
+        "folder-pipeline-review",
+        "trixie-personalize-discover",
+        "trixie-personalize-login",
+        "trixie-personalize-checkpoints",
+        "trixie-personalize-packages",
+        "trixie-personalize-vscode",
+        "trixie-personalize-rustdesk",
+        "trixie-personalize-services",
+        "trixie-personalize-verify",
+    }
+    assert {stage["kind"] for stage in windows_personalize_stages} == {
+        "folder-pipeline-review",
+        "windows10-personalize-discover",
+        "windows10-personalize-login",
+        "windows10-personalize-checkpoints",
+        "windows10-personalize-chocolatey",
+        "windows10-personalize-packages",
+        "windows10-personalize-verify",
+    }
+    assert {stage["kind"] for stage in winpe_builder_stages} == {
+        "folder-pipeline-review",
+        "windows10-adk-inspect",
+        "windows10-adk-install",
+        "windows10-builder-inspect-vm",
+        "windows10-builder-ssh",
+        "windows10-builder-stage-scripts",
+        "windows10-winpe-build",
+        "windows10-winpe-publish",
+    }
+    assert default_stages("ns1-provisioning-network-prepare") == [
+        stage["name"] for stage in network_stages
+    ]
+    assert default_stages("ns1-provisioning-dhcp-prepare") == [stage["name"] for stage in dhcp_stages]
+    assert default_stages("ns1-trixie-pxe-smoke") == [stage["name"] for stage in trixie_stages]
+    assert default_stages("windows10-reference-discover") == [stage["name"] for stage in windows_stages]
+    assert default_stages("windows10-pxe-smoke") == [stage["name"] for stage in windows_pxe_stages]
+    assert default_stages("windows10-winpe-builder") == [
+        stage["name"] for stage in winpe_builder_stages
+    ]
+    assert default_stages("trixie-workstation-personalize") == [
+        stage["name"] for stage in trixie_personalize_stages
+    ]
+    assert default_stages("windows10-workstation-personalize") == [
+        stage["name"] for stage in windows_personalize_stages
+    ]
+
+
+def test_runtime_dictionary_folder_can_overlay_repo_pipeline_without_pipeline_json(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Ns1_Recipe"
+    runtime_dir = tmp_path / "runtime-pipelines" / "NS1_Runtime"
+    items_dir = runtime_dir / "items"
+    repo_dir.mkdir(parents=True)
+    items_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "ns1-provisioning-network-prepare",
+  "name": "ns1 Provisioning Network Prepare",
+  "repo": "BlackKnightController",
+  "workflow": "ns1-provisioning-network-prepare",
+  "description": "Portable recipe.",
+  "stages": ["discover-current-network"]
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dictionary.json").write_text(
+        """{
+  "pipeline_id": "ns1-provisioning-network-prepare",
+  "target_node_id": "node:vm:ns1",
+  "provisioning_interface": "ens19"
+}
+""",
+        encoding="utf-8",
+    )
+    (items_dir / "10-discover-current-network.json").write_text(
+        """{
+  "name": "Discover Current Network",
+  "action": "ssh.network.discover"
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("ns1-provisioning-network-prepare")
+    assert pipeline is not None
+    assert pipeline["source_type"] == "runtime-folder"
+    assert pipeline["source_path"].endswith("NS1_Runtime/dictionary.json")
+    assert pipeline["dictionary"]["provisioning_interface"] == "ens19"
+    assert pipeline["items"][0]["id"] == "10-discover-current-network"
+    assert [layer["source_type"] for layer in pipeline["source_layers"]] == [
+        "repo-folder",
+        "runtime-folder",
+    ]
+
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+    assert resolved["values"]["target_node_id"] == "node:vm:ns1"
+    assert resolved["values"]["provisioning_interface"] == "ens19"
+    assert [layer["name"] for layer in resolved["layers"]] == [
+        "runtime dictionary",
+    ]
+
+
+def test_pipeline_dictionary_resolution_merges_repo_defaults_and_runtime(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Ns1_Recipe"
+    runtime_dir = tmp_path / "runtime-pipelines" / "NS1_Runtime"
+    repo_dir.mkdir(parents=True)
+    runtime_dir.mkdir(parents=True)
+
+    (repo_dir / "pipeline.json").write_text(
+        """{
+  "id": "ns1-provisioning-network-prepare",
+  "name": "ns1 Provisioning Network Prepare",
+  "repo": "BlackKnightController",
+  "workflow": "ns1-provisioning-network-prepare",
+  "description": "Portable recipe.",
+  "stages": ["discover-current-network"],
+  "inputs": {
+    "target_host": {"required": true},
+    "provisioning_interface": {"required": true},
+    "required_later": {"required": true}
+  }
+}
+""",
+        encoding="utf-8",
+    )
+    (repo_dir / "defaults.json").write_text(
+        """{
+  "target_host": "ns1.lab.auzietek.com",
+  "provisioning_interface": "",
+  "provisioning_address": "10.20.0.10/24"
+}
+""",
+        encoding="utf-8",
+    )
+    (runtime_dir / "dictionary.json").write_text(
+        """{
+  "pipeline_id": "ns1-provisioning-network-prepare",
+  "provisioning_interface": "ens19"
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    pipeline = pipeline_catalog.pipeline_by_id("ns1-provisioning-network-prepare")
+    resolved = pipeline_catalog.resolve_pipeline_dictionary(pipeline)
+
+    assert resolved["values"]["target_host"] == "ns1.lab.auzietek.com"
+    assert resolved["values"]["provisioning_interface"] == "ens19"
+    assert resolved["values"]["provisioning_address"] == "10.20.0.10/24"
+    assert resolved["missing"] == ["required_later"]
+    assert [layer["name"] for layer in resolved["layers"]] == [
+        "repo defaults",
+        "runtime dictionary",
+    ]
 
 
 def test_auzix_installer_pipeline_is_non_destructive():

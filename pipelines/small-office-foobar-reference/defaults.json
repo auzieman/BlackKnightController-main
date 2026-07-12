@@ -1,0 +1,123 @@
+{
+  "tenant_slug": "foobar",
+  "company_name": "FooBar",
+  "domain": "foo.bar",
+  "lab_zone": "lab.foo.bar",
+  "default_password_secret": "secret:foobar/changeme123",
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "identity_node_id": "node:vm:foobar-id-01",
+  "crm_node_id": "node:vm:foobar-crm-01",
+  "tickets_node_id": "node:vm:foobar-tickets-01",
+  "app_vm_pipeline": "small-office-foobar-app-vms",
+  "services_pipeline": "small-office-foobar-services",
+  "linux_profile_pipeline": "ns1-trixie-pxe-smoke",
+  "linux_personalize_pipeline": "trixie-workstation-personalize",
+  "windows_profile_pipeline": "windows10-pxe-smoke",
+  "windows_personalize_pipeline": "windows10-workstation-personalize",
+  "users": [
+    {
+      "username": "joe.user",
+      "display_name": "Joe User",
+      "role": "helpdesk",
+      "primary_workstation": "node:vm:foobar-helpdesk-win-01"
+    },
+    {
+      "username": "jill.user",
+      "display_name": "Jill User",
+      "role": "helpdesk",
+      "primary_workstation": "node:vm:foobar-helpdesk-win-02"
+    },
+    {
+      "username": "bob.dev1",
+      "display_name": "Bob Dev1",
+      "role": "developer",
+      "primary_workstation": "node:vm:foobar-dev-linux-01"
+    },
+    {
+      "username": "bob.dev2",
+      "display_name": "Bob Dev2",
+      "role": "developer",
+      "primary_workstation": "node:vm:foobar-dev-linux-02"
+    }
+  ],
+  "groups": [
+    "foobar_helpdesk",
+    "foobar_developers",
+    "foobar_crm_users"
+  ],
+  "nodes": {
+    "identity": {
+      "id": "node:vm:foobar-id-01",
+      "hostname": "foobar-id-01.lab.foo.bar",
+      "role": "identity-storage",
+      "services": [
+        "openldap",
+        "samba",
+        "phpldapadmin"
+      ]
+    },
+    "crm": {
+      "id": "node:vm:foobar-crm-01",
+      "hostname": "foobar-crm-01.lab.foo.bar",
+      "role": "crm-intranet",
+      "services": [
+        "http",
+        "php",
+        "mariadb",
+        "suitecrm"
+      ]
+    },
+    "tickets": {
+      "id": "node:vm:foobar-tickets-01",
+      "hostname": "foobar-tickets-01.lab.foo.bar",
+      "role": "ticket-board",
+      "services": [
+        "http",
+        "php",
+        "sqlite",
+        "kanboard"
+      ]
+    },
+    "workstations": [
+      {
+        "id": "node:vm:foobar-helpdesk-win-01",
+        "hostname": "foobar-helpdesk-win-01.lab.foo.bar",
+        "os_family": "windows",
+        "role": "helpdesk",
+        "primary_user": "joe.user"
+      },
+      {
+        "id": "node:vm:foobar-helpdesk-win-02",
+        "hostname": "foobar-helpdesk-win-02.lab.foo.bar",
+        "os_family": "windows",
+        "role": "helpdesk",
+        "primary_user": "jill.user"
+      },
+      {
+        "id": "node:vm:foobar-dev-linux-01",
+        "hostname": "foobar-dev-linux-01.lab.foo.bar",
+        "os_family": "linux",
+        "role": "developer",
+        "primary_user": "bob.dev1"
+      },
+      {
+        "id": "node:vm:foobar-dev-linux-02",
+        "hostname": "foobar-dev-linux-02.lab.foo.bar",
+        "os_family": "linux",
+        "role": "developer",
+        "primary_user": "bob.dev2"
+      }
+    ]
+  },
+  "validation_events": [
+    "recipe.intent_loaded",
+    "identity.users_declared",
+    "storage.home_shares_declared",
+    "crm.health_passed",
+    "workstation.pxe_completed",
+    "workstation.personalized",
+    "workstation.shared_home_validated",
+    "remote_support.agent_ready",
+    "recipe.validation_passed"
+  ]
+}

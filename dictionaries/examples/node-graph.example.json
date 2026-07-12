@@ -1,0 +1,961 @@
+{
+  "version": "bkc.node-graph.v1",
+  "nodes": [
+    {
+      "id": "node:location:lab",
+      "name": "lab",
+      "type": "location",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "location": {
+          "name": "AuzieTek Lab"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network:lab-mgmt",
+      "name": "lab-mgmt",
+      "type": "network",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "management"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "network": {
+          "cidr": "192.168.1.0/24",
+          "gateway": "192.168.1.1",
+          "dns": ["192.168.1.1"],
+          "role": "management",
+          "dhcp_authority": "spectrum-router",
+          "bkc_managed": false
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network:lab-provisioning",
+      "name": "lab-provisioning",
+      "type": "network",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "planned",
+      "current_state": "planned",
+      "desired_state": "available",
+      "tags": ["lab", "provisioning", "pxe"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "network": {
+          "cidr": "10.20.0.0/24",
+          "gateway": "",
+          "dhcp_range_start": "10.20.0.100",
+          "dhcp_range_end": "10.20.0.199",
+          "role": "provisioning",
+          "dhcp_authority": "ns1",
+          "bkc_managed": true
+        },
+        "pxe": {
+          "enabled": false,
+          "boot_server": "10.20.0.10",
+          "ipxe_script": "http://10.20.0.10/boot.ipxe"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:router:spectrum-router",
+      "name": "spectrum-router",
+      "type": "router",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "management", "external"],
+      "labels": {
+        "environment": "lab",
+        "authority": "external"
+      },
+      "facts": {
+        "network": {
+          "primary_ip": "192.168.1.1",
+          "provides_dhcp": true,
+          "bkc_managed": false
+        }
+      },
+      "owners": [],
+      "security_classification": "external",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network_switch:core-sw1",
+      "name": "core-sw1",
+      "type": "network_switch",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "available",
+      "desired_state": "available",
+      "tags": ["lab", "network"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "cisco"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "core-sw1"
+        },
+        "hardware": {
+          "vendor": "cisco",
+          "ports": 48
+        },
+        "management": {
+          "primary_ip": "192.168.1.2"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:bare_metal:pve1",
+      "name": "pve1",
+      "type": "bare_metal",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "proxmox"],
+      "labels": {
+        "environment": "lab",
+        "role": "hypervisor"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "pve1"
+        },
+        "network": {
+          "primary_ip": "192.168.1.9",
+          "observed_ips": ["192.168.1.9"]
+        },
+        "platform": {
+          "provider": "proxmox"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "proxmox",
+        "method": "discovered"
+      }
+    },
+    {
+      "id": "node:physical_machine:r630-01",
+      "name": "r630-01",
+      "type": "physical_machine",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "candidate",
+      "current_state": "powered_off",
+      "desired_state": "managed",
+      "tags": ["lab", "bare-metal", "small-office"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "dell",
+        "role": "future-hypervisor"
+      },
+      "facts": {
+        "hardware": {
+          "vendor": "Dell",
+          "model": "PowerEdge R630",
+          "serial": "R630-DEMO-001",
+          "asset_tag": "lab-r630-01",
+          "cpu_sockets": 2,
+          "memory_gib": 64
+        },
+        "power": {
+          "state": "off",
+          "last_observed_by": "node:bmc:r630-01-idrac"
+        },
+        "provisioning": {
+          "allowed_profiles": ["node:provisioning_profile:debian-trixie-server"],
+          "desired_profile": "node:provisioning_profile:debian-trixie-server"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:bmc:r630-01-idrac",
+      "name": "r630-01-idrac",
+      "type": "bmc",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "reachable",
+      "desired_state": "reachable",
+      "tags": ["lab", "bmc", "ipmi", "redfish"],
+      "labels": {
+        "environment": "lab",
+        "vendor": "dell"
+      },
+      "facts": {
+        "management": {
+          "protocols": ["ipmi", "redfish"],
+          "primary_ip": "192.168.1.41",
+          "credential_scope": "credential:bmc-lab"
+        },
+        "capabilities": {
+          "power_control": true,
+          "boot_override": true,
+          "virtual_media": true,
+          "serial_console": true
+        }
+      },
+      "owners": [],
+      "security_classification": "restricted",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:network_interface:r630-01-lom1",
+      "name": "r630-01-lom1",
+      "type": "network_interface",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "link-unknown",
+      "desired_state": "pxe-capable",
+      "tags": ["lab", "nic", "pxe"],
+      "labels": {
+        "environment": "lab",
+        "boot_role": "provisioning"
+      },
+      "facts": {
+        "interface": {
+          "name": "LOM1",
+          "mac": "b8:ca:3a:00:10:01",
+          "pxe_capable": true,
+          "expected_vlan": "provisioning",
+          "switch_port": "core-sw1:1/0/12"
+        },
+        "dhcp": {
+          "last_lease_ip": "",
+          "last_lease_observed_at": ""
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:image_asset:debian-trixie-netboot-amd64",
+      "name": "debian-trixie-netboot-amd64",
+      "type": "image_asset",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "cached",
+      "desired_state": "cached",
+      "tags": ["debian", "trixie", "netboot", "linux"],
+      "labels": {
+        "architecture": "amd64"
+      },
+      "facts": {
+        "image": {
+          "family": "linux",
+          "distribution": "debian",
+          "version": "trixie",
+          "kernel_path": "/srv/pxe/debian/trixie/amd64/linux",
+          "initrd_path": "/srv/pxe/debian/trixie/amd64/initrd.gz",
+          "checksum_policy": "required"
+        }
+      },
+      "owners": [],
+      "security_classification": "public",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:provisioning_profile:debian-trixie-server",
+      "name": "debian-trixie-server",
+      "type": "provisioning_profile",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "ready",
+      "desired_state": "ready",
+      "tags": ["provisioning", "pxe", "debian", "trixie"],
+      "labels": {
+        "environment": "lab",
+        "os_family": "linux"
+      },
+      "facts": {
+        "profile": {
+          "boot_mode": "ipxe",
+          "boot_menu_label": "BKC Debian Trixie Server",
+          "installer": "debian-preseed",
+          "post_install_boot_order": "disk-first",
+          "enrollment": "ssh-bootstrap"
+        },
+        "validation": {
+          "required_layers": ["infrastructure", "installation", "enrollment"],
+          "required_events": [
+            "dhcp.lease_observed",
+            "pxe.boot_request",
+            "installer.callback",
+            "first_boot.observed",
+            "enrollment.completed"
+          ]
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:validation_evidence:r630-01-dhcp-lease",
+      "name": "r630-01-dhcp-lease",
+      "type": "validation_evidence",
+      "actionable": false,
+      "structural": false,
+      "lifecycle_state": "evidence",
+      "current_state": "observed",
+      "desired_state": "observed",
+      "tags": ["validation", "dhcp", "pxe"],
+      "labels": {
+        "event_type": "dhcp.lease_observed"
+      },
+      "facts": {
+        "event": {
+          "event_type": "dhcp.lease_observed",
+          "observed_at": "2026-07-11T12:00:00Z",
+          "run_id": "run:baremetal-r630-01-001"
+        },
+        "evidence": {
+          "mac": "b8:ca:3a:00:10:01",
+          "ip": "10.20.0.141",
+          "dhcp_server": "node:service:ns1-dhcpd"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "observed"
+      }
+    },
+    {
+      "id": "node:vm:ns1",
+      "name": "ns1",
+      "type": "vm",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "dns", "ansible", "provisioning"],
+      "labels": {
+        "environment": "lab",
+        "role": "provisioning-controller"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "ns1",
+          "fqdn": "ns1.lab.auzietek.com"
+        },
+        "network": {
+          "primary_ip": "192.168.1.10",
+          "observed_ips": ["192.168.1.10", "10.20.0.10"],
+          "planned_provisioning_ip": "10.20.0.10/24"
+        },
+        "proxmox": {
+          "vmid": 129,
+          "host": "pve1"
+        },
+        "services": {
+          "ansible_controller": true,
+          "dhcp_enabled": false,
+          "pxe_enabled": false
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:service:ns1-dhcpd",
+      "name": "ns1-dhcpd",
+      "type": "service",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "disabled",
+      "desired_state": "disabled",
+      "tags": ["lab", "dhcp", "provisioning"],
+      "labels": {
+        "environment": "lab",
+        "authority": "bkc",
+        "risk": "network-wide"
+      },
+      "facts": {
+        "service": {
+          "name": "isc-dhcp-server",
+          "package": "isc-dhcp-server",
+          "enabled": false,
+          "activation_policy": "manual-after-review"
+        },
+        "dhcp": {
+          "config_path": "/etc/dhcp/dhcpd.conf",
+          "include_dir": "/etc/dhcp/dhcpd.d",
+          "managed_fragment": "/etc/dhcp/dhcpd.d/bkc-provisioning.conf",
+          "bind_interfaces": ["ens19"],
+          "subnet": "10.20.0.0",
+          "netmask": "255.255.255.0",
+          "range_start": "10.20.0.100",
+          "range_end": "10.20.0.120",
+          "router": "10.20.0.10",
+          "dns_servers": ["192.168.1.1"]
+        },
+        "update_policy": {
+          "mode": "managed-fragment-only",
+          "ignore_paths": ["/etc/dhcp/dhcpd.conf"],
+          "managed_paths": [
+            "/etc/dhcp/dhcpd.d/bkc-provisioning.conf",
+            "/etc/default/isc-dhcp-server"
+          ],
+          "reason": "Do not overwrite operator-owned dhcpd.conf; BKC owns only the include fragment and interface defaults."
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:service:ns1-pxe",
+      "name": "ns1-pxe",
+      "type": "service",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "prepared",
+      "desired_state": "prepared",
+      "tags": ["lab", "pxe", "ipxe", "provisioning"],
+      "labels": {
+        "environment": "lab",
+        "authority": "bkc"
+      },
+      "facts": {
+        "service": {
+          "http_root": "/srv/pxe",
+          "enabled": true
+        },
+        "pxe": {
+          "boot_server": "10.20.0.10",
+          "default_ipxe_script": "/srv/pxe/boot.ipxe",
+          "default_boot_policy": "menu",
+          "one_shot_required": true
+        },
+        "update_policy": {
+          "mode": "additive",
+          "ignore_paths": ["/srv/pxe/operator"],
+          "managed_paths": [
+            "/srv/pxe/debian-trixie.ipxe",
+            "/srv/pxe/preseed/trixie-smoke-vm132.cfg"
+          ],
+          "reason": "PXE assets are additive; BKC should not remove operator-owned rescue media."
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:vm:kube1",
+      "name": "kube1",
+      "type": "vm",
+      "actionable": true,
+      "structural": false,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["lab", "k3s"],
+      "labels": {
+        "environment": "lab",
+        "role": "k3s-control"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "kube1",
+          "fqdn": "kube1.lab.auzietek.com"
+        },
+        "network": {
+          "primary_ip": "192.168.1.14",
+          "observed_ips": ["192.168.1.14"]
+        },
+        "proxmox": {
+          "vmid": 101,
+          "host": "pve1"
+        },
+        "os": {
+          "name": "Fedora"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "merged"
+      }
+    },
+    {
+      "id": "node:vm:trixie-smoke-132",
+      "name": "trixie-smoke-132",
+      "type": "vm",
+      "actionable": true,
+      "structural": false,
+      "lifecycle_state": "ephemeral",
+      "current_state": "installed",
+      "desired_state": "installed",
+      "tags": ["lab", "pxe", "debian", "trixie", "smoke-test"],
+      "labels": {
+        "environment": "lab",
+        "purpose": "pxe-smoke"
+      },
+      "facts": {
+        "identity": {
+          "hostname": "trixie-smoke-132",
+          "fqdn": "trixie-smoke-132.lab.auzietek.com"
+        },
+        "proxmox": {
+          "vmid": 132,
+          "host": "pve1"
+        },
+        "boot": {
+          "install_boot_order": "net0,scsi0",
+          "post_install_boot_order": "scsi0,net0",
+          "one_shot_pxe": true,
+          "last_boot_source": "disk"
+        },
+        "update_policy": {
+          "mode": "ephemeral-rebuild",
+          "ignore_fields": ["facts.network.primary_ip"],
+          "reason": "Smoke VMs may be destroyed and recreated; DHCP address churn should not block relationship matching."
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:boot_image:debian-trixie-amd64-netboot",
+      "name": "debian-trixie-amd64-netboot",
+      "type": "boot_image",
+      "actionable": false,
+      "structural": true,
+      "lifecycle_state": "known",
+      "current_state": "cached",
+      "desired_state": "cached",
+      "tags": ["debian", "trixie", "netboot", "pxe"],
+      "labels": {
+        "architecture": "amd64"
+      },
+      "facts": {
+        "boot_image": {
+          "distribution": "debian",
+          "version": "trixie",
+          "architecture": "amd64",
+          "kernel_path": "/srv/netboot/debian/trixie/amd64/linux",
+          "initrd_path": "/srv/netboot/debian/trixie/amd64/initrd.gz",
+          "source_url": "https://deb.debian.org/debian/dists/trixie/main/installer-amd64/current/images/netboot/debian-installer/amd64/",
+          "sha256": {
+            "linux": "4cc864b8e34c86c281f66b36157a52945a95a1b290762245c608b7c7e3934a11",
+            "initrd.gz": "53376f70d695276c5d9c903589348a966d0f57dc0bbd6a701d4a97300761ba40"
+          }
+        }
+      },
+      "owners": [],
+      "security_classification": "public",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    },
+    {
+      "id": "node:service:rx-ui",
+      "name": "rx-ui",
+      "type": "service",
+      "actionable": true,
+      "structural": false,
+      "lifecycle_state": "managed",
+      "current_state": "running",
+      "desired_state": "running",
+      "tags": ["rx-demo", "k3s"],
+      "labels": {
+        "environment": "lab",
+        "application": "rx-demo"
+      },
+      "facts": {
+        "service": {
+          "protocol": "http",
+          "port": 8081,
+          "health_path": "/healthz"
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "kubernetes",
+        "method": "discovered"
+      }
+    },
+    {
+      "id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "name": "ns1-trixie-pxe-smoke",
+      "type": "pipeline",
+      "actionable": true,
+      "structural": true,
+      "lifecycle_state": "managed",
+      "current_state": "ready",
+      "desired_state": "ready",
+      "tags": ["lab", "pxe", "trixie", "pipeline"],
+      "labels": {
+        "environment": "lab"
+      },
+      "facts": {
+        "pipeline": {
+          "workflow": "ns1-trixie-pxe-smoke",
+          "source_path": "pipelines/ns1-trixie-pxe-smoke/pipeline.json"
+        },
+        "update_policy": {
+          "mode": "review-required",
+          "ignore_runtime_overrides": ["target_root_password", "target_user_password", "target_ssh_public_key"],
+          "reason": "Generated install credentials and keys are runtime artifacts, not stable catalog data."
+        }
+      },
+      "owners": [],
+      "security_classification": "internal",
+      "source": {
+        "system": "bkc",
+        "method": "declared"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "source_id": "node:network:lab-mgmt",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network:lab-provisioning",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:router:spectrum-router",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:router:spectrum-router",
+      "type": "provides_network",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_switch:core-sw1",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_switch:core-sw1",
+      "type": "provides_network",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bare_metal:pve1",
+      "type": "connects_to",
+      "target_id": "node:network_switch:core-sw1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bare_metal:pve1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "located_in",
+      "target_id": "node:location:lab",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "controlled_by",
+      "target_id": "node:bmc:r630-01-idrac",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:physical_machine:r630-01",
+      "type": "has_interface",
+      "target_id": "node:network_interface:r630-01-lom1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:bmc:r630-01-idrac",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_interface:r630-01-lom1",
+      "type": "attached_to",
+      "target_id": "node:network_switch:core-sw1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network_interface:r630-01-lom1",
+      "type": "uses",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:provisioning_profile:debian-trixie-server",
+      "type": "uses",
+      "target_id": "node:image_asset:debian-trixie-netboot-amd64",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:validation_evidence:r630-01-dhcp-lease",
+      "type": "validates",
+      "target_id": "node:network_interface:r630-01-lom1",
+      "source": "dhcp",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "runs_on",
+      "target_id": "node:bare_metal:pve1",
+      "source": "proxmox",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "bkc",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:ns1",
+      "type": "uses",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:service:ns1-dhcpd",
+      "type": "runs_on",
+      "target_id": "node:vm:ns1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:service:ns1-dhcpd",
+      "type": "provides_dhcp",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:service:ns1-pxe",
+      "type": "runs_on",
+      "target_id": "node:vm:ns1",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:service:ns1-pxe",
+      "type": "serves_pxe",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:vm:kube1",
+      "type": "runs_on",
+      "target_id": "node:bare_metal:pve1",
+      "source": "proxmox",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:kube1",
+      "type": "uses",
+      "target_id": "node:network:lab-mgmt",
+      "source": "ssh",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:service:rx-ui",
+      "type": "runs_on",
+      "target_id": "node:vm:kube1",
+      "source": "kubernetes",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:trixie-smoke-132",
+      "type": "runs_on",
+      "target_id": "node:bare_metal:pve1",
+      "source": "proxmox",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:vm:trixie-smoke-132",
+      "type": "uses",
+      "target_id": "node:network:lab-provisioning",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:vm:trixie-smoke-132",
+      "type": "booted_from",
+      "target_id": "node:boot_image:debian-trixie-amd64-netboot",
+      "source": "bkc",
+      "confidence": "observed"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "targets",
+      "target_id": "node:vm:trixie-smoke-132",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "targets",
+      "target_id": "node:physical_machine:r630-01",
+      "source": "bkc",
+      "confidence": "example"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "applies_profile",
+      "target_id": "node:provisioning_profile:debian-trixie-server",
+      "source": "bkc",
+      "confidence": "example"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "uses",
+      "target_id": "node:service:ns1-dhcpd",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "uses",
+      "target_id": "node:service:ns1-pxe",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:pipeline:ns1-trixie-pxe-smoke",
+      "type": "uses",
+      "target_id": "node:boot_image:debian-trixie-amd64-netboot",
+      "source": "bkc",
+      "confidence": "declared"
+    },
+    {
+      "source_id": "node:network:lab-provisioning",
+      "type": "uses",
+      "target_id": "node:boot_image:debian-trixie-amd64-netboot",
+      "source": "bkc",
+      "confidence": "declared"
+    }
+  ]
+}

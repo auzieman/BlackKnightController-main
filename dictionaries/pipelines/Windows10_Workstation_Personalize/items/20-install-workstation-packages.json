@@ -1,0 +1,5 @@
+{
+  "id": "install-workstation-packages",
+  "action": "ssh.powershell",
+  "summary": "Install LibreOffice Fresh, VS Code, and RustDesk through Chocolatey."
+}

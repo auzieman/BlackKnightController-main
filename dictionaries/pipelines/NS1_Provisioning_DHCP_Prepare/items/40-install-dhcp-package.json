@@ -1,0 +1,7 @@
+{
+  "id": "install-dhcp-package",
+  "name": "Install DHCP Package",
+  "action": "ssh.package.ensure",
+  "risk": "medium",
+  "description": "Install or verify the DHCP server package without enabling service by default."
+}

@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS audit_log (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS graph_positions (
+    tenant_id INTEGER NOT NULL,
+    node_id TEXT NOT NULL,
+    x REAL NOT NULL,
+    y REAL NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, node_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_memberships_tenant ON memberships(tenant_id);
 """
@@ -381,3 +391,46 @@ def recent_audit(limit: int = 200) -> list[dict[str, Any]]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def load_graph_positions(tenant_id: int) -> dict[str, dict[str, float]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT node_id, x, y FROM graph_positions WHERE tenant_id = ?",
+            (int(tenant_id),),
+        ).fetchall()
+        return {
+            str(row["node_id"]): {"x": float(row["x"]), "y": float(row["y"])}
+            for row in rows
+        }
+
+
+def save_graph_positions(tenant_id: int, positions: list[dict[str, Any]]) -> int:
+    cleaned: list[tuple[int, str, float, float, str]] = []
+    now = utc_now_iso()
+    for position in positions:
+        node_id = str(position.get("id") or position.get("node_id") or "").strip()
+        if not node_id:
+            continue
+        try:
+            x = float(position["x"])
+            y = float(position["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        cleaned.append((int(tenant_id), node_id, x, y, now))
+    if not cleaned:
+        return 0
+    with get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO graph_positions (tenant_id, node_id, x, y, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(tenant_id, node_id) DO UPDATE SET
+                x = excluded.x,
+                y = excluded.y,
+                updated_at = excluded.updated_at
+            """,
+            cleaned,
+        )
+        conn.commit()
+    return len(cleaned)

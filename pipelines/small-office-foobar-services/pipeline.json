@@ -1,0 +1,300 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "small-office-foobar-services",
+  "name": "Small Office FooBar Services",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "workflow": "small-office-foobar-services",
+  "summary": "Provision the foo.bar identity/storage VM plus lightweight SuiteCRM and Kanboard intranet endpoints.",
+  "tags": [
+    "bkc",
+    "small-office",
+    "foobar",
+    "foo.bar",
+    "identity",
+    "ldap",
+    "samba",
+    "crm",
+    "kanboard",
+    "runnable"
+  ],
+  "targets": {
+    "tenant": "tenant:foobar",
+    "identity": "node:vm:foobar-id-01",
+    "crm": "node:vm:foobar-crm-01",
+    "tickets": "node:vm:foobar-tickets-01",
+    "source_template": "node:vm:trixie-smoke-132"
+  },
+  "inputs": {
+    "source_template_vmid": {
+      "required": true,
+      "default": 132
+    },
+    "enable_replace_identity": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-app-vm-shells",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "small-office-foobar-app-vms",
+        "target_vms": "${dictionary.application_vms}"
+      }
+    },
+    {
+      "id": "guard-identity-vmid",
+      "kind": "vmid.boundary",
+      "with": {
+        "enable_replace": "${inputs.enable_replace_identity}",
+        "target_vm": "${dictionary.identity_vm}",
+        "refuse_name_mismatch": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-service-plan",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${dictionary.tenant_slug}",
+        "domain": "${dictionary.domain}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:foobar_service_plan_loaded"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "ensure-identity-vm",
+      "action": "proxmox.vm.clone.identity",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "source_vmid": "${inputs.source_template_vmid}",
+        "target": "${dictionary.identity_vm}",
+        "enable_replace": "${inputs.enable_replace_identity}"
+      },
+      "produces": [
+        "node:vm:foobar-id-01"
+      ],
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "wait-service-guests",
+      "action": "proxmox.guest.wait",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "targets": [
+          "${dictionary.identity_vm}",
+          "${dictionary.application_vms}"
+        ]
+      },
+      "produces": [
+        "fact:foobar_service_guests_ready"
+      ],
+      "timeout_seconds": 600
+    },
+    {
+      "id": "configure-demo-lan",
+      "action": "debian.demo_lan.configure",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "targets": [
+          "${dictionary.identity_vm}",
+          "${dictionary.application_vms}"
+        ],
+        "interface": "${dictionary.demo_lan_interface}",
+        "prefix": "${dictionary.demo_lan_prefix}"
+      },
+      "produces": [
+        "fact:foobar_demo_lan_ips"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "install-identity-packages",
+      "action": "debian.identity.packages.install",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "packages": [
+          "slapd",
+          "ldap-utils",
+          "samba",
+          "apache2",
+          "php",
+          "php-ldap",
+          "phpldapadmin",
+          "python3"
+        ]
+      },
+      "produces": [
+        "package:slapd",
+        "package:samba",
+        "package:apache2",
+        "package:phpldapadmin"
+      ],
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "seed-ldap-directory",
+      "action": "ldap.ldif.apply",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "base_dn": "${dictionary.ldap_base_dn}",
+        "users": "${dictionary.users}",
+        "groups": "${dictionary.groups}"
+      },
+      "produces": [
+        "directory:foo.bar"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "configure-samba-homes",
+      "action": "samba.share.configure",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "share": "foobar-homes"
+      },
+      "produces": [
+        "service:samba",
+        "share:foobar-homes"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "publish-identity-portal",
+      "action": "debian.identity.phpldapadmin.configure",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.identity_vm}",
+        "path": "/phpldapadmin/",
+        "base_dn": "${dictionary.ldap_base_dn}",
+        "admin_dn": "${dictionary.ldap_admin_dn}"
+      },
+      "produces": [
+        "service:openldap",
+        "service:phpldapadmin"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "provision-suitecrm-service",
+      "action": "debian.intranet.suitecrm.install",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "node:vm:foobar-crm-01",
+        "application": "suitecrm",
+        "version": "${dictionary.suitecrm_version}"
+      },
+      "produces": [
+        "service:suitecrm",
+        "application:suitecrm",
+        "database:suitecrm"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "provision-kanboard-service",
+      "action": "debian.intranet.kanboard.install",
+      "transport": "bkc-proxmox",
+      "risk": "medium",
+      "with": {
+        "target": "node:vm:foobar-tickets-01",
+        "application": "kanboard",
+        "version": "${dictionary.kanboard_version}"
+      },
+      "produces": [
+        "service:kanboard",
+        "application:kanboard"
+      ],
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "validate-foobar-services",
+      "action": "service.health.validate",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "targets": [
+          "${dictionary.identity_vm}",
+          "${dictionary.application_vms}"
+        ]
+      },
+      "produces": [
+        "evidence:foobar_services"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "record-service-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source": "tenant:foobar",
+            "target": "node:vm:foobar-id-01",
+            "type": "contains"
+          },
+          {
+            "source": "node:vm:foobar-id-01",
+            "target": "service:openldap",
+            "type": "hosts"
+          },
+          {
+            "source": "node:vm:foobar-id-01",
+            "target": "service:samba",
+            "type": "hosts"
+          },
+          {
+            "source": "node:vm:foobar-crm-01",
+            "target": "app:suitecrm",
+            "type": "hosts"
+          },
+          {
+            "source": "node:vm:foobar-tickets-01",
+            "target": "app:kanboard",
+            "type": "hosts"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:foobar-services",
+        "handoff:small-office-foobar-workstation-personalize"
+      ],
+      "timeout_seconds": 30
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "BKC FooBar Pipeline List",
+      "summary": "Filtered BKC list for the FooBar reference, reset, app VM, service, PXE, and personalization lanes.",
+      "url": "http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar"
+    },
+    {
+      "name": "Small Office Lifecycle",
+      "summary": "Show identity, CRM, and tickets service stages during the recording.",
+      "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s"
+    }
+  ],
+  "notes": "This lane installs lightweight real SuiteCRM and Kanboard service endpoints for the small-office demo."
+}

@@ -14,6 +14,7 @@ from services.pipeline_catalog import (
     create_custom_pipeline,
     demo_pipelines,
     pipeline_by_id,
+    resolve_pipeline_dictionary,
     save_pipeline_override,
     save_stage_override,
     stage_override,
@@ -719,10 +720,14 @@ def pipelines():
 
     all_pipelines = demo_pipelines()
     tenant_runs = [run for run in load_runs() if run.get("tenant_slug") == tenant_slug]
-    supported_workflows = {item["workflow"]: workflow_is_supported(item["workflow"]) for item in all_pipelines}
+    supported_workflows = {
+        str(item.get("workflow") or item.get("id") or ""): workflow_is_supported(str(item.get("workflow") or item.get("id") or ""))
+        for item in all_pipelines
+    }
     visible_pipelines = []
     for item in all_pipelines:
-        supported = supported_workflows.get(item["workflow"], False)
+        workflow = str(item.get("workflow") or item.get("id") or "")
+        supported = supported_workflows.get(workflow, False)
         tags = _pipeline_tags(item, supported=supported)
         if selected_tag and selected_tag not in tags:
             continue
@@ -782,6 +787,7 @@ def pipelines():
         "pipelines.html.j2",
         pipelines=visible_pipelines,
         selected_pipeline=selected_pipeline,
+        selected_dictionary=resolve_pipeline_dictionary(selected_pipeline),
         selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),
         runs=ledger_runs[:12],
         raw_run_count=len(visible_runs),

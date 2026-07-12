@@ -1,0 +1,7 @@
+{
+  "id": "observe-winpe-handoff",
+  "name": "Observe WinPE Handoff",
+  "action": "proxmox.vm.console.observe",
+  "risk": "low",
+  "description": "Observe the VM after PXE boot request and record Proxmox state."
+}

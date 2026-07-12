@@ -46,6 +46,11 @@ That path is visible inside the running BKC containers as `/app/dictionaries`.
 It is the right place for lab-local lane metadata that should be easy to inspect
 from an editor without opening one giant JSON file.
 
+Pipeline variables should follow explicit scope rules so portable recipes can be
+reused with lab-local overrides. See
+[`pipeline-dictionary-scope.md`](pipeline-dictionary-scope.md) for the proposed
+dictionary layout and variable precedence.
+
 ## Resource Gates
 
 Pipelines that build images, publish package repositories, install operating

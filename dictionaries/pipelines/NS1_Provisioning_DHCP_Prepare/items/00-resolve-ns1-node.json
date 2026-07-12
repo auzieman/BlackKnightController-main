@@ -1,0 +1,7 @@
+{
+  "id": "resolve-ns1-node",
+  "name": "Resolve ns1 Node",
+  "action": "node.resolve",
+  "risk": "low",
+  "description": "Resolve ns1 from the node graph or current inventory fallback."
+}

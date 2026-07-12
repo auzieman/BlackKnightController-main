@@ -1,0 +1,7 @@
+{
+  "id": "render-dhcp-windows-route",
+  "name": "Render DHCP Windows Route",
+  "action": "template.render",
+  "risk": "medium",
+  "description": "Route only the fixed VMID 136 MAC address to the Windows iPXE script."
+}

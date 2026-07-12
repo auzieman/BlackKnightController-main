@@ -1,0 +1,313 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "windows10-pxe-smoke",
+  "name": "Windows 10 PXE Smoke",
+  "status": "draft",
+  "owner": "bkc",
+  "summary": "Prepare a guarded Windows 10 WinPE/PXE smoke lane using ns1 and disposable VMID 136.",
+  "tags": [
+    "bkc",
+    "node-model",
+    "provisioning",
+    "pxe",
+    "netboot",
+    "windows",
+    "windows10",
+    "winpe",
+    "ns1",
+    "runnable"
+  ],
+  "targets": {
+    "controller": "node:vm:ns1",
+    "provisioning_network": "node:network:lab-provisioning",
+    "boot_image": "node:boot_image:windows10-22h2-winpe",
+    "target_vm": "node:vm:win10-pxe-smoke-136"
+  },
+  "inputs": {
+    "target_host": {
+      "required": true,
+      "default": "192.168.1.10"
+    },
+    "proxmox_iso_volume": {
+      "required": true,
+      "default": "local:iso/Win10_22H2_English_x64.iso"
+    },
+    "target_vmid": {
+      "required": true,
+      "default": 136
+    },
+    "target_vm_mac": {
+      "required": true,
+      "default": "02:10:20:00:01:36"
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-prepared-provisioning-network",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-network-prepare",
+        "network": "${dictionary.provisioning_network_cidr}",
+        "interface": "${dictionary.provisioning_interface}"
+      }
+    },
+    {
+      "id": "fixed-mac-windows-route",
+      "kind": "dhcp.boundary",
+      "with": {
+        "mac": "${dictionary.target_vm_mac}",
+        "windows_ipxe": "${dictionary.windows_ipxe_script_path}",
+        "debian_default": "/srv/pxe/debian-trixie.ipxe"
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-windows-pxe-context",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "controller": "${dictionary.target_node_id}",
+        "network": "${dictionary.provisioning_network_node_id}",
+        "boot_image": "${dictionary.boot_image_node_id}",
+        "target_vm": "${dictionary.target_vm_node_id}"
+      },
+      "produces": [
+        "fact:windows_pxe_context"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "verify-ns1-pxe-prereqs",
+      "action": "ssh.pxe.prereqs",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "interface": "${dictionary.provisioning_interface}",
+        "network": "${dictionary.provisioning_network_cidr}"
+      },
+      "produces": [
+        "fact:pxe_prereqs"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "verify-windows-iso",
+      "action": "proxmox.iso.verify",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "volume": "${dictionary.proxmox_iso_volume}",
+        "name": "${dictionary.windows_iso_name}"
+      },
+      "produces": [
+        "fact:windows_iso"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "fetch-wimboot",
+      "action": "ssh.http.fetch",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "url": "${dictionary.wimboot_url}",
+        "path": "${dictionary.wimboot_path}"
+      },
+      "produces": [
+        "artifact:wimboot"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "stage-windows-install-media",
+      "action": "proxmox.iso.extract.windows-media",
+      "transport": "bkc-proxmox+bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "iso": "${dictionary.proxmox_iso_volume}",
+        "target": "${dictionary.target_host}",
+        "boot_root": "${dictionary.windows_netboot_root}",
+        "media_root": "${dictionary.windows_media_root}"
+      },
+      "produces": [
+        "artifact:boot.wim",
+        "artifact:boot.sdi",
+        "artifact:BCD",
+        "artifact:bootmgr",
+        "artifact:windows-install-media"
+      ],
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "render-windows-ipxe",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "template": "templates/windows10.ipxe.tpl",
+        "target_path": "${dictionary.windows_ipxe_script_path}"
+      },
+      "produces": [
+        "artifact:windows10-ipxe"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "configure-windows-media-share",
+      "action": "ssh.samba.share",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${dictionary.target_host}",
+        "share": "${dictionary.windows_media_share}",
+        "path": "${dictionary.windows_media_root}",
+        "conf": "${dictionary.samba_media_conf_path}"
+      },
+      "produces": [
+        "service:smb",
+        "share:win10media"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "render-unattend-firstboot",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "unattend_template": "templates/Autounattend.xml.tpl",
+        "firstboot_template": "templates/bkc-firstboot.ps1.tpl",
+        "setupcomplete_template": "templates/SetupComplete.cmd.tpl",
+        "startnet_template": "templates/startnet.cmd.tpl",
+        "winpe_setup_template": "templates/bkc-winpe-setup.cmd.tpl"
+      },
+      "produces": [
+        "artifact:Autounattend.xml",
+        "artifact:bkc-firstboot.ps1",
+        "artifact:SetupComplete.cmd",
+        "artifact:startnet.cmd",
+        "artifact:bkc-winpe-setup.cmd",
+        "secret:windows-local-admin"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "render-dhcp-windows-route",
+      "action": "template.render",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "template": "templates/bkc-provisioning-windows-route.conf.tpl",
+        "target_path": "${dictionary.dhcp_fragment_path}",
+        "mac": "${dictionary.target_vm_mac}"
+      },
+      "produces": [
+        "artifact:dhcp-windows-route"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "prepare-vm136-pxe-target",
+      "action": "proxmox.vm.ensure",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "name": "${dictionary.target_vm_name}",
+        "mac": "${dictionary.target_vm_mac}",
+        "boot_bridge": "${dictionary.target_vm_boot_bridge}",
+        "management_bridge": "${dictionary.target_vm_management_bridge}"
+      },
+      "produces": [
+        "fact:vm136_target"
+      ],
+      "timeout_seconds": 240
+    },
+    {
+      "id": "pxe-boot-vm136",
+      "action": "proxmox.vm.boot",
+      "transport": "bkc-proxmox",
+      "risk": "high",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "boot": "${dictionary.target_vm_boot_nic}"
+      },
+      "produces": [
+        "fact:vm136_pxe_boot_requested"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "observe-winpe-handoff",
+      "action": "proxmox.vm.console.observe",
+      "transport": "bkc-proxmox",
+      "risk": "low",
+      "with": {
+        "vmid": "${dictionary.target_vmid}",
+        "expected": [
+          "Windows PE",
+          "wimboot"
+        ]
+      },
+      "produces": [
+        "fact:winpe_handoff"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "post-install-ssh-check",
+      "action": "pipeline.handoff.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "target": "${dictionary.target_install_hostname}.${dictionary.target_install_domain}",
+        "user": "${dictionary.post_boot_probe_user}",
+        "next_pipeline": "windows10-workstation-personalize",
+        "reason": "Windows setup and firstboot bootstrap must complete before SSH-driven personalization."
+      },
+      "produces": [
+        "event:windows_ssh_pending",
+        "handoff:windows10-workstation-personalize"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "record-windows-pxe-relationships",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${dictionary.pxe_service_node_id}",
+            "type": "serves",
+            "target_id": "${dictionary.boot_image_node_id}",
+            "confidence": "validated"
+          },
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "boots_from",
+            "target_id": "${dictionary.boot_image_node_id}",
+            "confidence": "planned"
+          },
+          {
+            "source_id": "${dictionary.target_vm_node_id}",
+            "type": "connected_to",
+            "target_id": "${dictionary.target_vm_boot_network_node_id}",
+            "confidence": "planned"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:pxe-serves-windows",
+        "relationship:vm136-boots-windows",
+        "relationship:vm136-on-provisioning-network"
+      ],
+      "timeout_seconds": 15
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "small-office-foobar-reference",
+  "name": "Small Office FooBar Reference",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "workflow": "small-office-foobar-reference",
+  "summary": "Compose the foo.bar small-office reference recipe from PXE install, workstation personalization, shared identity/storage, CRM, and validation evidence lanes.",
+  "tags": [
+    "bkc",
+    "recipe",
+    "small-office",
+    "foobar",
+    "foo.bar",
+    "pxe",
+    "windows",
+    "linux",
+    "identity",
+    "samba",
+    "crm",
+    "validation",
+    "demo"
+  ],
+  "targets": {
+    "tenant": "tenant:foobar",
+    "identity": "node:vm:foobar-id-01",
+    "crm": "node:vm:foobar-crm-01",
+    "tickets": "node:vm:foobar-tickets-01",
+    "windows_helpdesk_01": "node:vm:foobar-helpdesk-win-01",
+    "windows_helpdesk_02": "node:vm:foobar-helpdesk-win-02",
+    "linux_dev_01": "node:vm:foobar-dev-linux-01",
+    "linux_dev_02": "node:vm:foobar-dev-linux-02"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "foobar"
+    },
+    "domain": {
+      "required": true,
+      "default": "foo.bar"
+    },
+    "enable_provisioning": {
+      "required": false,
+      "default": false
+    },
+    "enable_personalization": {
+      "required": false,
+      "default": false
+    },
+    "enable_validation": {
+      "required": false,
+      "default": true
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-prepared-provisioning-network",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-network-prepare",
+        "network": "${dictionary.provisioning_network_node_id}"
+      }
+    },
+    {
+      "id": "requires-dhcp-pxe-boundary",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-dhcp-prepare"
+      }
+    },
+    {
+      "id": "provisioning-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_provisioning": "${inputs.enable_provisioning}",
+        "enable_personalization": "${inputs.enable_personalization}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-recipe-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "domain": "${inputs.domain}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:recipe.intent_loaded",
+        "fact:foobar_nodes",
+        "fact:foobar_users"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "plan-identity-storage",
+      "action": "recipe.role.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "node": "${dictionary.identity_node_id}",
+        "services": "${dictionary.nodes.identity.services}",
+        "users": "${dictionary.users}",
+        "groups": "${dictionary.groups}"
+      },
+      "produces": [
+        "event:identity.users_declared",
+        "event:storage.home_shares_declared",
+        "artifact:ldap-user-plan",
+        "artifact:samba-home-plan"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-crm-intranet",
+      "action": "recipe.role.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "pipeline_id": "${dictionary.app_vm_pipeline}",
+        "nodes": [
+          "${dictionary.crm_node_id}",
+          "${dictionary.tickets_node_id}"
+        ],
+        "services": [
+          "${dictionary.nodes.crm.services}",
+          "${dictionary.nodes.tickets.services}"
+        ],
+        "users": [
+          "joe.user",
+          "jill.user"
+        ]
+      },
+      "produces": [
+        "event:crm.plan_declared",
+        "event:tickets.plan_declared",
+        "artifact:crm-health-check"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "provision-linux-developer-workstations",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "pipeline_id": "${dictionary.linux_profile_pipeline}",
+        "targets": [
+          "node:vm:foobar-dev-linux-01",
+          "node:vm:foobar-dev-linux-02"
+        ],
+        "enabled": "${inputs.enable_provisioning}"
+      },
+      "produces": [
+        "event:linux_workstation.pxe_planned",
+        "relationship:uses_pipeline"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "provision-windows-helpdesk-workstations",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "pipeline_id": "${dictionary.windows_profile_pipeline}",
+        "targets": [
+          "node:vm:foobar-helpdesk-win-01",
+          "node:vm:foobar-helpdesk-win-02"
+        ],
+        "enabled": "${inputs.enable_provisioning}"
+      },
+      "produces": [
+        "event:windows_workstation.pxe_planned",
+        "relationship:uses_pipeline"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "personalize-workstations",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "pipelines": [
+          "${dictionary.linux_personalize_pipeline}",
+          "${dictionary.windows_personalize_pipeline}"
+        ],
+        "enabled": "${inputs.enable_personalization}"
+      },
+      "produces": [
+        "event:workstation.personalization_planned",
+        "relationship:has_profile"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "validate-small-office",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "enabled": "${inputs.enable_validation}",
+        "expected_events": "${dictionary.validation_events}",
+        "checks": [
+          "ldap users exist",
+          "smb homes reachable",
+          "crm http health passes",
+          "windows helpdesk nodes can reach crm",
+          "linux developer nodes can reach dev share",
+          "rustdesk installed on workstations"
+        ]
+      },
+      "produces": [
+        "event:recipe.validation_passed",
+        "node:validation_evidence",
+        "artifact:small-office-validation-summary"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "render-demo-lifecycle",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "template": "templates/foobar-lifecycle.mmd.tpl",
+        "target_path": "artifacts/foobar-lifecycle.mmd"
+      },
+      "produces": [
+        "artifact:grafana-mermaid-lifecycle"
+      ],
+      "timeout_seconds": 15
+    }
+  ],
+  "dashboards": [
+    {
+      "name": "Small Office Lifecycle",
+      "summary": "Show PXE, identity/storage, CRM, workstation, and validation stages for the foo.bar recipe.",
+      "url": "http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s&kiosk"
+    }
+  ],
+  "notes": "This is a recipe-level orchestrator. It should remain safe to review by default; live VM creation, PXE boot, and personalization require explicit runtime enablement."
+}

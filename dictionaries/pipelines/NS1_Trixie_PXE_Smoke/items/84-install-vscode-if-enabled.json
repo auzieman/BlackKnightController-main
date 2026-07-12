@@ -1,0 +1,5 @@
+{
+  "id": "install-vscode-if-enabled",
+  "action": "proxmox.guest.exec",
+  "description": "Install VS Code from the Microsoft apt repository when enabled."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "prepare-vm136-pxe-target",
+  "name": "Prepare VM136 PXE Target",
+  "action": "proxmox.vm.ensure",
+  "risk": "high",
+  "description": "Create or reset disposable VMID 136 with provisioning and management NICs."
+}

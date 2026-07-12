@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import crypt
 import ipaddress
+import hashlib
 import json
 import re
 import shlex
@@ -33,6 +35,7 @@ from services.integration_store import (
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.kubernetes_api import kubectl_text
+from services.pipeline_catalog import pipeline_by_id, resolve_pipeline_dictionary
 from services.proxmox import ProxmoxClient, load_proxmox_config
 from services.remote_ops import (
     download_remote_file,
@@ -2398,6 +2401,987 @@ WORKFLOW_DEFINITIONS = {
 # Backward-compatible alias while older runs and drafts still reference the cloud-import name.
 WORKFLOW_DEFINITIONS["fedora-cloud-import"] = WORKFLOW_DEFINITIONS["fedora-template-deploy"]
 WORKFLOW_DEFINITIONS["rx-demo-k3s-redeploy-from-git"] = WORKFLOW_DEFINITIONS["rx-demo-redeploy-from-git-event"]
+WORKFLOW_DEFINITIONS["ns1-provisioning-network-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-ns1-node",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing ns1 target node resolution.",
+            "complete": "ns1 target node resolution reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "discover-current-network",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing current ns1 network discovery step.",
+            "complete": "ns1 network discovery step reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "select-provisioning-interface",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing provisioning interface selection.",
+            "complete": "Provisioning interface selection reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "apply-provisioning-address",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing provisioning address application guardrails.",
+            "complete": "Provisioning address application reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-management-still-reachable",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing management reachability validation.",
+            "complete": "Management reachability validation reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "record-network-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-network-prepare",
+            "active": "Reviewing network relationship recording.",
+            "complete": "Network relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "ns1 provisioning network prepare review completed.",
+}
+WORKFLOW_DEFINITIONS["ns1-provisioning-dhcp-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-ns1-node",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing ns1 target node resolution.",
+            "complete": "ns1 target node resolution reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "verify-provisioning-network",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP provisioning network boundary checks.",
+            "complete": "DHCP provisioning network boundary checks reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "ensure-dhcp-include",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP main-config include guard.",
+            "complete": "DHCP main-config include guard reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "render-dhcp-fragment",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP provisioning fragment rendering.",
+            "complete": "DHCP provisioning fragment rendering reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "render-dhcp-defaults",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP interface defaults rendering.",
+            "complete": "DHCP interface defaults rendering reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "install-dhcp-package",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP package install intent.",
+            "complete": "DHCP package install intent reviewed.",
+            "timeout": 180,
+        },
+        {
+            "name": "validate-dhcp-config",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP syntax validation command.",
+            "complete": "DHCP syntax validation command reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "keep-dhcp-disabled",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP disabled-by-default gate.",
+            "complete": "DHCP disabled-by-default gate reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "record-dhcp-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-provisioning-dhcp-prepare",
+            "active": "Reviewing DHCP relationship recording.",
+            "complete": "DHCP relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "ns1 provisioning DHCP prepare review completed.",
+}
+WORKFLOW_DEFINITIONS["ns1-trixie-pxe-smoke"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-provisioning-context",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Reviewing Trixie provisioning context.",
+            "complete": "Trixie provisioning context reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "verify-ns1-pxe-prereqs",
+            "transport": "internal",
+            "kind": "trixie-pxe-prereqs",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Validating ns1 PXE prerequisite checks.",
+            "complete": "ns1 PXE prerequisite checks passed.",
+            "timeout": 45,
+        },
+        {
+            "name": "fetch-trixie-netboot",
+            "transport": "internal",
+            "kind": "trixie-netboot-fetch",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Caching Debian Trixie netboot assets on ns1.",
+            "complete": "Debian Trixie netboot assets cached.",
+            "timeout": 300,
+        },
+        {
+            "name": "render-ipxe-entry",
+            "transport": "internal",
+            "kind": "trixie-ipxe-render",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Rendering Trixie iPXE entry onto ns1.",
+            "complete": "Trixie iPXE entry rendered.",
+            "timeout": 15,
+        },
+        {
+            "name": "render-preseed-profile",
+            "transport": "internal",
+            "kind": "trixie-preseed-render",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Rendering Trixie preseed profile onto ns1.",
+            "complete": "Trixie preseed profile rendered.",
+            "timeout": 15,
+        },
+        {
+            "name": "prepare-vm132-pxe-target",
+            "transport": "internal",
+            "kind": "trixie-vm-prepare",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Recreating VMID 132 as a two-NIC PXE target.",
+            "complete": "VMID 132 PXE target prepared.",
+            "timeout": 300,
+        },
+        {
+            "name": "pxe-boot-vm132",
+            "transport": "internal",
+            "kind": "trixie-vm-boot",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Starting VMID 132 from PXE boot order.",
+            "complete": "VMID 132 PXE boot requested.",
+            "timeout": 120,
+        },
+        {
+            "name": "observe-installer-handoff",
+            "transport": "internal",
+            "kind": "trixie-vm-observe",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Observing VMID 132 Proxmox state after PXE boot.",
+            "complete": "VMID 132 Proxmox state observed.",
+            "timeout": 180,
+        },
+        {
+            "name": "post-boot-recollect",
+            "transport": "internal",
+            "kind": "event-note",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Recording post-boot recollection handoff.",
+            "complete": "Post-boot recollection handoff recorded.",
+            "message": "Post-boot facter recollection remains the next phase after Debian finishes installing and management SSH is reachable.",
+            "timeout": 120,
+        },
+        {
+            "name": "record-trixie-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-trixie-pxe-smoke",
+            "active": "Reviewing Trixie PXE relationship recording.",
+            "complete": "Trixie PXE relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "ns1 Trixie PXE smoke review completed.",
+}
+WORKFLOW_DEFINITIONS["windows10-reference-discover"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "verify-iso",
+            "transport": "internal",
+            "kind": "windows10-verify-iso",
+            "pipeline_id": "windows10-reference-discover",
+            "active": "Hashing the Windows 10 ISO source.",
+            "complete": "Windows 10 ISO source verified.",
+            "timeout": 120,
+        },
+        {
+            "name": "inspect-vm113",
+            "transport": "internal",
+            "kind": "windows10-inspect-vm",
+            "pipeline_id": "windows10-reference-discover",
+            "active": "Inspecting VMID 113 in Proxmox.",
+            "complete": "VMID 113 inspected.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-openssh",
+            "transport": "internal",
+            "kind": "windows10-validate-openssh",
+            "pipeline_id": "windows10-reference-discover",
+            "active": "Validating Windows OpenSSH key access.",
+            "complete": "Windows OpenSSH key access validated.",
+            "timeout": 60,
+        },
+        {
+            "name": "stage-firstboot-artifacts",
+            "transport": "internal",
+            "kind": "windows10-stage-artifacts",
+            "pipeline_id": "windows10-reference-discover",
+            "active": "Checking Windows firstboot artifact files.",
+            "complete": "Windows firstboot artifacts checked.",
+            "timeout": 15,
+        },
+        {
+            "name": "record-windows-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-reference-discover",
+            "active": "Reviewing Windows reference relationships.",
+            "complete": "Windows reference relationships reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Windows 10 reference discovery completed.",
+}
+WORKFLOW_DEFINITIONS["windows10-pxe-smoke"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-windows-pxe-context",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Reviewing Windows PXE context.",
+            "complete": "Windows PXE context reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "verify-ns1-pxe-prereqs",
+            "transport": "internal",
+            "kind": "windows10-pxe-prereqs",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Validating ns1 PXE prerequisite checks for Windows.",
+            "complete": "ns1 PXE prerequisite checks passed.",
+            "timeout": 45,
+        },
+        {
+            "name": "verify-windows-iso",
+            "transport": "internal",
+            "kind": "windows10-pxe-verify-iso",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Verifying Windows ISO in Proxmox storage.",
+            "complete": "Windows ISO verified.",
+            "timeout": 60,
+        },
+        {
+            "name": "fetch-wimboot",
+            "transport": "internal",
+            "kind": "windows10-wimboot-fetch",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Caching wimboot on ns1.",
+            "complete": "wimboot cached on ns1.",
+            "timeout": 120,
+        },
+        {
+            "name": "stage-windows-install-media",
+            "transport": "internal",
+            "kind": "windows10-winpe-stage",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Extracting Windows install media from the Proxmox ISO.",
+            "complete": "Windows install media staged on ns1.",
+            "timeout": 1800,
+        },
+        {
+            "name": "render-windows-ipxe",
+            "transport": "internal",
+            "kind": "windows10-ipxe-render",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Rendering Windows iPXE entry onto ns1.",
+            "complete": "Windows iPXE entry rendered.",
+            "timeout": 15,
+        },
+        {
+            "name": "configure-windows-media-share",
+            "transport": "internal",
+            "kind": "windows10-media-share",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Configuring read-only SMB share for Windows install media.",
+            "complete": "Windows install media SMB share configured.",
+            "timeout": 120,
+        },
+        {
+            "name": "render-unattend-firstboot",
+            "transport": "internal",
+            "kind": "windows10-unattend-render",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Rendering Windows unattended and firstboot assets.",
+            "complete": "Windows unattended and firstboot assets rendered.",
+            "timeout": 30,
+        },
+        {
+            "name": "render-dhcp-windows-route",
+            "transport": "internal",
+            "kind": "windows10-dhcp-route-render",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Rendering fixed-MAC DHCP route for Windows PXE.",
+            "complete": "Windows DHCP route rendered.",
+            "timeout": 60,
+        },
+        {
+            "name": "prepare-vm136-pxe-target",
+            "transport": "internal",
+            "kind": "windows10-vm-prepare",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Recreating VMID 136 as a Windows PXE target.",
+            "complete": "VMID 136 Windows PXE target prepared.",
+            "timeout": 300,
+        },
+        {
+            "name": "pxe-boot-vm136",
+            "transport": "internal",
+            "kind": "windows10-vm-boot",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Starting VMID 136 from PXE boot order.",
+            "complete": "VMID 136 PXE boot requested.",
+            "timeout": 120,
+        },
+        {
+            "name": "observe-winpe-handoff",
+            "transport": "internal",
+            "kind": "windows10-vm-observe",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Observing VMID 136 Proxmox state after PXE boot.",
+            "complete": "VMID 136 Proxmox state observed.",
+            "timeout": 180,
+        },
+        {
+            "name": "post-install-ssh-check",
+            "transport": "internal",
+            "kind": "event-note",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Recording Windows post-install SSH handoff.",
+            "complete": "Windows post-install SSH handoff recorded.",
+            "message": "Windows setup and firstboot bootstrap must complete before SSH-driven personalization.",
+            "timeout": 120,
+        },
+        {
+            "name": "record-windows-pxe-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-pxe-smoke",
+            "active": "Reviewing Windows PXE relationship recording.",
+            "complete": "Windows PXE relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Windows 10 PXE smoke completed.",
+}
+WORKFLOW_DEFINITIONS["trixie-workstation-personalize"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "discover-installed-trixie",
+            "transport": "internal",
+            "kind": "trixie-personalize-discover",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Verifying installed Trixie guest reachability through qemu-guest-agent.",
+            "complete": "Installed Trixie guest is reachable.",
+            "timeout": 60,
+        },
+        {
+            "name": "normalize-local-login",
+            "transport": "internal",
+            "kind": "trixie-personalize-login",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Normalizing the Trixie local workstation login.",
+            "complete": "Trixie local workstation login normalized.",
+            "timeout": 60,
+        },
+        {
+            "name": "publish-demo-checkpoints",
+            "transport": "internal",
+            "kind": "trixie-personalize-checkpoints",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Publishing FooBar demo checkpoint links on the Trixie desktop.",
+            "complete": "FooBar demo checkpoint links published on Trixie.",
+            "timeout": 180,
+        },
+        {
+            "name": "install-workstation-packages",
+            "transport": "internal",
+            "kind": "trixie-personalize-packages",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Installing Trixie workstation package profile.",
+            "complete": "Trixie workstation packages installed.",
+            "timeout": 3600,
+        },
+        {
+            "name": "install-vscode-if-enabled",
+            "transport": "internal",
+            "kind": "trixie-personalize-vscode",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Installing VS Code on Trixie if enabled.",
+            "complete": "VS Code stage completed.",
+            "timeout": 900,
+        },
+        {
+            "name": "install-rustdesk-if-configured",
+            "transport": "internal",
+            "kind": "trixie-personalize-rustdesk",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Installing RustDesk on Trixie if configured.",
+            "complete": "RustDesk stage completed.",
+            "timeout": 900,
+        },
+        {
+            "name": "enable-graphical-services",
+            "transport": "internal",
+            "kind": "trixie-personalize-services",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Enabling Trixie graphical and remoting services.",
+            "complete": "Trixie graphical and remoting services enabled.",
+            "timeout": 120,
+        },
+        {
+            "name": "verify-trixie-personality",
+            "transport": "internal",
+            "kind": "trixie-personalize-verify",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Verifying Trixie workstation personality.",
+            "complete": "Trixie workstation personality verified.",
+            "timeout": 120,
+        },
+        {
+            "name": "record-trixie-personality",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "trixie-workstation-personalize",
+            "active": "Reviewing Trixie workstation relationship recording.",
+            "complete": "Trixie workstation relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Trixie workstation personalization completed.",
+}
+WORKFLOW_DEFINITIONS["windows10-workstation-personalize"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "discover-installed-windows",
+            "transport": "internal",
+            "kind": "windows10-personalize-discover",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Verifying installed Windows guest SSH reachability.",
+            "complete": "Installed Windows guest is reachable.",
+            "timeout": 120,
+        },
+        {
+            "name": "normalize-local-login",
+            "transport": "internal",
+            "kind": "windows10-personalize-login",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Normalizing the Windows local workstation login.",
+            "complete": "Windows local workstation login normalized.",
+            "timeout": 60,
+        },
+        {
+            "name": "publish-demo-checkpoints",
+            "transport": "internal",
+            "kind": "windows10-personalize-checkpoints",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Publishing FooBar demo checkpoint links on the Windows desktop.",
+            "complete": "FooBar demo checkpoint links published on Windows.",
+            "timeout": 180,
+        },
+        {
+            "name": "ensure-chocolatey",
+            "transport": "internal",
+            "kind": "windows10-personalize-chocolatey",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Installing Chocolatey if missing.",
+            "complete": "Chocolatey is available.",
+            "timeout": 600,
+        },
+        {
+            "name": "install-workstation-packages",
+            "transport": "internal",
+            "kind": "windows10-personalize-packages",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Installing Windows workstation package profile.",
+            "complete": "Windows workstation packages installed.",
+            "timeout": 1800,
+        },
+        {
+            "name": "verify-windows-personality",
+            "transport": "internal",
+            "kind": "windows10-personalize-verify",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Verifying Windows workstation personality.",
+            "complete": "Windows workstation personality verified.",
+            "timeout": 120,
+        },
+        {
+            "name": "record-windows-personality",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-workstation-personalize",
+            "active": "Reviewing Windows workstation relationship recording.",
+            "complete": "Windows workstation relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Windows 10 workstation personalization completed.",
+}
+WORKFLOW_DEFINITIONS["windows10-winpe-builder"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-builder-context",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Reviewing Windows WinPE builder context.",
+            "complete": "Windows WinPE builder context reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "inspect-vm113",
+            "transport": "internal",
+            "kind": "windows10-builder-inspect-vm",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Inspecting VMID 113 in Proxmox.",
+            "complete": "VMID 113 inspected.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-builder-ssh",
+            "transport": "internal",
+            "kind": "windows10-builder-ssh",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Validating Windows builder OpenSSH access.",
+            "complete": "Windows builder OpenSSH access validated.",
+            "timeout": 60,
+        },
+        {
+            "name": "inspect-adk-tooling",
+            "transport": "internal",
+            "kind": "windows10-adk-inspect",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Inspecting Windows ADK and WinPE tooling.",
+            "complete": "Windows ADK tooling inspected.",
+            "timeout": 60,
+        },
+        {
+            "name": "stage-builder-scripts",
+            "transport": "internal",
+            "kind": "windows10-builder-stage-scripts",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Staging WinPE builder scripts on VMID 113.",
+            "complete": "WinPE builder scripts staged.",
+            "timeout": 60,
+        },
+        {
+            "name": "install-adk-if-enabled",
+            "transport": "internal",
+            "kind": "windows10-adk-install",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Checking ADK install gate.",
+            "complete": "ADK install gate checked.",
+            "timeout": 900,
+        },
+        {
+            "name": "build-winpe-if-enabled",
+            "transport": "internal",
+            "kind": "windows10-winpe-build",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Checking WinPE build gate.",
+            "complete": "WinPE build gate checked.",
+            "timeout": 900,
+        },
+        {
+            "name": "publish-winpe-if-enabled",
+            "transport": "internal",
+            "kind": "windows10-winpe-publish",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Checking WinPE publish gate.",
+            "complete": "WinPE publish gate checked.",
+            "timeout": 600,
+        },
+        {
+            "name": "record-winpe-builder-relationships",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "windows10-winpe-builder",
+            "active": "Reviewing WinPE builder relationship recording.",
+            "complete": "WinPE builder relationships reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Windows 10 WinPE builder preparation completed.",
+}
+
+WORKFLOW_DEFINITIONS["small-office-foobar-reference"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-recipe-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing foo.bar recipe intent.",
+            "complete": "FooBar recipe intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "plan-identity-storage",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing identity and shared-home service plan.",
+            "complete": "Identity and shared-home plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-crm-intranet",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing CRM/intranet service plan.",
+            "complete": "CRM/intranet service plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "provision-linux-developer-workstations",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing Linux developer workstation PXE plan.",
+            "complete": "Linux developer workstation PXE plan reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "provision-windows-helpdesk-workstations",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing Windows helpdesk workstation PXE plan.",
+            "complete": "Windows helpdesk workstation PXE plan reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "personalize-workstations",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing workstation personalization plan.",
+            "complete": "Workstation personalization plan reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-small-office",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing small-office validation evidence plan.",
+            "complete": "Small-office validation evidence plan reviewed.",
+            "timeout": 120,
+        },
+        {
+            "name": "render-demo-lifecycle",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reference",
+            "active": "Reviewing Grafana/Mermaid lifecycle render plan.",
+            "complete": "Grafana/Mermaid lifecycle render plan reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Small Office FooBar reference review completed.",
+}
+
+WORKFLOW_DEFINITIONS["small-office-foobar-reset"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-reset-scope",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reset",
+            "active": "Reviewing foo.bar reset scope.",
+            "complete": "FooBar reset scope reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "plan-demo-vm-removal",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reset",
+            "active": "Reviewing demo VM removal plan.",
+            "complete": "Demo VM removal plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-pxe-route-cleanup",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reset",
+            "active": "Reviewing PXE route cleanup plan.",
+            "complete": "PXE route cleanup plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-evidence-archive",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reset",
+            "active": "Reviewing validation evidence archive plan.",
+            "complete": "Validation evidence archive plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "verify-reset-boundary",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-reset",
+            "active": "Reviewing reset boundary validation.",
+            "complete": "Reset boundary validation reviewed.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Small Office FooBar reset review completed.",
+}
+
+WORKFLOW_DEFINITIONS["small-office-foobar-app-vms"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-app-vm-plan",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Reviewing foo.bar application VM plan.",
+            "complete": "FooBar application VM plan reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "select-trixie-source",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-source-select",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Selecting the prepared Trixie source VM.",
+            "complete": "Prepared Trixie source VM selected.",
+            "timeout": 60,
+        },
+        {
+            "name": "clone-app-vms",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-vm-clone",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Cloning SuiteCRM and Kanboard VM shells from Trixie.",
+            "complete": "SuiteCRM and Kanboard VM shells cloned.",
+            "timeout": 2400,
+        },
+        {
+            "name": "boot-app-vms",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-app-vm-boot",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Starting SuiteCRM and Kanboard VM shells.",
+            "complete": "SuiteCRM and Kanboard VM shells are running.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-app-relationships",
+            "transport": "internal",
+            "kind": "foobar-app-relationships",
+            "pipeline_id": "small-office-foobar-app-vms",
+            "active": "Recording foo.bar application VM relationships.",
+            "complete": "FooBar application VM relationships recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Small Office FooBar application VM pipeline completed.",
+}
+
+WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-service-plan",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Reviewing foo.bar service provisioning plan.",
+            "complete": "FooBar service provisioning plan reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "ensure-identity-vm",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-vm",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Ensuring the foo.bar identity VM exists.",
+            "complete": "FooBar identity VM is ready to boot.",
+            "timeout": 2400,
+        },
+        {
+            "name": "wait-service-guests",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-guest-wait",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Waiting for foo.bar service guests to accept BKC guest commands.",
+            "complete": "FooBar service guests are command-ready.",
+            "timeout": 600,
+        },
+        {
+            "name": "configure-demo-lan",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-demo-lan",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Configuring browser-reachable foo.bar service interfaces.",
+            "complete": "FooBar demo LAN service interfaces configured.",
+            "timeout": 300,
+        },
+        {
+            "name": "install-identity-packages",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-packages",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Installing foo.bar LDAP, Samba, and web packages.",
+            "complete": "FooBar identity packages installed.",
+            "timeout": 2400,
+        },
+        {
+            "name": "seed-ldap-directory",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-ldap-seed",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Applying foo.bar LDAP base, groups, and users.",
+            "complete": "FooBar LDAP directory seeded.",
+            "timeout": 300,
+        },
+        {
+            "name": "configure-samba-homes",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-samba-homes",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Configuring foo.bar Samba shared homes.",
+            "complete": "FooBar Samba shared homes configured.",
+            "timeout": 300,
+        },
+        {
+            "name": "publish-identity-portal",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-identity-portal",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Publishing foo.bar identity portal placeholder.",
+            "complete": "FooBar identity portal published.",
+            "timeout": 180,
+        },
+        {
+            "name": "provision-suitecrm-service",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-suitecrm-provision",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Installing the foo.bar SuiteCRM service.",
+            "complete": "FooBar SuiteCRM service installed.",
+            "timeout": 1800,
+        },
+        {
+            "name": "provision-kanboard-service",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-kanboard-provision",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Installing the foo.bar Kanboard ticket service.",
+            "complete": "FooBar Kanboard ticket service installed.",
+            "timeout": 1800,
+        },
+        {
+            "name": "validate-foobar-services",
+            "transport": "bkc-proxmox",
+            "kind": "foobar-service-validate",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Validating foo.bar identity, CRM, and ticket services.",
+            "complete": "FooBar services validated.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-service-relationships",
+            "transport": "internal",
+            "kind": "foobar-service-relationships",
+            "pipeline_id": "small-office-foobar-services",
+            "active": "Recording foo.bar service relationships.",
+            "complete": "FooBar service relationships recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Small Office FooBar service provisioning pipeline completed.",
+}
 
 
 def workflow_is_supported(workflow: str) -> bool:
@@ -5817,6 +6801,2139 @@ def _run_demo_k3s_add_node_reset_verify(run_id: str, stage_name: str) -> None:
     append_event(run_id, "info", stage_name, kubectl[-800:] if kubectl else "reset-verified")
 
 
+def _run_folder_pipeline_review_stage(run_id: str, stage: dict) -> None:
+    stage_name = str(stage["name"])
+    pipeline_id = str(stage.get("pipeline_id") or "").strip()
+    pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is not available in the catalog.")
+
+    resolved = resolve_pipeline_dictionary(pipeline)
+    missing = list(resolved.get("missing", []))
+    if missing:
+        raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is missing required dictionary values: {', '.join(missing)}")
+
+    stage_spec = next(
+        (
+            item
+            for item in pipeline.get("stages", [])
+            if str(item.get("id") or item.get("name") or "").strip() == stage_name
+        ),
+        {},
+    )
+    item_spec = next(
+        (
+            item
+            for item in pipeline.get("items", [])
+            if str(item.get("id") or item.get("name") or "").strip() == stage_name
+        ),
+        {},
+    )
+    evidence = {
+        "pipeline_id": pipeline_id,
+        "pipeline_name": pipeline.get("name"),
+        "source_type": pipeline.get("source_type"),
+        "source_layers": [layer.get("source_type") for layer in pipeline.get("source_layers", [])],
+        "stage": {
+            "id": stage_spec.get("id") or stage_name,
+            "action": stage_spec.get("action") or item_spec.get("action"),
+            "transport": stage_spec.get("transport"),
+            "risk": stage_spec.get("risk") or item_spec.get("risk"),
+            "with": stage_spec.get("with", {}),
+            "produces": stage_spec.get("produces", []),
+        },
+        "dictionary": {
+            "keys": sorted(str(key) for key in resolved.get("values", {}).keys()),
+            "target_host": resolved.get("values", {}).get("target_host"),
+            "provisioning_interface": resolved.get("values", {}).get("provisioning_interface"),
+            "enable_dhcp_service": resolved.get("values", {}).get("enable_dhcp_service"),
+            "dhcp_range_start": resolved.get("values", {}).get("dhcp_range_start"),
+            "dhcp_range_end": resolved.get("values", {}).get("dhcp_range_end"),
+            "boot_image_name": resolved.get("values", {}).get("boot_image_name"),
+            "netboot_root": resolved.get("values", {}).get("netboot_root"),
+            "target_vmid": resolved.get("values", {}).get("target_vmid"),
+            "target_vm_name": resolved.get("values", {}).get("target_vm_name"),
+            "target_vm_boot_nic": resolved.get("values", {}).get("target_vm_boot_nic"),
+            "target_vm_boot_bridge": resolved.get("values", {}).get("target_vm_boot_bridge"),
+            "target_vm_management_nic": resolved.get("values", {}).get("target_vm_management_nic"),
+            "target_vm_management_bridge": resolved.get("values", {}).get("target_vm_management_bridge"),
+            "enable_vm_create": resolved.get("values", {}).get("enable_vm_create"),
+            "enable_pxe_boot": resolved.get("values", {}).get("enable_pxe_boot"),
+            "enable_install": resolved.get("values", {}).get("enable_install"),
+        },
+        "mode": "review-only",
+    }
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Folder pipeline review stage completed.")))
+
+
+def _folder_pipeline_context(pipeline_id: str) -> tuple[dict, dict, dict]:
+    pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is not available in the catalog.")
+    resolved = resolve_pipeline_dictionary(pipeline)
+    missing = list(resolved.get("missing", []))
+    if missing:
+        raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is missing required dictionary values: {', '.join(missing)}")
+    return pipeline, resolved, dict(resolved.get("values", {}))
+
+
+def _repo_pipeline_folder(pipeline: dict) -> Path:
+    for layer in pipeline.get("source_layers", []):
+        if str(layer.get("source_type", "")).strip() == "repo-folder":
+            folder = Path(str(layer.get("source_folder") or "")).resolve()
+            if folder.exists():
+                return folder
+    source_path = Path(str(pipeline.get("source_path") or "")).resolve()
+    return source_path.parent if source_path.exists() else Path.cwd()
+
+
+def _render_pipeline_template(template_text: str, values: dict) -> str:
+    def replace(match: re.Match[str]) -> str:
+        scope = match.group(1)
+        key = match.group(2)
+        if scope == "dictionary":
+            return str(values.get(key, ""))
+        return str(values.get(key, ""))
+
+    return re.sub(r"\$\{(dictionary|inputs)\.([A-Za-z0-9_]+)\}", replace, template_text)
+
+
+def _run_ns1_command(values: dict, command: str, *, timeout: int = 120) -> str:
+    return run_remote_command(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        command=command,
+        timeout=timeout,
+    )
+
+
+def _run_trixie_pxe_prereqs(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    interface = shlex.quote(str(values.get("provisioning_interface") or ""))
+    cidr = shlex.quote(str(values.get("provisioning_network_cidr") or ""))
+    command = (
+        "set -e; "
+        f"ip link show {interface} >/dev/null; "
+        f"ip -o addr show dev {interface} | grep -F {shlex.quote(str(values.get('pxe_http_host') or ''))} >/dev/null; "
+        f"case {cidr} in 10.*/*|172.16.*/*|172.17.*/*|172.18.*/*|172.19.*/*|172.20.*/*|172.21.*/*|172.22.*/*|172.23.*/*|172.24.*/*|172.25.*/*|172.26.*/*|172.27.*/*|172.28.*/*|172.29.*/*|172.30.*/*|172.31.*/*) ;; *) exit 12 ;; esac; "
+        "echo trixie-pxe-prereqs-ok"
+    )
+    output = _run_ns1_command(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "ns1 PXE prerequisites are present.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "trixie-pxe-prereqs-ok")
+
+
+def _run_trixie_netboot_fetch(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    source = str(values.get("netboot_source_url") or "").rstrip("/") + "/"
+    root = str(values.get("netboot_root") or "")
+    command = (
+        "set -e; "
+        f"mkdir -p {shlex.quote(root)}; "
+        f"curl -fsSL -o {shlex.quote(str(values.get('netboot_kernel_path') or ''))} {shlex.quote(source + 'linux')}; "
+        f"curl -fsSL -o {shlex.quote(str(values.get('netboot_initrd_path') or ''))} {shlex.quote(source + 'initrd.gz')}; "
+        f"test -s {shlex.quote(str(values.get('netboot_kernel_path') or ''))}; "
+        f"test -s {shlex.quote(str(values.get('netboot_initrd_path') or ''))}; "
+        f"ls -lh {shlex.quote(root)}"
+    )
+    output = _run_ns1_command(values, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "Debian Trixie netboot assets are cached on ns1.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie netboot cached")
+
+
+def _run_trixie_template_upload(run_id: str, stage_name: str, template_name: str, target_key: str, mode: int = 0o644) -> None:
+    pipeline, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found: {template_path}")
+    target_path = str(values.get(target_key) or "").strip()
+    if not target_path.startswith("/srv/"):
+        raise PipelineExecutionError(f"Refusing to write template outside /srv: {target_path}")
+    render_values = dict(values)
+    if template_name == "trixie-smoke-preseed.cfg.tpl":
+        password = str(values.get("target_install_password") or "").strip() or f"Bkc-{secrets.token_urlsafe(18)}A1!"
+        if not str(render_values.get("target_user_password_crypted") or "").strip():
+            render_values["target_user_password_crypted"] = crypt.crypt(password, crypt.mksalt(crypt.METHOD_SHA512))
+        if not str(render_values.get("target_root_password_crypted") or "").strip():
+            render_values["target_root_password_crypted"] = render_values["target_user_password_crypted"]
+        if not str(render_values.get("target_ssh_authorized_key") or "").strip():
+            integrations = load_integrations()
+            ssh = integrations["ssh"]
+            render_values["target_ssh_authorized_key"] = read_key_pair(
+                ssh["private_key_path"],
+                ssh["public_key_path"],
+            ).get("public_key", "")
+        if not str(render_values.get("target_ssh_authorized_key") or "").startswith("ssh-"):
+            raise PipelineExecutionError("BKC SSH public key is missing or invalid.")
+        credentials_path = f"/root/bkc-vm{int(values.get('target_vmid') or 132)}-trixie-credentials.txt"
+        credentials = (
+            f"host={values.get('target_install_hostname')}.{values.get('target_install_domain')}\n"
+            f"user={values.get('target_install_user')}\n"
+            f"password={password}\n"
+        )
+        upload_remote_bytes(
+            host=str(values.get("target_host") or "").strip(),
+            user="root",
+            remote_path=credentials_path,
+            content=credentials.encode("utf-8"),
+            mode=0o600,
+            timeout=60,
+        )
+        append_event(run_id, "info", stage_name, json.dumps({"credentials_path": credentials_path, "user": values.get("target_install_user")}, sort_keys=True))
+
+    content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), render_values).encode("utf-8")
+    parent = str(Path(target_path).parent)
+    _run_ns1_command(values, f"mkdir -p {shlex.quote(parent)}", timeout=60)
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=target_path,
+        content=content,
+        mode=mode,
+        timeout=60,
+    )
+    output = _run_ns1_command(values, f"test -s {shlex.quote(target_path)} && ls -l {shlex.quote(target_path)}", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Rendered {template_name} to ns1.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else target_path)
+
+
+def _run_trixie_vm_prepare(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    vmid = int(values.get("target_vmid") or 132)
+    name = shlex.quote(str(values.get("target_vm_name") or f"trixie-smoke-{vmid}"))
+    memory = int(values.get("target_vm_memory_mb") or 4096)
+    cores = int(values.get("target_vm_cores") or 2)
+    disk_gb = int(values.get("target_vm_disk_gb") or 32)
+    storage = shlex.quote(str(values.get("target_vm_storage") or "local-lvm"))
+    boot_bridge = shlex.quote(str(values.get("target_vm_boot_bridge") or "vmbr1"))
+    management_bridge = shlex.quote(str(values.get("target_vm_management_bridge") or "vmbr0"))
+    command = (
+        "set -e; "
+        f"if qm config {vmid} >/dev/null 2>&1; then "
+        f"qm status {vmid} | grep -q running && qm stop {vmid} --timeout 30 || true; "
+        f"qm destroy {vmid} --purge 1 || qm destroy {vmid}; "
+        "fi; "
+        f"qm create {vmid} --name {name} --memory {memory} --cores {cores} --sockets 1 "
+        "--numa 0 --ostype l26 --scsihw virtio-scsi-single --agent enabled=1 --serial0 socket "
+        f"--net0 virtio,bridge={boot_bridge},firewall=1 "
+        f"--net1 virtio,bridge={management_bridge},firewall=1; "
+        f"qm set {vmid} --scsi0 {storage}:{disk_gb},iothread=1; "
+        f"qm set {vmid} --boot order=net0\\;scsi0; "
+        f"cfg=$(qm config {vmid}); printf \"%s\\n\" \"$cfg\"; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"net0:\" >/dev/null; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"net1:\" >/dev/null; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"boot: order=net0;scsi0\" >/dev/null; "
+        f"echo trixie-vm{vmid}-prepared"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=240)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} exists with PXE and management NICs.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else f"vm{vmid} prepared")
+
+
+def _run_trixie_vm_boot(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    vmid = int(values.get("target_vmid") or 132)
+    command = (
+        "set -e; "
+        f"qm set {vmid} --boot order=net0\\;scsi0; "
+        f"qm status {vmid} | grep -q running || qm start {vmid}; "
+        "sleep 5; "
+        f"qm set {vmid} --boot order=scsi0\\;net0; "
+        f"qm status {vmid}; "
+        f"qm config {vmid} | grep -F \"boot: order=scsi0;net0\" >/dev/null; "
+        f"echo trixie-vm{vmid}-pxe-boot-requested-disk-first-next"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=120)
+    guard = (
+        "#!ipxe\n"
+        f"# BKC guard: VMID {vmid} already entered Debian installer. Boot local disk on accidental PXE retry.\n"
+        "sanboot --no-describe --drive 0x80 || exit\n"
+    )
+    ipxe_script = str(values.get("ipxe_script_path") or "").strip()
+    if ipxe_script:
+        upload_remote_bytes(
+            host=str(values.get("target_host") or "").strip(),
+            user="root",
+            remote_path=ipxe_script,
+            content=guard.encode("utf-8"),
+            mode=0o644,
+            timeout=60,
+        )
+        append_event(run_id, "info", stage_name, f"Installed local-disk PXE guard at {ipxe_script}.")
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} PXE boot requested; next boot is disk-first.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"vm{vmid} booted")
+
+
+def _run_trixie_vm_observe(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
+    vmid = int(values.get("target_vmid") or 132)
+    output = _run_proxmox_ssh_command(f"qm status {vmid}; qm config {vmid} | sed -n '1,80p'", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} is observable in Proxmox.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else f"vm{vmid} observable")
+
+
+def _run_windows10_verify_iso(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("windows10-reference-discover")
+    iso_path = Path(str(values.get("windows_iso_path") or "")).expanduser()
+    if iso_path.exists():
+        digest = hashlib.sha256()
+        with iso_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        summary = {
+            "source": "local-path",
+            "path": str(iso_path),
+            "name": values.get("windows_iso_name"),
+            "size": iso_path.stat().st_size,
+            "sha256": digest.hexdigest(),
+        }
+        _set_stage(run_id, stage_name, "complete", "Windows ISO exists locally and was hashed.")
+        append_event(run_id, "info", stage_name, json.dumps(summary, sort_keys=True))
+        return
+
+    proxmox_volume = str(values.get("proxmox_iso_volume") or "").strip()
+    if not proxmox_volume:
+        raise PipelineExecutionError(f"Windows ISO is missing: {iso_path}")
+
+    storage = proxmox_volume.split(":", 1)[0] if ":" in proxmox_volume else "local"
+    command = (
+        f"pvesm list {shlex.quote(storage)} --content iso | "
+        f"awk -v vol={shlex.quote(proxmox_volume)} '$1 == vol {{found=1; print}} END {{exit found ? 0 : 1}}'"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=60).strip()
+    summary = {
+        "source": "proxmox-storage",
+        "local_path": str(iso_path),
+        "name": values.get("windows_iso_name"),
+        "proxmox_volume": proxmox_volume,
+        "proxmox_inventory": output,
+    }
+    _set_stage(run_id, stage_name, "complete", "Windows ISO exists in Proxmox storage.")
+    append_event(run_id, "info", stage_name, json.dumps(summary, sort_keys=True))
+
+
+def _run_windows10_inspect_vm(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("windows10-reference-discover")
+    vmid = int(values.get("reference_vmid") or 113)
+    output = _run_proxmox_ssh_command(f"qm status {vmid}; qm config {vmid} | sed -n '1,120p'", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} Proxmox shape inspected.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else f"vm{vmid} inspected")
+
+
+def _windows_ssh_command(values: dict, command: str, *, timeout: int = 60) -> str:
+    host = str(values.get("reference_vm_ip") or "").strip()
+    user = str(values.get("reference_vm_user") or "depadmin").strip()
+    return run_remote_command(
+        host=host,
+        user=user,
+        command=command,
+        timeout=timeout,
+    )
+
+
+def _run_windows10_validate_openssh(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("windows10-reference-discover")
+    output = _windows_ssh_command(values, "hostname", timeout=60)
+    _set_stage(run_id, stage_name, "complete", "Windows OpenSSH key access works from BKC.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "windows ssh ready")
+
+
+def _run_windows10_stage_artifacts(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _folder_pipeline_context("windows10-reference-discover")
+    folder = _repo_pipeline_folder(pipeline)
+    artifacts = {}
+    for key in ("bootstrap_script", "diet_script"):
+        rel_path = str(values.get(key) or "").strip()
+        path = folder / rel_path
+        if not path.exists():
+            raise PipelineExecutionError(f"Windows artifact is missing: {path}")
+        artifacts[key] = {"path": str(path), "size": path.stat().st_size}
+    _set_stage(run_id, stage_name, "complete", "Windows firstboot artifacts are present.")
+    append_event(run_id, "info", stage_name, json.dumps(artifacts, sort_keys=True))
+
+
+def _windows10_pxe_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("windows10-pxe-smoke")
+
+
+def _run_windows10_pxe_prereqs(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    interface = shlex.quote(str(values.get("provisioning_interface") or ""))
+    cidr = shlex.quote(str(values.get("provisioning_network_cidr") or ""))
+    command = (
+        "set -e; "
+        f"ip link show {interface} >/dev/null; "
+        f"ip -o addr show dev {interface} | grep -F {shlex.quote(str(values.get('pxe_http_host') or ''))} >/dev/null; "
+        f"case {cidr} in 10.*/*|172.16.*/*|172.17.*/*|172.18.*/*|172.19.*/*|172.20.*/*|172.21.*/*|172.22.*/*|172.23.*/*|172.24.*/*|172.25.*/*|172.26.*/*|172.27.*/*|172.28.*/*|172.29.*/*|172.30.*/*|172.31.*/*) ;; *) exit 12 ;; esac; "
+        "systemctl is-active --quiet dhcpd; "
+        "systemctl is-active --quiet nginx; "
+        "systemctl is-active --quiet tftp.socket; "
+        "echo windows10-pxe-prereqs-ok"
+    )
+    output = _run_ns1_command(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "ns1 Windows PXE prerequisites are present.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "windows10-pxe-prereqs-ok")
+
+
+def _run_windows10_pxe_verify_iso(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    proxmox_volume = str(values.get("proxmox_iso_volume") or "").strip()
+    if not proxmox_volume:
+        raise PipelineExecutionError("Windows PXE ISO volume is missing.")
+    storage = proxmox_volume.split(":", 1)[0] if ":" in proxmox_volume else "local"
+    command = (
+        f"pvesm list {shlex.quote(storage)} --content iso | "
+        f"awk -v vol={shlex.quote(proxmox_volume)} '$1 == vol {{found=1; print}} END {{exit found ? 0 : 1}}'"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=60).strip()
+    summary = {
+        "source": "proxmox-storage",
+        "name": values.get("windows_iso_name"),
+        "proxmox_volume": proxmox_volume,
+        "proxmox_inventory": output,
+    }
+    _set_stage(run_id, stage_name, "complete", "Windows ISO exists in Proxmox storage.")
+    append_event(run_id, "info", stage_name, json.dumps(summary, sort_keys=True))
+
+
+def _run_windows10_wimboot_fetch(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    target = str(values.get("wimboot_path") or "").strip()
+    if not target.startswith("/srv/"):
+        raise PipelineExecutionError(f"Refusing to write wimboot outside /srv: {target}")
+    command = (
+        "set -e; "
+        f"mkdir -p {shlex.quote(str(Path(target).parent))}; "
+        f"if ! test -s {shlex.quote(target)}; then "
+        f"curl -fsSL -o {shlex.quote(target)} {shlex.quote(str(values.get('wimboot_url') or ''))}; "
+        "fi; "
+        f"chmod 0644 {shlex.quote(target)}; "
+        f"test -s {shlex.quote(target)}; "
+        f"ls -lh {shlex.quote(target)}"
+    )
+    output = _run_ns1_command(values, command, timeout=180)
+    _set_stage(run_id, stage_name, "complete", "wimboot is cached on ns1.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else target)
+
+
+def _proxmox_iso_file_path(volume: str) -> str:
+    storage, _, image = volume.partition(":")
+    if storage != "local" or not image.startswith("iso/"):
+        raise PipelineExecutionError(f"Unsupported Windows ISO volume for file extraction: {volume}")
+    return "/var/lib/vz/template/" + image
+
+
+def _run_windows10_winpe_stage(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    proxmox_volume = str(values.get("proxmox_iso_volume") or "").strip()
+    iso_path = _proxmox_iso_file_path(proxmox_volume)
+    target_root = str(values.get("windows_netboot_root") or "").strip()
+    media_root = str(values.get("windows_media_root") or "").strip()
+    if not target_root.startswith("/srv/"):
+        raise PipelineExecutionError(f"Refusing to stage WinPE files outside /srv: {target_root}")
+    if not media_root.startswith("/srv/"):
+        raise PipelineExecutionError(f"Refusing to stage Windows media outside /srv: {media_root}")
+
+    reuse_command = (
+        f"test -s {shlex.quote(media_root + '/setup.exe')} && "
+        f"(test -s {shlex.quote(media_root + '/sources/install.wim')} || "
+        f"test -s {shlex.quote(media_root + '/sources/install.esd')})"
+    )
+    media_reused = False
+    try:
+        _run_ns1_command(values, reuse_command, timeout=60)
+        media_reused = True
+    except Exception:
+        media_reused = False
+
+    host, user, password = _proxmox_ssh_target(load_proxmox_config())
+    copied_files = 0
+    copied_bytes = 0
+    mount_dir = f"/mnt/bkc-winiso-{run_id[:8]}"
+    if not media_reused:
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+        private_key_path = str(key_info["private_key_path"])
+        if not private_key_path or not Path(private_key_path).exists():
+            raise PipelineExecutionError("BKC SSH private key is missing; cannot stream Windows media to ns1.")
+        proxmox_key_path = f"/var/tmp/bkc-ns1-copy-{run_id[:8]}"
+        upload_remote_file(
+            host=host,
+            user=user,
+            password=password,
+            remote_path=proxmox_key_path,
+            local_path=private_key_path,
+            mode=0o600,
+            timeout=60,
+        )
+        ns1_host = str(values.get("target_host") or "").strip()
+        transfer_command = (
+            "set -e; "
+            f"umount {shlex.quote(mount_dir)} >/dev/null 2>&1 || true; "
+            f"rm -rf {shlex.quote(mount_dir)}; mkdir -p {shlex.quote(mount_dir)}; "
+            f"mount -o loop,ro {shlex.quote(iso_path)} {shlex.quote(mount_dir)}; "
+            f"test -s {shlex.quote(mount_dir + '/setup.exe')}; "
+            f"files=$(find {shlex.quote(mount_dir)} -type f | wc -l); "
+            f"bytes=$(du -sb {shlex.quote(mount_dir)} | awk '{{print $1}}'); "
+            f"ssh -i {shlex.quote(proxmox_key_path)} -o BatchMode=yes -o StrictHostKeyChecking=no root@{shlex.quote(ns1_host)} "
+            f"{shlex.quote('rm -rf ' + shlex.quote(media_root) + ' && mkdir -p ' + shlex.quote(media_root))}; "
+            f"tar -C {shlex.quote(mount_dir)} -cf - . | "
+            f"ssh -i {shlex.quote(proxmox_key_path)} -o BatchMode=yes -o StrictHostKeyChecking=no root@{shlex.quote(ns1_host)} "
+            f"{shlex.quote('tar -C ' + shlex.quote(media_root) + ' -xf -')}; "
+            f"ssh -i {shlex.quote(proxmox_key_path)} -o BatchMode=yes -o StrictHostKeyChecking=no root@{shlex.quote(ns1_host)} "
+            f"{shlex.quote('test -s ' + shlex.quote(media_root + '/setup.exe') + ' && (test -s ' + shlex.quote(media_root + '/sources/install.wim') + ' || test -s ' + shlex.quote(media_root + '/sources/install.esd') + ')')}; "
+            "echo copied_files=$files copied_bytes=$bytes"
+        )
+        try:
+            transfer_output = run_remote_command(
+                host=host,
+                user=user,
+                password=password,
+                command=transfer_command,
+                timeout=1800,
+            )
+            match_files = re.search(r"copied_files=(\d+)", transfer_output)
+            match_bytes = re.search(r"copied_bytes=(\d+)", transfer_output)
+            copied_files = int(match_files.group(1)) if match_files else 0
+            copied_bytes = int(match_bytes.group(1)) if match_bytes else 0
+        finally:
+            run_remote_command(
+                host=host,
+                user=user,
+                password=password,
+                command=(
+                    f"rm -f {shlex.quote(proxmox_key_path)}; "
+                    f"umount {shlex.quote(mount_dir)} >/dev/null 2>&1 || true; "
+                    f"rmdir {shlex.quote(mount_dir)} >/dev/null 2>&1 || true"
+                ),
+                timeout=60,
+            )
+
+    derive_command = (
+        "set -e; "
+        f"mkdir -p {shlex.quote(target_root)}; "
+        f"cp {shlex.quote(media_root + '/bootmgr')} {shlex.quote(target_root + '/bootmgr')}; "
+        f"cp {shlex.quote(media_root + '/boot/bcd')} {shlex.quote(target_root + '/BCD')}; "
+        f"cp {shlex.quote(media_root + '/boot/boot.sdi')} {shlex.quote(target_root + '/boot.sdi')}; "
+        f"cp {shlex.quote(media_root + '/sources/boot.wim')} {shlex.quote(target_root + '/boot.wim')}; "
+        f"test -s {shlex.quote(media_root + '/setup.exe')}; "
+        f"(test -s {shlex.quote(media_root + '/sources/install.wim')} || test -s {shlex.quote(media_root + '/sources/install.esd')}); "
+        f"ls -lh {shlex.quote(target_root)}; "
+        f"ls -lh {shlex.quote(media_root + '/setup.exe')} {shlex.quote(media_root + '/sources/install.wim')} {shlex.quote(media_root + '/sources/install.esd')} 2>/dev/null || true"
+    )
+    verify = _run_ns1_command(values, derive_command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Windows install media and WinPE boot files are staged on ns1.")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        json.dumps(
+            {
+                "copied_bytes": copied_bytes,
+                "copied_files": copied_files,
+                "media_reused": media_reused,
+                "media_root": media_root,
+                "ns1": verify[-1600:],
+            },
+            sort_keys=True,
+        ),
+    )
+
+
+def _windows10_pxe_upload_template(
+    run_id: str,
+    stage_name: str,
+    template_name: str,
+    target_key: str,
+    values: dict | None = None,
+    *,
+    mode: int = 0o644,
+) -> None:
+    pipeline, _, base_values = _windows10_pxe_context()
+    render_values = dict(base_values)
+    if values:
+        render_values.update(values)
+    template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found: {template_path}")
+    target_path = str(render_values.get(target_key) or "").strip()
+    if not target_path.startswith("/srv/") and not target_path.startswith("/etc/dhcp/"):
+        raise PipelineExecutionError(f"Refusing to write template outside approved paths: {target_path}")
+    content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), render_values).encode("utf-8")
+    _run_ns1_command(render_values, f"mkdir -p {shlex.quote(str(Path(target_path).parent))}", timeout=60)
+    upload_remote_bytes(
+        host=str(render_values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=target_path,
+        content=content,
+        mode=mode,
+        timeout=60,
+    )
+    output = _run_ns1_command(render_values, f"test -s {shlex.quote(target_path)} && ls -l {shlex.quote(target_path)}", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Rendered {template_name} to ns1.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else target_path)
+
+
+def _run_windows10_unattend_render(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    password = str(values.get("target_admin_password") or "").strip() or f"Bkc-{secrets.token_urlsafe(18)}A1!"
+    public_key = str(values.get("target_ssh_authorized_key") or "").strip()
+    if not public_key:
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        public_key = read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key", "")
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is missing or invalid.")
+    render_values = {
+        **values,
+        "target_admin_password": password,
+        "target_ssh_authorized_key": public_key,
+    }
+    _windows10_pxe_upload_template(
+        run_id,
+        stage_name,
+        "Autounattend.xml.tpl",
+        "windows_unattend_path",
+        render_values,
+        mode=0o644,
+    )
+    _windows10_pxe_upload_template(
+        run_id,
+        stage_name,
+        "bkc-firstboot.ps1.tpl",
+        "windows_firstboot_path",
+        render_values,
+        mode=0o644,
+    )
+    for template_name, value_key in (
+        ("winpeshl.ini.tpl", "windows_winpe_shell_path"),
+        ("startnet.cmd.tpl", "windows_winpe_startnet_path"),
+        ("bkc-winpe-setup.cmd.tpl", "windows_winpe_setup_path"),
+    ):
+        _windows10_pxe_upload_template(
+            run_id,
+            stage_name,
+            template_name,
+            value_key,
+            render_values,
+            mode=0o644,
+        )
+    oem_script_root = f"{values.get('windows_media_root')}/sources/$OEM$/$$/Setup/Scripts"
+    _run_ns1_command(render_values, f"mkdir -p {shlex.quote(oem_script_root)}", timeout=60)
+    for template_name, output_name in (
+        ("bkc-firstboot.ps1.tpl", "bkc-firstboot.ps1"),
+        ("SetupComplete.cmd.tpl", "SetupComplete.cmd"),
+    ):
+        pipeline, _, _ = _windows10_pxe_context()
+        template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+        content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), render_values).encode("utf-8")
+        upload_remote_bytes(
+            host=str(values.get("target_host") or "").strip(),
+            user="root",
+            remote_path=f"{oem_script_root}/{output_name}",
+            content=content,
+            mode=0o644,
+            timeout=60,
+        )
+    append_event(run_id, "info", stage_name, f"Staged Windows SetupComplete assets under {oem_script_root}.")
+    credentials_path = f"/root/bkc-vm{int(values.get('target_vmid') or 136)}-credentials.txt"
+    credentials = (
+        f"host={values.get('target_install_hostname')}.{values.get('target_install_domain')}\n"
+        f"user={values.get('target_admin_user')}\n"
+        f"password={password}\n"
+    )
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=credentials_path,
+        content=credentials.encode("utf-8"),
+        mode=0o600,
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "Windows unattended assets rendered and credentials staged on ns1.")
+    append_event(run_id, "info", stage_name, json.dumps({"credentials_path": credentials_path, "user": values.get("target_admin_user")}, sort_keys=True))
+
+
+def _run_windows10_dhcp_route_render(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    _windows10_pxe_upload_template(
+        run_id,
+        stage_name,
+        "bkc-provisioning-windows-route.conf.tpl",
+        "dhcp_fragment_path",
+        values,
+        mode=0o644,
+    )
+    output = _run_ns1_command(
+        values,
+        "dhcpd -t -cf /etc/dhcp/dhcpd.conf >/dev/null && systemctl restart dhcpd && systemctl is-active dhcpd",
+        timeout=60,
+    )
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "dhcpd active")
+
+
+def _run_windows10_ipxe_render(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    _windows10_pxe_upload_template(run_id, stage_name, "windows10.ipxe.tpl", "windows_ipxe_script_path", values)
+
+
+def _run_windows10_media_share(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    media_root = str(values.get("windows_media_root") or "").strip()
+    share = str(values.get("windows_media_share") or "win10media").strip()
+    conf_path = str(values.get("samba_media_conf_path") or "/etc/samba/smb.conf.d/bkc-windows-media.conf").strip()
+    if not media_root.startswith("/srv/"):
+        raise PipelineExecutionError(f"Refusing to share Windows media outside /srv: {media_root}")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", share):
+        raise PipelineExecutionError(f"Invalid Samba share name: {share}")
+    if not conf_path.startswith("/etc/samba/"):
+        raise PipelineExecutionError(f"Refusing to write Samba config outside /etc/samba: {conf_path}")
+
+    _run_ns1_command(values, f"mkdir -p {shlex.quote(str(Path(conf_path).parent))}", timeout=60)
+    share_conf = (
+        f"[{share}]\n"
+        f"    path = {media_root}\n"
+        "    read only = yes\n"
+        "    guest ok = yes\n"
+        "    guest only = yes\n"
+        "    browsable = yes\n"
+        "    force user = nobody\n"
+    )
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=conf_path,
+        content=share_conf.encode("utf-8"),
+        mode=0o644,
+        timeout=60,
+    )
+    command = (
+        "set -e; "
+        "grep -q '^\\s*map to guest = Bad User' /etc/samba/smb.conf || "
+        "sed -i '/^\\[global\\]/a\\    map to guest = Bad User' /etc/samba/smb.conf; "
+        "sed -i '/^# BKC WINDOWS MEDIA BEGIN$/,/^# BKC WINDOWS MEDIA END$/d' /etc/samba/smb.conf; "
+        "printf '\\n# BKC WINDOWS MEDIA BEGIN\\n' >> /etc/samba/smb.conf; "
+        f"cat {shlex.quote(conf_path)} >> /etc/samba/smb.conf; "
+        "printf '# BKC WINDOWS MEDIA END\\n' >> /etc/samba/smb.conf; "
+        f"test -s {shlex.quote(media_root + '/setup.exe')}; "
+        f"(test -s {shlex.quote(media_root + '/sources/install.wim')} || test -s {shlex.quote(media_root + '/sources/install.esd')}); "
+        f"chcon -t samba_share_t {shlex.quote(media_root)} {shlex.quote(media_root + '/setup.exe')} {shlex.quote(media_root + '/sources')} >/dev/null 2>&1 || true; "
+        "timeout 20s firewall-cmd --add-service=samba >/dev/null 2>&1 || true; "
+        "timeout 20s firewall-cmd --add-service=samba --permanent >/dev/null 2>&1 || true; "
+        "timeout 30s systemctl enable --now smb >/dev/null; "
+        "timeout 30s systemctl restart smb; "
+        "timeout 20s testparm -s >/tmp/bkc-testparm.out; "
+        "systemctl is-active smb; "
+        f"timeout 20s smbclient -N -L //127.0.0.1 | grep -F {shlex.quote(share)} >/dev/null; "
+        f"timeout 20s smbclient -N //127.0.0.1/{shlex.quote(share)} -c 'ls setup.exe' >/dev/null; "
+        "cat /tmp/bkc-testparm.out | sed -n '1,120p'"
+    )
+    output = _run_ns1_command(values, command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", f"Windows media share //{values.get('pxe_http_host')}/{share} is ready.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else f"{share} ready")
+
+
+def _run_windows10_vm_prepare(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    vmid = int(values.get("target_vmid") or 136)
+    name = str(values.get("target_vm_name") or f"win10-pxe-smoke-{vmid}")
+    q_name = shlex.quote(name)
+    memory = int(values.get("target_vm_memory_mb") or 8192)
+    cores = int(values.get("target_vm_cores") or 4)
+    disk_gb = int(values.get("target_vm_disk_gb") or 64)
+    storage = shlex.quote(str(values.get("target_vm_storage") or "local-lvm"))
+    disk_bus = str(values.get("target_vm_disk_bus") or "sata0").strip()
+    if disk_bus != "sata0":
+        raise PipelineExecutionError(f"Windows PXE smoke currently supports only sata0 disk bus, got {disk_bus}.")
+    boot_bridge = shlex.quote(str(values.get("target_vm_boot_bridge") or "vmbr20"))
+    management_bridge = shlex.quote(str(values.get("target_vm_management_bridge") or "vmbr0"))
+    mac = str(values.get("target_vm_mac") or "").strip()
+    if not re.fullmatch(r"[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}", mac):
+        raise PipelineExecutionError(f"Invalid Windows PXE target MAC: {mac}")
+    q_mac = shlex.quote(mac.upper())
+    command = (
+        "set -e; "
+        f"if qm config {vmid} >/dev/null 2>&1; then "
+        f"current=$(qm config {vmid} | awk -F': ' '$1 == \"name\" {{print $2}}'); "
+        f"test \"$current\" = {shlex.quote(name)} || (echo \"Refusing to replace VMID {vmid} named $current\" >&2; exit 22); "
+        f"qm status {vmid} | grep -q running && qm stop {vmid} --timeout 30 || true; "
+        f"qm destroy {vmid} --purge 1 || qm destroy {vmid}; "
+        "fi; "
+        f"qm create {vmid} --name {q_name} --memory {memory} --cores {cores} --sockets 1 "
+        "--numa 0 --ostype win10 --bios seabios "
+        f"--net0 e1000={q_mac},bridge={boot_bridge},firewall=1 "
+        f"--net1 e1000,bridge={management_bridge},firewall=1; "
+        f"qm set {vmid} --{disk_bus} {storage}:{disk_gb}; "
+        f"qm set {vmid} --boot order=net0\\;{disk_bus}; "
+        f"cfg=$(qm config {vmid}); printf \"%s\\n\" \"$cfg\"; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"net0:\" >/dev/null; "
+        "printf \"%s\\n\" \"$cfg\" | grep -F \"net1:\" >/dev/null; "
+        f"printf \"%s\\n\" \"$cfg\" | grep -F \"{disk_bus}:\" >/dev/null; "
+        f"printf \"%s\\n\" \"$cfg\" | grep -F \"boot: order=net0;{disk_bus}\" >/dev/null; "
+        f"echo windows10-vm{vmid}-prepared"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=240)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} exists with Windows PXE and management NICs.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else f"vm{vmid} prepared")
+
+
+def _run_windows10_vm_boot(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    vmid = int(values.get("target_vmid") or 136)
+    disk_bus = str(values.get("target_vm_disk_bus") or "sata0").strip()
+    if disk_bus != "sata0":
+        raise PipelineExecutionError(f"Windows PXE smoke currently supports only sata0 disk bus, got {disk_bus}.")
+    command = (
+        "set -e; "
+        f"qm set {vmid} --boot order=net0\\;{disk_bus}; "
+        f"qm status {vmid} | grep -q running || qm start {vmid}; "
+        "sleep 5; "
+        f"qm set {vmid} --boot order={disk_bus}\\;net0; "
+        f"qm status {vmid}; "
+        f"qm config {vmid} | grep -F \"boot: order={disk_bus};net0\" >/dev/null; "
+        f"echo windows10-vm{vmid}-pxe-boot-requested-disk-first-next"
+    )
+    output = _run_proxmox_ssh_command(command, timeout=120)
+    guard = (
+        "#!ipxe\n"
+        f"# BKC guard: VMID {vmid} already entered Windows setup. Boot local disk on accidental PXE retry.\n"
+        "sanboot --no-describe --drive 0x80 || exit\n"
+    )
+    windows_ipxe = str(values.get("windows_ipxe_script_path") or "").strip()
+    if windows_ipxe:
+        upload_remote_bytes(
+            host=str(values.get("target_host") or "").strip(),
+            user="root",
+            remote_path=windows_ipxe,
+            content=guard.encode("utf-8"),
+            mode=0o644,
+            timeout=60,
+        )
+        append_event(run_id, "info", stage_name, f"Installed local-disk PXE guard at {windows_ipxe}.")
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} PXE boot requested; next boot is disk-first.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"vm{vmid} booted")
+
+
+def _run_windows10_vm_observe(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    vmid = int(values.get("target_vmid") or 136)
+    output = _run_proxmox_ssh_command(f"qm status {vmid}; qm config {vmid} | sed -n '1,100p'", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} is observable in Proxmox.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else f"vm{vmid} observable")
+
+
+def _run_windows10_post_install_ssh(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_pxe_context()
+    if str(values.get("enable_post_install_ssh_check")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped post-install SSH check until Windows bootstrap reachability is explicit.")
+        append_event(run_id, "info", stage_name, "Windows net-install handoff is allowed to continue asynchronously; SSH validation remains opt-in.")
+        return
+    host = f"{values.get('target_install_hostname')}.{values.get('target_install_domain')}"
+    output = run_remote_command(
+        host=host,
+        user=str(values.get("post_boot_probe_user") or values.get("target_admin_user") or "depadmin"),
+        command="hostname",
+        timeout=120,
+    )
+    _set_stage(run_id, stage_name, "complete", "Windows post-install SSH access works from BKC.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "windows ssh ready")
+
+
+def _flatten_package_values(*groups: object) -> list[str]:
+    packages: list[str] = []
+    for group in groups:
+        if isinstance(group, list):
+            for item in group:
+                if isinstance(item, str) and item.strip():
+                    packages.append(item.strip())
+        elif isinstance(group, str) and group.strip():
+            packages.extend(part.strip() for part in group.replace(",", " ").split() if part.strip())
+    return packages
+
+
+def _trixie_personalize_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("trixie-workstation-personalize")
+
+
+def _pipeline_value_truthy(values: dict, key: str) -> bool:
+    return str(values.get(key) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _trixie_guest_exec(values: dict, command: str, *, timeout: int = 120) -> str:
+    vmid = int(values.get("target_vmid") or 132)
+    host_timeout = max(10, int(timeout) - 5)
+    encoded_command = b64encode(command.encode("utf-8")).decode("ascii")
+    wrapper = f"printf %s {shlex.quote(encoded_command)} | base64 -d | /bin/sh"
+    remote = f"timeout {host_timeout}s qm guest exec {vmid} -- /bin/sh -c {shlex.quote(wrapper)}"
+    output = _run_proxmox_ssh_command(remote, timeout=timeout)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return output
+    pid = payload.get("pid")
+    if pid is not None and "exitcode" not in payload:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status_output = _run_proxmox_ssh_command(
+                f"timeout 10s qm guest exec-status {vmid} {int(pid)}",
+                timeout=15,
+            )
+            try:
+                status = json.loads(status_output)
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"Could not parse guest exec-status for VMID {vmid}: {status_output}") from exc
+            if status.get("exited"):
+                payload = status
+                break
+            time.sleep(2)
+        else:
+            raise PipelineExecutionError(f"guest command on VMID {vmid} did not exit within {timeout} seconds")
+    out = str(payload.get("out-data") or "")
+    err = str(payload.get("err-data") or "")
+    exit_code = int(payload.get("exitcode") or 0)
+    combined = "\n".join(part for part in (out.rstrip(), err.rstrip()) if part)
+    if exit_code != 0:
+        raise PipelineExecutionError(combined or f"guest command exited {exit_code}")
+    return combined
+
+
+def _run_trixie_personalize_discover(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    output = _trixie_guest_exec(
+        values,
+        "hostname; ip -brief addr; systemctl is-active qemu-guest-agent ssh",
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "Installed Trixie guest is reachable through qemu-guest-agent.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie guest ready")
+
+
+def _run_trixie_personalize_login(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    install_user = str(values.get("target_install_user") or "auzieman").strip()
+    install_password = str(values.get("target_install_password") or "").strip()
+    if not install_user:
+        raise PipelineExecutionError("target_install_user is required for Trixie login normalization.")
+    if not install_password:
+        _set_stage(run_id, stage_name, "complete", "Skipped password normalization because target_install_password is blank.")
+        append_event(run_id, "info", stage_name, "Trixie local password normalization is opt-in.")
+        return
+    command = (
+        "set -e; "
+        f"user={shlex.quote(install_user)}; "
+        "getent passwd \"$user\" >/dev/null; "
+        f"printf '%s\n' {shlex.quote(f'{install_user}:{install_password}')} | chpasswd; "
+        "passwd -S \"$user\" | awk '{print $1, $2, $3}'; "
+        "getent passwd \"$user\""
+    )
+    output = _trixie_guest_exec(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Trixie local login normalized for {install_user}.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"{install_user} password normalized")
+
+
+def _service_checkpoint_urls(values: dict) -> list[dict]:
+    checkpoints = values.get("service_checkpoints")
+    if not isinstance(checkpoints, list) or not checkpoints:
+        raise PipelineExecutionError("service_checkpoints must be configured for demo checkpoint publishing.")
+    preferred_prefix = str(values.get("demo_lan_prefix") or "192.168.1.").strip()
+    require_demo_lan = _pipeline_value_truthy(values, "require_demo_lan_urls")
+    urls = []
+    for raw in checkpoints:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each service checkpoint must be an object.")
+        label = str(raw.get("label") or "").strip()
+        vmid = int(raw.get("vmid") or 0)
+        path = str(raw.get("path") or "/").strip() or "/"
+        if not path.startswith("/"):
+            path = f"/{path}"
+        if not label or not vmid:
+            raise PipelineExecutionError("Each service checkpoint requires label and vmid.")
+        output = _foobar_guest_exec(
+            vmid,
+            "ip -4 -o addr show | awk '{split($4,a,\"/\"); print a[1]}'",
+            timeout=60,
+        ).strip()
+        candidates = output.split()
+        ip = next((candidate for candidate in candidates if preferred_prefix and candidate.startswith(preferred_prefix)), "")
+        if not ip and not require_demo_lan:
+            ip = candidates[0] if candidates else ""
+        if not ip:
+            detail = f" with prefix {preferred_prefix}" if preferred_prefix else ""
+            raise PipelineExecutionError(f"Could not resolve browser-reachable IP{detail} for service checkpoint {label} VMID {vmid}.")
+        urls.append({"label": label, "vmid": vmid, "ip": ip, "url": f"http://{ip}{path}"})
+    return urls
+
+
+def _checkpoint_text(urls: list[dict]) -> str:
+    lines = [
+        "FooBar Small Office Demo Checkpoints",
+        "",
+        "Use these IP-based URLs from lab workstations; local DNS may not resolve foo.bar names.",
+        "",
+    ]
+    lines.extend(f"{item['label']}: {item['url']}" for item in urls)
+    lines.extend(["", "Generated by BlackKnightController."])
+    return "\n".join(lines)
+
+
+def _run_trixie_personalize_checkpoints(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    urls = _service_checkpoint_urls(values)
+    text = _checkpoint_text(urls)
+    install_user = str(values.get("target_install_user") or "auzieman").strip()
+    quoted_text = shlex.quote(text)
+    command = (
+        "set -e; "
+        f"user={shlex.quote(install_user)}; "
+        "home=$(getent passwd \"$user\" | cut -d: -f6); "
+        "test -n \"$home\"; "
+        "install -d -m 0755 \"$home/Desktop\"; "
+        f"printf '%s\n' {quoted_text} > \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        "chown \"$user:$user\" \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        "cat \"$home/Desktop/FooBar Demo Checkpoints.txt\"; "
+        + " ".join(f"curl -fsS {shlex.quote(item['url'])} >/dev/null;" for item in urls)
+    )
+    output = _trixie_guest_exec(values, command, timeout=180)
+    _store_run_extra(run_id, {"foobar_demo_checkpoints": urls})
+    _set_stage(run_id, stage_name, "complete", "FooBar demo checkpoint links published on Trixie.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else json.dumps(urls, sort_keys=True))
+
+
+def _run_trixie_personalize_packages(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization"):
+        _set_stage(run_id, stage_name, "complete", "Skipped full Trixie package profile because enable_full_personalization is false.")
+        append_event(run_id, "info", stage_name, "Lightweight demo checkpoint mode is active.")
+        return
+    packages = _flatten_package_values(values.get("desktop_packages"), values.get("developer_packages"))
+    if not packages:
+        raise PipelineExecutionError("No Trixie workstation packages are configured.")
+    package_args = " ".join(shlex.quote(package) for package in packages)
+    command = (
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        f"apt-get -o DPkg::Lock::Timeout=600 install -y {package_args}"
+    )
+    output = _trixie_guest_exec(values, command, timeout=3600)
+    _set_stage(run_id, stage_name, "complete", "Trixie workstation package profile installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "trixie packages installed")
+
+
+def _run_trixie_personalize_vscode(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization") or str(values.get("enable_vscode")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped VS Code because enable_vscode is false.")
+        append_event(run_id, "info", stage_name, "VS Code install remains opt-in.")
+        return
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        "install -d -m 0755 /etc/apt/keyrings; "
+        "wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/keyrings/packages.microsoft.gpg; "
+        "chmod 0644 /etc/apt/keyrings/packages.microsoft.gpg; "
+        "printf '%s\n' 'deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' > /etc/apt/sources.list.d/vscode.list; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y code"
+    )
+    output = _trixie_guest_exec(values, command, timeout=900)
+    _set_stage(run_id, stage_name, "complete", "VS Code installed on Trixie.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "vscode installed")
+
+
+def _run_trixie_personalize_rustdesk(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    enabled = _pipeline_value_truthy(values, "enable_full_personalization") and str(values.get("enable_rustdesk")).strip().lower() == "true"
+    url = str(values.get("rustdesk_deb_url") or "").strip()
+    if not enabled or not url:
+        _set_stage(run_id, stage_name, "complete", "Skipped RustDesk because enable_rustdesk is false or rustdesk_deb_url is blank.")
+        append_event(run_id, "info", stage_name, "RustDesk Linux install requires an explicit .deb URL.")
+        return
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"wget -O /tmp/bkc-rustdesk.deb {shlex.quote(url)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y /tmp/bkc-rustdesk.deb"
+    )
+    output = _trixie_guest_exec(values, command, timeout=900)
+    _set_stage(run_id, stage_name, "complete", "RustDesk installed on Trixie.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "rustdesk installed")
+
+
+def _run_trixie_personalize_services(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    target = str(values.get("graphical_target") or "graphical.target").strip()
+    command = (
+        f"systemctl set-default {shlex.quote(target)}; "
+        "systemctl enable --now ssh qemu-guest-agent; "
+        "systemctl enable --now lightdm 2>/dev/null || true; "
+        "systemctl is-enabled ssh qemu-guest-agent; "
+        "systemctl is-active lightdm 2>/dev/null || true; "
+        "systemctl get-default"
+    )
+    output = _trixie_guest_exec(values, command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Trixie graphical and remoting services are enabled.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie services enabled")
+
+
+def _run_trixie_personalize_verify(run_id: str, stage_name: str) -> None:
+    _, _, values = _trixie_personalize_context()
+    command = (
+        "dpkg-query -W libreoffice mate-desktop-environment-core enlightenment 2>/dev/null; "
+        "command -v code >/dev/null 2>&1 && code --version | head -n 1 || true; "
+        "systemctl is-active ssh qemu-guest-agent; "
+        "systemctl get-default"
+    )
+    output = _trixie_guest_exec(values, command, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Trixie workstation personality verified.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "trixie workstation verified")
+
+
+def _windows10_personalize_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("windows10-workstation-personalize")
+
+
+def _windows10_personalize_powershell(values: dict, script: str, *, timeout: int = 120) -> str:
+    host = str(values.get("target_host") or "").strip()
+    user = str(values.get("target_admin_user") or "depadmin").strip()
+    if not host:
+        raise PipelineExecutionError("Windows personalization target_host is required.")
+    encoded = b64encode(script.encode("utf-16le")).decode("ascii")
+    command = f"powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}"
+    return run_remote_command(host=host, user=user, command=command, timeout=timeout)
+
+
+def _run_windows10_personalize_discover(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    host = str(values.get("target_host") or "").strip()
+    user = str(values.get("target_admin_user") or "depadmin").strip()
+    append_event(run_id, "info", stage_name, f"Resolved Windows personalization target {user}@{host}.")
+    output = _windows10_personalize_powershell(
+        values,
+        "hostname; Get-Service sshd | Select-Object Name,Status,StartType | Format-List",
+        timeout=120,
+    )
+    _set_stage(run_id, stage_name, "complete", "Installed Windows guest is reachable over BKC SSH.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "windows ssh ready")
+
+
+def _run_windows10_personalize_login(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    admin_user = str(values.get("target_admin_user") or "depadmin").strip()
+    demo_password = str(values.get("target_demo_password") or "").strip()
+    if not admin_user:
+        raise PipelineExecutionError("target_admin_user is required for Windows login normalization.")
+    if not demo_password:
+        _set_stage(run_id, stage_name, "complete", "Skipped password normalization because target_demo_password is blank.")
+        append_event(run_id, "info", stage_name, "Windows local password normalization is opt-in.")
+        return
+    escaped_user = admin_user.replace("'", "''")
+    escaped_password = demo_password.replace("'", "''")
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"net user '{escaped_user}' '{escaped_password}'; "
+        "Write-Output 'windows-local-login-normalized'; "
+        "whoami"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"Windows local login normalized for {admin_user}.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else f"{admin_user} password normalized")
+
+
+def _run_windows10_personalize_checkpoints(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    urls = _service_checkpoint_urls(values)
+    text = _checkpoint_text(urls)
+    ps_urls = "@(" + ",".join("'" + item["url"].replace("'", "''") + "'" for item in urls) + ")"
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$desktop = [Environment]::GetFolderPath('Desktop'); "
+        "if (-not $desktop) { $desktop = Join-Path $env:USERPROFILE 'Desktop' }; "
+        "New-Item -ItemType Directory -Force -Path $desktop | Out-Null; "
+        f"@'\n{text}\n'@ | Set-Content -Encoding UTF8 -Path (Join-Path $desktop 'FooBar Demo Checkpoints.txt'); "
+        f"$urls = {ps_urls}; "
+        "foreach ($url in $urls) { Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 15 | Out-Null }; "
+        "Get-Content (Join-Path $desktop 'FooBar Demo Checkpoints.txt')"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=180)
+    _store_run_extra(run_id, {"foobar_demo_checkpoints": urls})
+    _set_stage(run_id, stage_name, "complete", "FooBar demo checkpoint links published on Windows.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else json.dumps(urls, sort_keys=True))
+
+
+def _run_windows10_personalize_chocolatey(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization") or str(values.get("enable_chocolatey")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped Chocolatey because enable_chocolatey is false.")
+        append_event(run_id, "info", stage_name, "Chocolatey remains opt-in.")
+        return
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+        "if ((Test-Path 'C:\\ProgramData\\chocolatey') -and -not (Test-Path $choco)) { Remove-Item -Recurse -Force 'C:\\ProgramData\\chocolatey' }; "
+        "if (-not (Test-Path $choco)) { "
+        "Set-ExecutionPolicy Bypass -Scope Process -Force; "
+        "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; "
+        "iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); "
+        "} "
+        "if (-not (Test-Path $choco)) { $cmd = Get-Command choco.exe -ErrorAction SilentlyContinue; if ($cmd) { $choco = $cmd.Source } } "
+        "if (-not (Test-Path $choco)) { throw 'Chocolatey install did not produce choco.exe.' } "
+        "& $choco --version"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=600)
+    _set_stage(run_id, stage_name, "complete", "Chocolatey is available on Windows.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "chocolatey ready")
+
+
+def _run_windows10_personalize_packages(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    if not _pipeline_value_truthy(values, "enable_full_personalization"):
+        _set_stage(run_id, stage_name, "complete", "Skipped full Windows package profile because enable_full_personalization is false.")
+        append_event(run_id, "info", stage_name, "Lightweight demo checkpoint mode is active.")
+        return
+    packages = _flatten_package_values(values.get("package_names"))
+    if not packages:
+        raise PipelineExecutionError("No Windows workstation packages are configured.")
+    package_args = " ".join(packages)
+    script = (
+        "$ErrorActionPreference = 'Stop'; "
+        "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+        "if (-not (Test-Path $choco)) { $cmd = Get-Command choco.exe -ErrorAction SilentlyContinue; if ($cmd) { $choco = $cmd.Source } } "
+        "if (-not (Test-Path $choco)) { throw 'Chocolatey is not installed.' } "
+        f"& $choco install {package_args} -y --no-progress --limit-output"
+    )
+    output = _windows10_personalize_powershell(values, script, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", "Windows workstation package profile installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "windows packages installed")
+
+
+def _run_windows10_personalize_verify(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_personalize_context()
+    if _pipeline_value_truthy(values, "enable_full_personalization"):
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            "$ProgressPreference = 'SilentlyContinue'; "
+            "$choco = 'C:\\ProgramData\\chocolatey\\bin\\choco.exe'; "
+            "$expected = @( "
+            "'C:\\Program Files\\LibreOffice\\program\\soffice.exe', "
+            "'C:\\Program Files\\Microsoft VS Code\\Code.exe', "
+            "'C:\\Program Files\\RustDesk\\RustDesk.exe', "
+            "'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' "
+            "); "
+            "$missing = @($expected | Where-Object { -not (Test-Path $_) }); "
+            "if ($missing.Count -gt 0) { throw ('Missing expected workstation apps: ' + ($missing -join ', ')) }; "
+            "hostname; "
+            "if (Test-Path $choco) { & $choco list --local-only --limit-output | Out-String | Write-Output }; "
+            "$expected | ForEach-Object { Write-Output ('present: ' + $_) }; "
+            "Get-Service sshd | Select-Object Name,Status,StartType | Format-List; "
+            "Write-Output 'Windows workstation package verification passed.'"
+        )
+    else:
+        script = (
+            "$ErrorActionPreference = 'Stop'; "
+            "hostname; "
+            "Test-Path (Join-Path ([Environment]::GetFolderPath('Desktop')) 'FooBar Demo Checkpoints.txt'); "
+            "Get-Service sshd | Select-Object Name,Status,StartType | Format-List"
+        )
+    output = _windows10_personalize_powershell(values, script, timeout=120)
+    _set_stage(run_id, stage_name, "complete", "Windows workstation personality verified.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "windows workstation verified")
+
+
+def _windows10_builder_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("windows10-winpe-builder")
+
+
+def _windows10_builder_command(values: dict, command: str, *, timeout: int = 60) -> str:
+    return run_remote_command(
+        host=str(values.get("builder_vm_ip") or "").strip(),
+        user=str(values.get("builder_vm_user") or "depadmin").strip(),
+        command=command,
+        timeout=timeout,
+    )
+
+
+def _run_windows10_builder_inspect_vm(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    vmid = int(values.get("builder_vmid") or 113)
+    output = _run_proxmox_ssh_command(f"qm status {vmid}; qm config {vmid} | sed -n '1,120p'", timeout=60)
+    _set_stage(run_id, stage_name, "complete", f"VMID {vmid} Proxmox shape inspected.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else f"vm{vmid} inspected")
+
+
+def _run_windows10_builder_ssh(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    output = _windows10_builder_command(values, "hostname && whoami", timeout=60)
+    _set_stage(run_id, stage_name, "complete", "Windows builder SSH access works from BKC.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "windows builder ssh ready")
+
+
+def _run_windows10_adk_inspect(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    command = r'''powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Continue'; $adkRoot='${ADK_ROOT}'; $paths=@($adkRoot, 'C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Windows Preinstallation Environment', 'C:\Program Files (x86)\Windows Kits\10\Windows Preinstallation Environment'); $result=[ordered]@{ computer=$env:COMPUTERNAME; adk_root_exists=(Test-Path $adkRoot); dism=(Get-Command dism.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1); copype=($paths | ForEach-Object { Join-Path $_ 'copype.cmd' } | Where-Object { Test-Path $_ } | Select-Object -First 1); makewinpemedia=($paths | ForEach-Object { Join-Path $_ 'MakeWinPEMedia.cmd' } | Where-Object { Test-Path $_ } | Select-Object -First 1) }; $result | ConvertTo-Json -Compress"'''
+    command = command.replace("${ADK_ROOT}", str(values.get("adk_root") or ""))
+    output = _windows10_builder_command(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "Windows ADK and WinPE tooling inspected.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "adk inspected")
+
+
+def _windows_path_join(base: str, leaf: str) -> str:
+    return base.rstrip("\\/") + "\\" + leaf.lstrip("\\/")
+
+
+def _run_windows10_builder_stage_scripts(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _windows10_builder_context()
+    folder = _repo_pipeline_folder(pipeline)
+    artifact_root = str(values.get("artifact_root") or r"C:\BKC\WinPE")
+    host = str(values.get("builder_vm_ip") or "").strip()
+    user = str(values.get("builder_vm_user") or "depadmin").strip()
+    _windows10_builder_command(
+        values,
+        f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force {json.dumps(artifact_root)} | Out-Null"',
+        timeout=60,
+    )
+    staged = {}
+    for key in ("build_script", "publish_script"):
+        rel_path = str(values.get(key) or "").strip()
+        source = folder / rel_path
+        if not source.exists():
+            raise PipelineExecutionError(f"Windows builder script is missing: {source}")
+        target = _windows_path_join(artifact_root, Path(rel_path).name)
+        upload_remote_file(
+            host=host,
+            user=user,
+            remote_path=target,
+            local_path=str(source),
+            mode=0o644,
+            timeout=60,
+        )
+        staged[key] = target
+    verify = _windows10_builder_command(
+        values,
+        f'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem {json.dumps(artifact_root)} | Select-Object Name,Length | ConvertTo-Json -Compress"',
+        timeout=60,
+    )
+    _set_stage(run_id, stage_name, "complete", "Windows builder scripts are staged on VMID 113.")
+    append_event(run_id, "info", stage_name, json.dumps({"staged": staged, "verify": verify}, sort_keys=True))
+
+
+def _run_windows10_adk_install(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    if str(values.get("enable_adk_install")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped ADK install because enable_adk_install is false.")
+        append_event(run_id, "info", stage_name, "ADK install remains opt-in.")
+        return
+    raise PipelineExecutionError("ADK install is not implemented yet; keep enable_adk_install false until installer URLs and silent flags are added.")
+
+
+def _run_windows10_winpe_build(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    if str(values.get("enable_build")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped WinPE build because enable_build is false.")
+        append_event(run_id, "info", stage_name, "WinPE build remains opt-in until ADK tooling is verified.")
+        return
+    script = _windows_path_join(str(values.get("artifact_root") or r"C:\BKC\WinPE"), Path(str(values.get("build_script") or "build-bkc-winpe.ps1")).name)
+    command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -File {json.dumps(script)}'
+    output = _windows10_builder_command(values, command, timeout=900)
+    _set_stage(run_id, stage_name, "complete", "BKC WinPE artifact built on VMID 113.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "winpe built")
+
+
+def _run_windows10_winpe_publish(run_id: str, stage_name: str) -> None:
+    _, _, values = _windows10_builder_context()
+    if str(values.get("enable_publish")).strip().lower() != "true":
+        _set_stage(run_id, stage_name, "complete", "Skipped WinPE publish because enable_publish is false.")
+        append_event(run_id, "info", stage_name, "WinPE publish remains opt-in until build artifacts are verified.")
+        return
+    script = _windows_path_join(str(values.get("artifact_root") or r"C:\BKC\WinPE"), Path(str(values.get("publish_script") or "publish-bkc-winpe.ps1")).name)
+    command = f'powershell.exe -NoProfile -ExecutionPolicy Bypass -File {json.dumps(script)}'
+    output = _windows10_builder_command(values, command, timeout=600)
+    _set_stage(run_id, stage_name, "complete", "BKC WinPE artifact publish contract executed.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "winpe publish checked")
+
+
+def _foobar_app_vm_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("small-office-foobar-app-vms")
+
+
+def _foobar_app_targets(values: dict) -> list[dict]:
+    targets = values.get("target_vms")
+    if not isinstance(targets, list) or not targets:
+        raise PipelineExecutionError("small-office-foobar-app-vms requires target_vms in defaults.json.")
+    normalized = []
+    for raw in targets:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each foo.bar app VM target must be an object.")
+        vmid = int(raw.get("vmid") or 0)
+        name = str(raw.get("name") or "").strip()
+        if not vmid or not name:
+            raise PipelineExecutionError("Each foo.bar app VM target requires vmid and name.")
+        target = dict(raw)
+        target["vmid"] = vmid
+        target["name"] = name
+        normalized.append(target)
+    return normalized
+
+
+def _foobar_truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _find_proxmox_vm_node(client: ProxmoxClient, vmid: int, preferred_node: str = "") -> tuple[str, dict | None]:
+    preferred = str(preferred_node or "").strip()
+    if preferred:
+        try:
+            return preferred, client.vm_config(preferred, vmid)
+        except Exception:
+            pass
+    for node in client.nodes():
+        node_name = str(node.get("node") or "").strip()
+        if not node_name:
+            continue
+        try:
+            return node_name, client.vm_config(node_name, vmid)
+        except Exception:
+            continue
+    return preferred, None
+
+
+def _run_foobar_app_source_select(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_app_vm_context()
+    client = ProxmoxClient(load_proxmox_config())
+    source_vmid = int(values.get("source_template_vmid") or 0)
+    source_node_hint = str(values.get("source_template_node") or "").strip()
+    expected_name = str(values.get("source_template_name") or "").strip()
+    if not source_vmid:
+        raise PipelineExecutionError("source_template_vmid is required.")
+
+    source_node, config = _find_proxmox_vm_node(client, source_vmid, source_node_hint)
+    if not config:
+        raise PipelineExecutionError(f"Trixie source VMID {source_vmid} was not found in Proxmox.")
+    actual_name = str(config.get("name") or "").strip()
+    if expected_name and actual_name and actual_name != expected_name:
+        raise PipelineExecutionError(
+            f"Refusing to use VMID {source_vmid}: expected {expected_name!r}, found {actual_name!r}."
+        )
+    status = client.vm_status(source_node, source_vmid)
+    is_template = str(config.get("template") or "0") == "1"
+    current_status = str(status.get("status") or "").strip().lower()
+    if current_status == "running" and not is_template:
+        raise PipelineExecutionError(
+            f"Source VMID {source_vmid} is running. Shut it down or convert it to a template before cloning app VMs."
+        )
+
+    _store_run_extra(
+        run_id,
+        {
+            "foobar_app_source": {
+                "node": source_node,
+                "vmid": source_vmid,
+                "name": actual_name or expected_name,
+                "status": current_status,
+                "template": is_template,
+            }
+        },
+    )
+    _set_stage(run_id, stage_name, "complete", f"Selected Trixie source VMID {source_vmid} on {source_node}.")
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        json.dumps({"source_node": source_node, "vmid": source_vmid, "status": current_status, "template": is_template}, sort_keys=True),
+    )
+
+
+def _run_foobar_app_vm_clone(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_app_vm_context()
+    client = ProxmoxClient(load_proxmox_config())
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    source = dict(extra.get("foobar_app_source") or {})
+    source_node = str(source.get("node") or values.get("source_template_node") or "").strip()
+    source_vmid = int(source.get("vmid") or values.get("source_template_vmid") or 0)
+    if not source_node or not source_vmid:
+        raise PipelineExecutionError("FooBar app VM source metadata is missing. Re-run select-trixie-source.")
+    targets = _foobar_app_targets(values)
+    enable_replace = _foobar_truthy(values.get("enable_replace"))
+    cloned = []
+
+    for target in targets:
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        existing_node, existing_config = _find_proxmox_vm_node(client, vmid, source_node)
+        if existing_config:
+            existing_name = str(existing_config.get("name") or "").strip()
+            if existing_name != name:
+                raise PipelineExecutionError(
+                    f"Refusing to replace VMID {vmid}: expected {name!r}, found {existing_name!r}."
+                )
+            if not enable_replace:
+                cloned.append({"node": existing_node or source_node, "vmid": vmid, "name": name, "status": "existing"})
+                continue
+            status = client.vm_status(existing_node or source_node, vmid)
+            if str(status.get("status") or "").strip().lower() == "running":
+                stop_upid = client.stop_vm(existing_node or source_node, vmid, timeout=60)
+                client.wait_for_task(existing_node or source_node, str(stop_upid), timeout=180)
+            destroy_upid = client.destroy_vm(existing_node or source_node, vmid, purge=True)
+            client.wait_for_task(existing_node or source_node, str(destroy_upid), timeout=300)
+
+        upid = client.clone_vm(
+            node=source_node,
+            source_vmid=source_vmid,
+            new_vmid=vmid,
+            name=name,
+            full=True,
+        )
+        task = client.wait_for_task(source_node, str(upid), timeout=2400)
+        exit_status = str(task.get("exitstatus") or "")
+        if exit_status and exit_status != "OK":
+            raise PipelineExecutionError(f"Proxmox clone failed for {name}: {exit_status}")
+        cloned.append(
+            {
+                "node": source_node,
+                "vmid": vmid,
+                "name": name,
+                "role": target.get("role"),
+                "application": target.get("application"),
+                "status": "cloned",
+                "upid": str(upid),
+            }
+        )
+
+    _store_run_extra(run_id, {"foobar_app_vms": cloned})
+    _set_stage(run_id, stage_name, "complete", "FooBar SuiteCRM and Kanboard VM shells cloned.")
+    append_event(run_id, "info", stage_name, json.dumps(cloned, sort_keys=True))
+
+
+def _run_foobar_app_vm_boot(run_id: str, stage_name: str) -> None:
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    targets = list(extra.get("foobar_app_vms") or [])
+    if not targets:
+        _, _, values = _foobar_app_vm_context()
+        source_node = str((extra.get("foobar_app_source") or {}).get("node") or values.get("source_template_node") or "").strip()
+        targets = [{"node": source_node, **target} for target in _foobar_app_targets(values)]
+    client = ProxmoxClient(load_proxmox_config())
+    booted = []
+    for target in targets:
+        node = str(target.get("node") or "").strip()
+        vmid = int(target.get("vmid") or 0)
+        name = str(target.get("name") or f"vm-{vmid}").strip()
+        if not node or not vmid:
+            raise PipelineExecutionError("FooBar app VM boot target metadata is incomplete.")
+        status = client.vm_status(node, vmid)
+        if str(status.get("status") or "").strip().lower() != "running":
+            upid = client.start_vm(node, vmid)
+            task = client.wait_for_task(node, str(upid), timeout=180)
+            exit_status = str(task.get("exitstatus") or "")
+            if exit_status and exit_status != "OK":
+                raise PipelineExecutionError(f"Proxmox start failed for {name}: {exit_status}")
+        running = client.wait_for_vm_status(node, vmid, "running", timeout=120)
+        booted.append({"node": node, "vmid": vmid, "name": name, "status": running.get("status", "running")})
+    _store_run_extra(run_id, {"foobar_app_vms_running": booted})
+    _set_stage(run_id, stage_name, "complete", "FooBar application VM shells are running.")
+    append_event(run_id, "info", stage_name, json.dumps(booted, sort_keys=True))
+
+
+def _run_foobar_app_relationships(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _foobar_app_vm_context()
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    payload = {
+        "pipeline_id": pipeline.get("id"),
+        "tenant": values.get("tenant_slug"),
+        "source": extra.get("foobar_app_source"),
+        "vms": extra.get("foobar_app_vms_running") or extra.get("foobar_app_vms") or _foobar_app_targets(values),
+        "handoff": "small-office-foobar-app-install",
+    }
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar SuiteCRM and Kanboard VM relationships recorded.")
+
+
+def _foobar_services_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("small-office-foobar-services")
+
+
+def _foobar_service_identity_target(values: dict) -> dict:
+    target = values.get("identity_vm")
+    if not isinstance(target, dict):
+        raise PipelineExecutionError("small-office-foobar-services requires identity_vm in defaults.json.")
+    vmid = int(target.get("vmid") or 0)
+    name = str(target.get("name") or "").strip()
+    if not vmid or not name:
+        raise PipelineExecutionError("identity_vm requires vmid and name.")
+    normalized = dict(target)
+    normalized["vmid"] = vmid
+    normalized["name"] = name
+    return normalized
+
+
+def _foobar_service_app_targets(values: dict) -> list[dict]:
+    targets = values.get("application_vms")
+    if not isinstance(targets, list) or not targets:
+        raise PipelineExecutionError("small-office-foobar-services requires application_vms in defaults.json.")
+    normalized = []
+    for raw in targets:
+        if not isinstance(raw, dict):
+            raise PipelineExecutionError("Each foo.bar service application target must be an object.")
+        vmid = int(raw.get("vmid") or 0)
+        name = str(raw.get("name") or "").strip()
+        role = str(raw.get("role") or "").strip()
+        if not vmid or not name or not role:
+            raise PipelineExecutionError("Each foo.bar service application target requires vmid, name, and role.")
+        target = dict(raw)
+        target["vmid"] = vmid
+        target["name"] = name
+        target["role"] = role
+        normalized.append(target)
+    return normalized
+
+
+def _foobar_service_targets(values: dict) -> list[dict]:
+    return [_foobar_service_identity_target(values), *_foobar_service_app_targets(values)]
+
+
+def _foobar_guest_exec(vmid: int, command: str, *, timeout: int = 120) -> str:
+    host_timeout = max(10, int(timeout) - 5)
+    encoded_command = b64encode(command.encode("utf-8")).decode("ascii")
+    wrapper = f"printf %s {shlex.quote(encoded_command)} | base64 -d | /bin/sh"
+    remote = f"timeout {host_timeout}s qm guest exec {int(vmid)} -- /bin/sh -c {shlex.quote(wrapper)}"
+    output = _run_proxmox_ssh_command(remote, timeout=timeout)
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return output
+    pid = payload.get("pid")
+    if pid is not None and "exitcode" not in payload:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            status_output = _run_proxmox_ssh_command(
+                f"timeout 10s qm guest exec-status {int(vmid)} {int(pid)}",
+                timeout=15,
+            )
+            try:
+                status = json.loads(status_output)
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"Could not parse guest exec-status for VMID {vmid}: {status_output}") from exc
+            if status.get("exited"):
+                payload = status
+                break
+            time.sleep(2)
+        else:
+            raise PipelineExecutionError(f"guest command on VMID {vmid} did not exit within {timeout} seconds")
+    out = str(payload.get("out-data") or "")
+    err = str(payload.get("err-data") or "")
+    exit_code = int(payload.get("exitcode") or 0)
+    combined = "\n".join(part for part in (out.rstrip(), err.rstrip()) if part)
+    if exit_code != 0:
+        raise PipelineExecutionError(combined or f"guest command exited {exit_code}")
+    return combined
+
+
+def _foobar_wait_guest(vmid: int, name: str, *, attempts: int = 30, sleep_seconds: int = 10) -> str:
+    last_error = ""
+    for _ in range(attempts):
+        try:
+            return _foobar_guest_exec(vmid, "hostname; systemctl is-active qemu-guest-agent || true", timeout=60)
+        except Exception as exc:
+            last_error = str(exc)
+            time.sleep(sleep_seconds)
+    raise PipelineExecutionError(f"{name} VMID {vmid} did not become guest-command ready: {last_error}")
+
+
+def _run_foobar_service_identity_vm(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    client = ProxmoxClient(load_proxmox_config())
+    source_vmid = int(values.get("source_template_vmid") or 0)
+    source_node_hint = str(values.get("source_template_node") or "").strip()
+    expected_source_name = str(values.get("source_template_name") or "").strip()
+    target = _foobar_service_identity_target(values)
+    target_vmid = int(target["vmid"])
+    target_name = str(target["name"])
+    if not source_vmid:
+        raise PipelineExecutionError("source_template_vmid is required for identity VM clone.")
+
+    source_node, source_config = _find_proxmox_vm_node(client, source_vmid, source_node_hint)
+    if not source_config:
+        raise PipelineExecutionError(f"Trixie source VMID {source_vmid} was not found in Proxmox.")
+    actual_source_name = str(source_config.get("name") or "").strip()
+    if expected_source_name and actual_source_name and actual_source_name != expected_source_name:
+        raise PipelineExecutionError(
+            f"Refusing to use VMID {source_vmid}: expected {expected_source_name!r}, found {actual_source_name!r}."
+        )
+
+    existing_node, existing_config = _find_proxmox_vm_node(client, target_vmid, source_node)
+    enable_replace = _foobar_truthy(values.get("enable_replace_identity"))
+    if existing_config:
+        existing_name = str(existing_config.get("name") or "").strip()
+        if existing_name != target_name:
+            raise PipelineExecutionError(
+                f"Refusing to replace VMID {target_vmid}: expected {target_name!r}, found {existing_name!r}."
+            )
+        if enable_replace:
+            status = client.vm_status(existing_node or source_node, target_vmid)
+            if str(status.get("status") or "").strip().lower() == "running":
+                stop_upid = client.stop_vm(existing_node or source_node, target_vmid, timeout=60)
+                client.wait_for_task(existing_node or source_node, str(stop_upid), timeout=180)
+            destroy_upid = client.destroy_vm(existing_node or source_node, target_vmid, purge=True)
+            client.wait_for_task(existing_node or source_node, str(destroy_upid), timeout=300)
+        else:
+            _store_run_extra(run_id, {"foobar_identity_vm": {"node": existing_node or source_node, **target, "status": "existing"}})
+            _set_stage(run_id, stage_name, "complete", f"Identity VMID {target_vmid} already exists.")
+            return
+
+    source_status = client.vm_status(source_node, source_vmid)
+    source_running = str(source_status.get("status") or "").strip().lower() == "running"
+    if source_running:
+        if not _foobar_truthy(values.get("stop_source_for_identity_clone")):
+            raise PipelineExecutionError(f"Source VMID {source_vmid} is running and stop_source_for_identity_clone is false.")
+        stop_upid = client.stop_vm(source_node, source_vmid, timeout=60)
+        client.wait_for_task(source_node, str(stop_upid), timeout=180)
+        client.wait_for_vm_status(source_node, source_vmid, "stopped", timeout=120)
+
+    upid = client.clone_vm(node=source_node, source_vmid=source_vmid, new_vmid=target_vmid, name=target_name, full=True)
+    task = client.wait_for_task(source_node, str(upid), timeout=2400)
+    exit_status = str(task.get("exitstatus") or "")
+    if exit_status and exit_status != "OK":
+        raise PipelineExecutionError(f"Proxmox clone failed for {target_name}: {exit_status}")
+    start_upid = client.start_vm(source_node, target_vmid)
+    client.wait_for_task(source_node, str(start_upid), timeout=180)
+    client.wait_for_vm_status(source_node, target_vmid, "running", timeout=120)
+    identity = {"node": source_node, **target, "status": "running", "upid": str(upid)}
+    _store_run_extra(run_id, {"foobar_identity_vm": identity})
+    append_event(run_id, "info", stage_name, json.dumps(identity, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", f"Identity VM {target_name} cloned and started.")
+
+
+def _run_foobar_service_guest_wait(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    client = ProxmoxClient(load_proxmox_config())
+    ready = []
+    for target in _foobar_service_targets(values):
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        node, config = _find_proxmox_vm_node(client, vmid, str(values.get("source_template_node") or ""))
+        if not config or not node:
+            raise PipelineExecutionError(f"{name} VMID {vmid} was not found in Proxmox.")
+        status = client.vm_status(node, vmid)
+        if str(status.get("status") or "").strip().lower() != "running":
+            upid = client.start_vm(node, vmid)
+            client.wait_for_task(node, str(upid), timeout=180)
+            client.wait_for_vm_status(node, vmid, "running", timeout=120)
+        append_event(run_id, "info", stage_name, f"Waiting for guest-command readiness on {name} VMID {vmid}.")
+        output = _foobar_wait_guest(vmid, name)
+        append_event(run_id, "info", stage_name, f"{name} VMID {vmid} accepted BKC guest commands.")
+        ready.append({"node": node, "vmid": vmid, "name": name, "output": output[-300:]})
+    _store_run_extra(run_id, {"foobar_service_guests_ready": ready})
+    append_event(run_id, "info", stage_name, json.dumps(ready, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service guests are command-ready.")
+
+
+def _run_foobar_service_demo_lan(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    interface = str(values.get("demo_lan_interface") or "ens19").strip()
+    prefix = str(values.get("demo_lan_prefix") or "192.168.1.").strip()
+    if not interface:
+        raise PipelineExecutionError("demo_lan_interface is required.")
+    evidence = []
+    for target in _foobar_service_targets(values):
+        vmid = int(target["vmid"])
+        name = str(target["name"])
+        command = (
+            "set -e; "
+            f"iface={shlex.quote(interface)}; "
+            "ip link show \"$iface\" >/dev/null; "
+            "ip link set \"$iface\" up; "
+            "command -v dhclient >/dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get -o DPkg::Lock::Timeout=600 update; apt-get -o DPkg::Lock::Timeout=600 install -y isc-dhcp-client; }; "
+            "dhclient -1 -v \"$iface\" 2>/tmp/bkc-demo-lan-dhclient.log || cat /tmp/bkc-demo-lan-dhclient.log; "
+            "ip -4 -o addr show dev \"$iface\" | awk '{split($4,a,\"/\"); print a[1]}'"
+        )
+        output = _foobar_guest_exec(vmid, command, timeout=240)
+        ips = [line.strip() for line in output.splitlines() if line.strip() and line.strip()[0].isdigit()]
+        selected = next((ip for ip in ips if not prefix or ip.startswith(prefix)), ips[-1] if ips else "")
+        if not selected:
+            raise PipelineExecutionError(f"{name} VMID {vmid} did not receive a demo LAN IPv4 address on {interface}.")
+        evidence.append({"vmid": vmid, "name": name, "interface": interface, "ip": selected})
+    _store_run_extra(run_id, {"foobar_demo_lan_ips": evidence})
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service demo LAN interfaces configured.")
+
+
+def _foobar_usernames(values: dict) -> list[str]:
+    users = values.get("users")
+    if not isinstance(users, list):
+        return []
+    return [str(user.get("username") or "").strip() for user in users if isinstance(user, dict) and str(user.get("username") or "").strip()]
+
+
+def _foobar_identity_values(values: dict) -> tuple[dict, int, str, str, str, list[str]]:
+    target = _foobar_service_identity_target(values)
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    domain = str(values.get("domain") or "foo.bar").strip()
+    password = str(values.get("default_password") or "changeme123").strip()
+    users = _foobar_usernames(values)
+    return target, vmid, hostname, domain, password, users
+
+
+def _run_foobar_service_identity_packages(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, hostname, domain, password, _ = _foobar_identity_values(values)
+    slapd_seed = "\n".join(
+        [
+            "slapd slapd/no_configuration boolean false",
+            f"slapd slapd/domain string {domain}",
+            "slapd shared/organization string FooBar",
+            f"slapd slapd/password1 password {password}",
+            f"slapd slapd/password2 password {password}",
+            "slapd slapd/backend select MDB",
+            "slapd slapd/purge_database boolean true",
+            "slapd slapd/move_old_database boolean true",
+            "slapd slapd/allow_ldap_v2 boolean false",
+        ]
+    )
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        f"printf '%s\n' {shlex.quote(slapd_seed)} | debconf-set-selections; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y slapd ldap-utils samba apache2 php php-ldap libapache2-mod-php phpldapadmin python3 curl; "
+        "systemctl enable --now slapd; "
+        "systemctl is-active slapd; "
+        "ldapsearch -x -H ldap://localhost -b dc=foo,dc=bar -s base dn"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=2400)
+    _set_stage(run_id, stage_name, "complete", "FooBar identity packages installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "identity packages installed")
+
+
+def _run_foobar_service_ldap_seed(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, password, users = _foobar_identity_values(values)
+    user_ldif_parts = []
+    uid_base = 10000
+    for offset, username in enumerate(users, start=1):
+        cn = username.replace(".", " ").title()
+        user_ldif_parts.append(
+            "\n".join(
+                [
+                    f"dn: uid={username},ou=People,dc=foo,dc=bar",
+                    "objectClass: inetOrgPerson",
+                    "objectClass: posixAccount",
+                    f"cn: {cn}",
+                    f"sn: {cn.split()[-1]}",
+                    f"uid: {username}",
+                    f"uidNumber: {uid_base + offset}",
+                    "gidNumber: 10000",
+                    f"homeDirectory: /srv/foobar/homes/{username}",
+                    "loginShell: /bin/bash",
+                    "userPassword: ${USER_PASSWORD_HASH}",
+                ]
+            )
+        )
+    user_ldif = "\n\n".join(user_ldif_parts)
+    command = (
+        "set -e; "
+        f"USER_PASSWORD_HASH=$(slappasswd -s {shlex.quote(password)}); "
+        "cat >/tmp/bkc-foobar-base.ldif <<'LDIF'\n"
+        "dn: ou=People,dc=foo,dc=bar\n"
+        "objectClass: organizationalUnit\n"
+        "ou: People\n\n"
+        "dn: ou=Groups,dc=foo,dc=bar\n"
+        "objectClass: organizationalUnit\n"
+        "ou: Groups\n\n"
+        "dn: cn=foobar_users,ou=Groups,dc=foo,dc=bar\n"
+        "objectClass: posixGroup\n"
+        "cn: foobar_users\n"
+        "gidNumber: 10000\n"
+        "LDIF\n"
+        "sed \"s|${USER_PASSWORD_HASH}|$USER_PASSWORD_HASH|g\" >/tmp/bkc-foobar-users.ldif <<'LDIF'\n"
+        f"{user_ldif}\n"
+        "LDIF\n"
+        "ldapsearch -x -D cn=admin,dc=foo,dc=bar -w "
+        f"{shlex.quote(password)} "
+        "-b ou=People,dc=foo,dc=bar -s base dn >/dev/null 2>&1 || "
+        f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -f /tmp/bkc-foobar-base.ldif; "
+        "while IFS= read -r dn; do "
+        "actual_dn=${dn#dn: }; "
+        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b \"$actual_dn\" -s base dn >/dev/null 2>&1 || "
+        "awk -v start=\"$dn\" 'BEGIN{p=0} $0==start{p=1} p{print} p && $0==\"\"{exit}' /tmp/bkc-foobar-users.ldif | "
+        f"ldapadd -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)}; "
+        "done <<'DNS'\n"
+        + "\n".join(f"dn: uid={username},ou=People,dc=foo,dc=bar" for username in users)
+        + "\nDNS\n"
+        f"ldapsearch -x -D cn=admin,dc=foo,dc=bar -w {shlex.quote(password)} -b ou=People,dc=foo,dc=bar uid | sed -n '1,80p'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "FooBar LDAP directory seeded.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else "ldap directory seeded")
+
+
+def _run_foobar_service_samba_homes(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, _, users = _foobar_identity_values(values)
+    user_dirs = " ".join(shlex.quote(f"/srv/foobar/homes/{username}") for username in users)
+    command = (
+        "set -e; "
+        "install -d -m 0755 /srv/foobar/homes; "
+        f"install -d -m 0750 {user_dirs}; "
+        "chown -R root:root /srv/foobar; "
+        "cp /etc/samba/smb.conf /etc/samba/smb.conf.bkc-pre-foobar 2>/dev/null || true; "
+        "sed -i '/# BKC FooBar homes start/,/# BKC FooBar homes end/d' /etc/samba/smb.conf; "
+        "cat >>/etc/samba/smb.conf <<'SMB'\n"
+        "# BKC FooBar homes start\n"
+        "[foobar-homes]\n"
+        "   path = /srv/foobar/homes\n"
+        "   browseable = yes\n"
+        "   read only = no\n"
+        "   guest ok = yes\n"
+        "   force user = root\n"
+        "# BKC FooBar homes end\n"
+        "SMB\n"
+        "systemctl enable --now smbd; "
+        "systemctl restart smbd; "
+        "systemctl is-active smbd; "
+        "testparm -s >/tmp/bkc-foobar-testparm.out"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=300)
+    _set_stage(run_id, stage_name, "complete", "FooBar Samba shared homes configured.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else "samba homes configured")
+
+
+def _run_foobar_service_identity_portal(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    _, vmid, _, _, _, users = _foobar_identity_values(values)
+    base_dn = str(values.get("ldap_base_dn") or "dc=foo,dc=bar").strip()
+    admin_dn = str(values.get("ldap_admin_dn") or "cn=admin,dc=foo,dc=bar").strip()
+    user_labels = ", ".join(users)
+    command = (
+        "set -e; "
+        "test -f /etc/phpldapadmin/config.php; "
+        "cp /etc/phpldapadmin/config.php /etc/phpldapadmin/config.php.bkc-pre-foobar 2>/dev/null || true; "
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        "path = Path('/etc/phpldapadmin/config.php')\n"
+        "text = path.read_text()\n"
+        "marker = '// bkc_foobar_configured'\n"
+        "if marker not in text:\n"
+        "    block = \"\\n\".join([\n"
+        "        marker,\n"
+        "        \"$servers->setValue('server','host','127.0.0.1');\",\n"
+        f"        \"$servers->setValue('server','base',array({base_dn!r}));\",\n"
+        f"        \"$servers->setValue('login','bind_id',{admin_dn!r});\",\n"
+        "        \"$config->custom->appearance['hide_template_warning'] = true;\",\n"
+        "    ]) + \"\\n\"\n"
+        "    stripped = text.rstrip()\n"
+        "    if stripped.endswith('?>'):\n"
+        "        text = stripped[:-2].rstrip() + \"\\n\" + block + \"?>\\n\"\n"
+        "    else:\n"
+        "        text = text.rstrip() + \"\\n\" + block\n"
+        "path.write_text(text)\n"
+        "PY\n"
+        f"printf '%s\\n' '<!doctype html><title>FooBar Identity</title><h1>FooBar Identity</h1><p>OpenLDAP, Samba homes, and phpLDAPadmin are provisioned.</p><p>Users: {user_labels}</p><p>Admin DN: {admin_dn}</p><p><a href=\"/phpldapadmin/\">Open phpLDAPadmin</a></p>' > /var/www/html/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        "curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-foobar-identity.html; "
+        "grep -Ei 'phpLDAPadmin|Authenticate|Login|Username' /tmp/bkc-foobar-identity.html | head -n 5"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=180)
+    _set_stage(run_id, stage_name, "complete", "FooBar phpLDAPadmin portal published.")
+    append_event(run_id, "info", stage_name, output[-1800:] if output else "phpLDAPadmin portal published")
+
+
+def _foobar_app_target_by_role(values: dict, role: str) -> dict:
+    for target in _foobar_service_app_targets(values):
+        if str(target.get("role") or "") == role:
+            return target
+    raise PipelineExecutionError(f"No foo.bar service target found for role {role!r}.")
+
+
+def _run_foobar_service_app_provision(run_id: str, stage_name: str, *, role: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, role)
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    app = str(target.get("application") or role).strip()
+    endpoint_path = str(target.get("endpoint_path") or f"/{app}/").strip()
+    packages = "apache2 php libapache2-mod-php curl"
+    if role == "crm":
+        packages += " mariadb-server"
+        title = "FooBar SuiteCRM"
+        body = "CRM placeholder endpoint for helpdesk customer records."
+    else:
+        packages += " sqlite3"
+        title = "FooBar Kanboard"
+        body = "Ticket board placeholder endpoint for helpdesk case work."
+    web_dir = f"/var/www/html/{app}"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        f"apt-get -o DPkg::Lock::Timeout=600 install -y {packages}; "
+        f"install -d -m 0755 {shlex.quote(web_dir)}; "
+        f"printf '%s\\n' '<!doctype html><title>{title}</title><h1>{title}</h1><p>{body}</p><p>BKC service lane: {stage_name}</p>' > {shlex.quote(web_dir + '/index.html')}; "
+        f"printf '%s\\n' '<!doctype html><title>{title}</title><h1>{title}</h1><p>{body}</p><p>Endpoint: {endpoint_path}</p>' > /var/www/html/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        f"curl -fsS http://localhost{shlex.quote(endpoint_path)} >/tmp/bkc-foobar-{role}.html"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar {app} intranet endpoint provisioned.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"{app} endpoint provisioned")
+
+
+def _run_foobar_service_suitecrm(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, "crm")
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    version = str(values.get("suitecrm_version") or "7.15.1").strip().lstrip("v")
+    db_password = str(values.get("default_password") or "changeme123").strip()
+    sql_password = db_password.replace("'", "''")
+    if not version:
+        raise PipelineExecutionError("suitecrm_version is required.")
+    archive_url = f"https://github.com/SuiteCRM/SuiteCRM/releases/download/v{version}/SuiteCRM-{version}.zip"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y "
+        "apache2 mariadb-server php libapache2-mod-php php-mysql php-curl php-xml php-mbstring "
+        "php-zip php-gd php-ldap php-intl php-soap unzip curl wget ca-certificates; "
+        "a2enmod rewrite >/dev/null 2>&1 || true; "
+        "for php_conf_dir in /etc/php/*/apache2/conf.d; do "
+        "test -d \"$php_conf_dir\" || continue; "
+        "cat >\"$php_conf_dir/99-bkc-suitecrm.ini\" <<'PHPINI'\n"
+        "upload_max_filesize = 64M\n"
+        "post_max_size = 64M\n"
+        "memory_limit = 512M\n"
+        "max_execution_time = 300\n"
+        "max_input_time = 300\n"
+        "PHPINI\n"
+        "done; "
+        "systemctl enable --now mariadb apache2; "
+        "cat >/tmp/bkc-suitecrm.sql <<'SQL'\n"
+        "CREATE DATABASE IF NOT EXISTS suitecrm CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n"
+        f"CREATE USER IF NOT EXISTS 'suitecrm'@'localhost' IDENTIFIED BY '{sql_password}';\n"
+        "GRANT ALL PRIVILEGES ON suitecrm.* TO 'suitecrm'@'localhost';\n"
+        "FLUSH PRIVILEGES;\n"
+        "SQL\n"
+        "mysql </tmp/bkc-suitecrm.sql; "
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; "
+        f"wget -qO \"$tmp/suitecrm.zip\" {shlex.quote(archive_url)}; "
+        "rm -rf /var/www/html/suitecrm; "
+        "install -d -m 0755 /var/www/html/suitecrm; "
+        "unzip -q \"$tmp/suitecrm.zip\" -d \"$tmp/suitecrm-src\"; "
+        "src=$(find \"$tmp/suitecrm-src\" -mindepth 1 -maxdepth 1 -type d | head -n 1); "
+        "cp -a \"$src\"/. /var/www/html/suitecrm/; "
+        "install -d -m 0775 /var/www/html/suitecrm/cache /var/www/html/suitecrm/custom "
+        "/var/www/html/suitecrm/modules /var/www/html/suitecrm/upload; "
+        "chown -R www-data:www-data /var/www/html/suitecrm; "
+        "find /var/www/html/suitecrm -type d -exec chmod 0755 {} +; "
+        "find /var/www/html/suitecrm -type f -exec chmod 0644 {} +; "
+        "chmod -R u+rwX,g+rwX /var/www/html/suitecrm/cache /var/www/html/suitecrm/custom "
+        "/var/www/html/suitecrm/modules /var/www/html/suitecrm/upload; "
+        "cat >/etc/apache2/conf-available/bkc-suitecrm.conf <<'APACHE'\n"
+        "<Directory /var/www/html/suitecrm>\n"
+        "    AllowOverride All\n"
+        "    Require all granted\n"
+        "</Directory>\n"
+        "APACHE\n"
+        "a2enconf bkc-suitecrm >/dev/null 2>&1 || true; "
+        "printf '%s\\n' '<!doctype html><title>FooBar CRM</title><h1>FooBar CRM</h1><p>SuiteCRM is staged at <a href=\"/suitecrm/\">/suitecrm/</a>.</p><p>Installer database: localhost / suitecrm / suitecrm / changeme123</p><p>Demo admin convention: admin / changeme123</p>' > /var/www/html/index.html; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2 mariadb; "
+        "curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; "
+        "grep -Ei 'SuiteCRM|Install|Setup|Login' /tmp/bkc-validate-suitecrm.html | head -n 8; "
+        f"printf '%s\\n' 'suitecrm_version={version}'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar SuiteCRM v{version} staged.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"suitecrm v{version} staged")
+
+
+def _run_foobar_service_kanboard(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    target = _foobar_app_target_by_role(values, "tickets")
+    vmid = int(target["vmid"])
+    hostname = str(target.get("hostname") or target["name"]).split(".", 1)[0]
+    version = str(values.get("kanboard_version") or "1.2.52").strip().lstrip("v")
+    if not version:
+        raise PipelineExecutionError("kanboard_version is required.")
+    archive_url = f"https://github.com/kanboard/kanboard/archive/refs/tags/v{version}.tar.gz"
+    command = (
+        "set -e; export DEBIAN_FRONTEND=noninteractive; "
+        f"hostnamectl set-hostname {shlex.quote(hostname)}; "
+        "apt-get -o DPkg::Lock::Timeout=600 update; "
+        "apt-get -o DPkg::Lock::Timeout=600 install -y "
+        "apache2 libapache2-mod-php php php-cli php-sqlite3 php-mbstring php-xml php-gd php-curl php-zip "
+        "sqlite3 curl wget ca-certificates tar; "
+        "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT; "
+        f"wget -qO \"$tmp/kanboard.tar.gz\" {shlex.quote(archive_url)}; "
+        "rm -rf /var/www/html/kanboard; "
+        "install -d -m 0755 /var/www/html/kanboard; "
+        "tar -xzf \"$tmp/kanboard.tar.gz\" -C /var/www/html/kanboard --strip-components=1; "
+        "install -d -m 0775 /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "chown -R www-data:www-data /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "find /var/www/html/kanboard -type d -exec chmod 0755 {} +; "
+        "find /var/www/html/kanboard -type f -exec chmod 0644 {} +; "
+        "chmod -R u+rwX,g+rwX /var/www/html/kanboard/data /var/www/html/kanboard/plugins; "
+        "printf '%s\\n' '<!doctype html><title>FooBar Tickets</title><h1>FooBar Tickets</h1><p>Kanboard is installed at <a href=\"/kanboard/\">/kanboard/</a>.</p><p>Initial login: admin / admin</p>' > /var/www/html/index.html; "
+        "systemctl enable --now apache2; "
+        "systemctl restart apache2; "
+        "systemctl is-active apache2; "
+        "curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; "
+        "grep -Ei 'Kanboard|Username|Password' /tmp/bkc-validate-kanboard.html | head -n 5; "
+        f"printf '%s\\n' 'kanboard_version={version}'"
+    )
+    output = _foobar_guest_exec(vmid, command, timeout=1800)
+    _set_stage(run_id, stage_name, "complete", f"FooBar Kanboard v{version} installed.")
+    append_event(run_id, "info", stage_name, output[-2400:] if output else f"kanboard v{version} installed")
+
+
+def _run_foobar_service_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _foobar_services_context()
+    identity = _foobar_service_identity_target(values)
+    crm = _foobar_app_target_by_role(values, "crm")
+    tickets = _foobar_app_target_by_role(values, "tickets")
+    checks = [
+        (
+            identity,
+            "set -e; systemctl is-active slapd apache2 smbd; test -d /srv/foobar/homes/joe.user; test -f /etc/phpldapadmin/config.php; curl -fsS http://localhost/phpldapadmin/ >/tmp/bkc-validate-identity.html; grep -Ei 'phpLDAPadmin|Authenticate|Login|Username' /tmp/bkc-validate-identity.html | head -n 5",
+        ),
+        (
+            crm,
+            "set -e; systemctl is-active apache2 mariadb; test -d /var/www/html/suitecrm/cache; curl -fsS http://localhost/suitecrm/ >/tmp/bkc-validate-suitecrm.html; grep -Ei 'SuiteCRM|Install|Setup|Login' /tmp/bkc-validate-suitecrm.html | head -n 8",
+        ),
+        (
+            tickets,
+            "set -e; systemctl is-active apache2; test -d /var/www/html/kanboard/data; curl -fsS http://localhost/kanboard/ >/tmp/bkc-validate-kanboard.html; grep -Ei 'Kanboard|Username|Password' /tmp/bkc-validate-kanboard.html | head -n 5",
+        ),
+    ]
+    evidence = []
+    for target, command in checks:
+        output = _foobar_guest_exec(int(target["vmid"]), command, timeout=120)
+        evidence.append({"vmid": target["vmid"], "name": target["name"], "evidence": output[-700:]})
+    _store_run_extra(run_id, {"foobar_service_evidence": evidence})
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar services validated.")
+
+
+def _run_foobar_service_relationships(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _foobar_services_context()
+    payload = {
+        "pipeline_id": pipeline.get("id"),
+        "tenant": values.get("tenant_slug"),
+        "identity": _foobar_service_identity_target(values),
+        "applications": _foobar_service_app_targets(values),
+        "users": _foobar_usernames(values),
+        "handoff": "small-office-foobar-workstation-personalize",
+    }
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "FooBar service relationships recorded.")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -5847,6 +8964,258 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             if message:
                 append_event(run_id, "info", stage_name, message)
             _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Stage completed.")))
+            continue
+
+        if kind == "folder-pipeline-review":
+            _run_folder_pipeline_review_stage(run_id, stage)
+            continue
+
+        if kind == "trixie-pxe-prereqs":
+            _run_trixie_pxe_prereqs(run_id, stage_name)
+            continue
+
+        if kind == "trixie-netboot-fetch":
+            _run_trixie_netboot_fetch(run_id, stage_name)
+            continue
+
+        if kind == "trixie-ipxe-render":
+            _run_trixie_template_upload(
+                run_id,
+                stage_name,
+                "debian-trixie.ipxe.tpl",
+                "ipxe_script_path",
+                mode=0o644,
+            )
+            continue
+
+        if kind == "trixie-preseed-render":
+            _run_trixie_template_upload(
+                run_id,
+                stage_name,
+                "trixie-smoke-preseed.cfg.tpl",
+                "preseed_path",
+                mode=0o644,
+            )
+            continue
+
+        if kind == "trixie-vm-prepare":
+            _run_trixie_vm_prepare(run_id, stage_name)
+            continue
+
+        if kind == "trixie-vm-boot":
+            _run_trixie_vm_boot(run_id, stage_name)
+            continue
+
+        if kind == "trixie-vm-observe":
+            _run_trixie_vm_observe(run_id, stage_name)
+            continue
+
+        if kind == "windows10-verify-iso":
+            _run_windows10_verify_iso(run_id, stage_name)
+            continue
+
+        if kind == "windows10-inspect-vm":
+            _run_windows10_inspect_vm(run_id, stage_name)
+            continue
+
+        if kind == "windows10-validate-openssh":
+            _run_windows10_validate_openssh(run_id, stage_name)
+            continue
+
+        if kind == "windows10-stage-artifacts":
+            _run_windows10_stage_artifacts(run_id, stage_name)
+            continue
+
+        if kind == "windows10-pxe-prereqs":
+            _run_windows10_pxe_prereqs(run_id, stage_name)
+            continue
+
+        if kind == "windows10-pxe-verify-iso":
+            _run_windows10_pxe_verify_iso(run_id, stage_name)
+            continue
+
+        if kind == "windows10-wimboot-fetch":
+            _run_windows10_wimboot_fetch(run_id, stage_name)
+            continue
+
+        if kind == "windows10-winpe-stage":
+            _run_windows10_winpe_stage(run_id, stage_name)
+            continue
+
+        if kind == "windows10-ipxe-render":
+            _run_windows10_ipxe_render(run_id, stage_name)
+            continue
+
+        if kind == "windows10-media-share":
+            _run_windows10_media_share(run_id, stage_name)
+            continue
+
+        if kind == "windows10-unattend-render":
+            _run_windows10_unattend_render(run_id, stage_name)
+            continue
+
+        if kind == "windows10-dhcp-route-render":
+            _run_windows10_dhcp_route_render(run_id, stage_name)
+            continue
+
+        if kind == "windows10-vm-prepare":
+            _run_windows10_vm_prepare(run_id, stage_name)
+            continue
+
+        if kind == "windows10-vm-boot":
+            _run_windows10_vm_boot(run_id, stage_name)
+            continue
+
+        if kind == "windows10-vm-observe":
+            _run_windows10_vm_observe(run_id, stage_name)
+            continue
+
+        if kind == "windows10-post-install-ssh":
+            _run_windows10_post_install_ssh(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-source-select":
+            _run_foobar_app_source_select(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-vm-clone":
+            _run_foobar_app_vm_clone(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-vm-boot":
+            _run_foobar_app_vm_boot(run_id, stage_name)
+            continue
+
+        if kind == "foobar-app-relationships":
+            _run_foobar_app_relationships(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-vm":
+            _run_foobar_service_identity_vm(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-guest-wait":
+            _run_foobar_service_guest_wait(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-demo-lan":
+            _run_foobar_service_demo_lan(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-packages":
+            _run_foobar_service_identity_packages(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-ldap-seed":
+            _run_foobar_service_ldap_seed(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-samba-homes":
+            _run_foobar_service_samba_homes(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-identity-portal":
+            _run_foobar_service_identity_portal(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-suitecrm-provision":
+            _run_foobar_service_suitecrm(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-kanboard-provision":
+            _run_foobar_service_kanboard(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-validate":
+            _run_foobar_service_validate(run_id, stage_name)
+            continue
+
+        if kind == "foobar-service-relationships":
+            _run_foobar_service_relationships(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-discover":
+            _run_trixie_personalize_discover(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-login":
+            _run_trixie_personalize_login(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-checkpoints":
+            _run_trixie_personalize_checkpoints(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-packages":
+            _run_trixie_personalize_packages(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-vscode":
+            _run_trixie_personalize_vscode(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-rustdesk":
+            _run_trixie_personalize_rustdesk(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-services":
+            _run_trixie_personalize_services(run_id, stage_name)
+            continue
+
+        if kind == "trixie-personalize-verify":
+            _run_trixie_personalize_verify(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-discover":
+            _run_windows10_personalize_discover(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-login":
+            _run_windows10_personalize_login(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-checkpoints":
+            _run_windows10_personalize_checkpoints(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-chocolatey":
+            _run_windows10_personalize_chocolatey(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-packages":
+            _run_windows10_personalize_packages(run_id, stage_name)
+            continue
+
+        if kind == "windows10-personalize-verify":
+            _run_windows10_personalize_verify(run_id, stage_name)
+            continue
+
+        if kind == "windows10-builder-inspect-vm":
+            _run_windows10_builder_inspect_vm(run_id, stage_name)
+            continue
+
+        if kind == "windows10-builder-ssh":
+            _run_windows10_builder_ssh(run_id, stage_name)
+            continue
+
+        if kind == "windows10-adk-inspect":
+            _run_windows10_adk_inspect(run_id, stage_name)
+            continue
+
+        if kind == "windows10-builder-stage-scripts":
+            _run_windows10_builder_stage_scripts(run_id, stage_name)
+            continue
+
+        if kind == "windows10-adk-install":
+            _run_windows10_adk_install(run_id, stage_name)
+            continue
+
+        if kind == "windows10-winpe-build":
+            _run_windows10_winpe_build(run_id, stage_name)
+            continue
+
+        if kind == "windows10-winpe-publish":
+            _run_windows10_winpe_publish(run_id, stage_name)
             continue
 
         if kind == "lab-storage-preflight":
@@ -6373,7 +9742,7 @@ def workflow_runtime_snapshot(workflow: str) -> dict | None:
     if not runtime:
         return None
 
-    settings = _remote_settings()
+    settings = {} if config.get("settings_optional") else _remote_settings()
     manager_host = settings["manager_host"]
     manager_user = settings["manager_user"]
     manager_password = settings["manager_password"]

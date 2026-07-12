@@ -1,0 +1,40 @@
+{
+  "pipeline_id": "windows10-workstation-personalize",
+  "target_vmid": 136,
+  "target_vm_node_id": "node:vm:win10-pxe-smoke-136",
+  "target_vm_name": "win10-pxe-smoke-136",
+  "target_host": "192.168.1.183",
+  "target_admin_user": "depadmin",
+  "target_demo_password": "changeme123",
+  "package_names": [
+    "libreoffice-fresh",
+    "vscode",
+    "rustdesk",
+    "googlechrome"
+  ],
+  "enable_chocolatey": true,
+  "enable_libreoffice": true,
+  "enable_vscode": true,
+  "enable_rustdesk": true,
+  "enable_full_personalization": true,
+  "service_checkpoints": [
+    {
+      "label": "FooBar Identity",
+      "vmid": 139,
+      "path": "/phpldapadmin/"
+    },
+    {
+      "label": "FooBar CRM",
+      "vmid": 137,
+      "path": "/suitecrm/"
+    },
+    {
+      "label": "FooBar Tickets",
+      "vmid": 138,
+      "path": "/kanboard/"
+    }
+  ],
+  "notes": "Post-install personalization for the current VMID 136 Windows install. Does not rerun WinPE.",
+  "demo_lan_prefix": "192.168.1.",
+  "require_demo_lan_urls": true
+}

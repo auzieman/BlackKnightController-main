@@ -1,0 +1,7 @@
+{
+  "id": "verify-windows-iso",
+  "name": "Verify Windows ISO",
+  "action": "proxmox.iso.verify",
+  "risk": "low",
+  "description": "Confirm the Windows 10 ISO exists in Proxmox local ISO storage."
+}

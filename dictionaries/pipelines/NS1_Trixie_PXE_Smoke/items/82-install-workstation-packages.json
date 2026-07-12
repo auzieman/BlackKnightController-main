@@ -1,0 +1,5 @@
+{
+  "id": "install-workstation-packages",
+  "action": "proxmox.guest.exec",
+  "description": "Install the Trixie workstation package profile after the installed guest is reachable."
+}

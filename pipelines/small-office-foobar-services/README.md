@@ -1,0 +1,48 @@
+# Small Office FooBar Services
+
+Runnable service layer for the `foo.bar` small-office demo.
+
+This lane follows `small-office-foobar-app-vms`. It creates the identity/storage
+VM from the prepared Trixie source, then provisions the current service layer:
+
+- `foobar-id-01`: OpenLDAP, Samba homes, and a real phpLDAPadmin portal.
+- `foobar-crm-01`: Apache/PHP/MariaDB with a basic real SuiteCRM service.
+- `foobar-tickets-01`: Apache/PHP/SQLite with a real Kanboard service.
+
+SuiteCRM and Kanboard are intentionally basic installs for the first demo loop.
+They provide credible app targets and health evidence without trying to model a
+full application customization lifecycle yet.
+
+## Links
+
+- Pipeline list:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?q=small-office-foobar`
+- Service lane:
+  `http://swarm1.lab.auzietek.com:5000/pipelines?pipeline=small-office-foobar-services`
+- Clean service run:
+  `http://swarm1.lab.auzietek.com:5000/pipelines/ea6853ca-a4fd-477d-ad67-28150368ae83`
+- Grafana lifecycle:
+  `http://swarm1.lab.auzietek.com:3000/d/small-office-foobar/foobar-small-office-lifecycle?orgId=1&refresh=5s`
+
+## Demo Checkpoints
+
+- Identity VM:
+  `foobar-id-01.lab.foo.bar`
+- Browser-facing service IPs:
+  `configure-demo-lan` records the current `ens19` addresses for workstation
+  checkpoints. The `*.lab.foo.bar` names are inventory labels unless DNS has
+  been registered for the workstation network.
+- LDAP seed stage:
+  `install-identity-packages` -> `seed-ldap-directory`
+- phpLDAPadmin stage:
+  `publish-identity-portal`
+- Shared homes stage:
+  `configure-samba-homes`
+- Identity portal:
+  `http://192.168.1.244/phpldapadmin/`
+- SuiteCRM:
+  `http://192.168.1.59/suitecrm/`
+- Kanboard:
+  `http://192.168.1.133/kanboard/`
+- Validation evidence:
+  `validate-foobar-services` in run `ea6853ca-a4fd-477d-ad67-28150368ae83`

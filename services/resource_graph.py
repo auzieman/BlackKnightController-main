@@ -177,6 +177,75 @@ def _pipeline_actions(pipeline: dict) -> list[dict]:
     ]
 
 
+def _pipeline_target_resource(target: str) -> dict | None:
+    value = str(target or "").strip()
+    if not value:
+        return None
+    if value.startswith("repo:"):
+        repo_name = value.split(":", 1)[1].strip()
+        if not repo_name:
+            return None
+        return {
+            "id": f"repo:{repo_name}",
+            "kind": "repo",
+            "name": repo_name,
+            "state": "referenced",
+            "summary": "Repository referenced by a pipeline target.",
+            "sources": ["pipeline target"],
+            "facts": {"target": value},
+            "actions": [{"label": "Open pipelines", "href": "/pipelines"}],
+        }
+    if value.startswith("service:"):
+        service_name = value.split(":", 1)[1].strip()
+        if not service_name:
+            return None
+        return {
+            "id": f"container:{service_name}",
+            "kind": "container",
+            "name": service_name,
+            "state": "referenced",
+            "summary": "Service referenced by a pipeline target.",
+            "sources": ["pipeline target"],
+            "facts": {"target": value, "provider": "service"},
+            "actions": _resource_action_links("container"),
+        }
+    return None
+
+
+def _pipeline_stage_service_targets(pipeline: dict) -> list[str]:
+    services: list[str] = []
+    for stage in pipeline.get("stages", []):
+        if not isinstance(stage, dict):
+            continue
+        values = stage.get("with") if isinstance(stage.get("with"), dict) else {}
+        for key in ("service", "services"):
+            value = values.get(key)
+            candidates = value if isinstance(value, list) else [value]
+            for candidate in candidates:
+                service = str(candidate or "").strip()
+                if not service or "${" in service:
+                    continue
+                if service not in services:
+                    services.append(service)
+    return services
+
+
+def _pipeline_service_resource(service_name: str) -> dict | None:
+    service = str(service_name or "").strip()
+    if not service:
+        return None
+    return {
+        "id": f"container:{service}",
+        "kind": "container",
+        "name": service,
+        "state": "referenced",
+        "summary": "Service referenced by pipeline stage metadata.",
+        "sources": ["pipeline stage"],
+        "facts": {"provider": "service", "service": service},
+        "actions": _resource_action_links("container"),
+    }
+
+
 def _resource_action_links(kind: str, existing: list[dict] | None = None) -> list[dict]:
     actions = list(existing or [])
     for action in actions_for_kind(kind):
@@ -536,9 +605,25 @@ def build_resource_graph() -> dict:
                 "sources": ["pipeline catalog"],
                 "facts": facts,
                 "actions": _pipeline_actions(pipeline),
-                "raw": {"stages": pipeline.get("stages", []), "notes": pipeline.get("notes", "")},
+                "raw": {
+                    "stages": pipeline.get("stages", []),
+                    "notes": pipeline.get("notes", ""),
+                    "targets": pipeline.get("targets", {}),
+                },
             },
         )
+        for target in (pipeline.get("targets") or {}).values():
+            target_resource = _pipeline_target_resource(str(target))
+            if not target_resource:
+                continue
+            existing = _add_resource(graph, target_resource)
+            _add_relationship(graph, pipeline_id, "targets", existing["id"], "Pipeline target metadata.")
+        for service in _pipeline_stage_service_targets(pipeline):
+            service_resource = _pipeline_service_resource(service)
+            if not service_resource:
+                continue
+            existing = _add_resource(graph, service_resource)
+            _add_relationship(graph, pipeline_id, "targets", existing["id"], "Pipeline stage service metadata.")
         for action_name in pipeline.get("actions", []):
             action_id = f"action:{action_name}"
             if action_id in graph["resources_by_id"]:
@@ -619,3 +704,361 @@ def related_to(graph: dict, resource_id: str) -> list[dict]:
         for relationship in graph["relationships"]
         if relationship["source_id"] == resource_id or relationship["target_id"] == resource_id
     ]
+
+
+CYTOSCAPE_NODE_TYPES = {"cluster", "host", "vm", "container", "pipeline"}
+
+
+def _cytoscape_status(state: str) -> str:
+    normalized = str(state or "").strip().lower()
+    if normalized in {"stopped", "inactive", "legacy", "template", "retired"}:
+        return "inactive"
+    if normalized in {"failed", "failure", "error", "blocked", "needs setup", "unreachable"}:
+        return "failed"
+    if normalized in {"running", "active", "queued", "planned", "in_progress", "pending"}:
+        return "running"
+    return "success"
+
+
+def _cytoscape_edge_type(relation_type: str) -> str:
+    normalized = str(relation_type or "").strip().lower()
+    if normalized == "authenticates":
+        return "ssh"
+    if normalized in {"composes", "created"}:
+        return "pipeline_flow"
+    return "dependency"
+
+
+def _ensure_cytoscape_parent_host(nodes_by_id: dict[str, dict], host_name: str) -> str:
+    label = str(host_name or "").strip()
+    parent_id = f"host:{label}"
+    if parent_id not in nodes_by_id:
+        nodes_by_id[parent_id] = {
+            "data": {
+                "id": parent_id,
+                "label": label,
+                "type": "host",
+                "status": "success",
+            }
+        }
+    return parent_id
+
+
+def _cytoscape_stage_id(pipeline_id: str, stage: str, index: int) -> str:
+    clean = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in str(stage).strip().lower())
+    clean = "-".join(part for part in clean.split("-") if part)
+    return f"stage:{pipeline_id.removeprefix('pipeline:')}:{index + 1:02d}:{clean or 'stage'}"
+
+
+def _cytoscape_pipeline_group_id(pipeline_id: str) -> str:
+    return f"pipeline-group:{pipeline_id.removeprefix('pipeline:')}"
+
+
+def _cytoscape_stage_lane(stage: str, index: int) -> int:
+    normalized = str(stage or "").strip().lower()
+    if any(token in normalized for token in ("install", "package", "chocolatey", "vscode", "rustdesk", "chrome")):
+        return -1 if index % 2 == 0 else 1
+    if any(token in normalized for token in ("verify", "validate", "check", "smoke")):
+        return 1
+    if any(token in normalized for token in ("record", "link", "inventory", "relationship")):
+        return 2
+    return 0
+
+
+def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
+    """Return Cytoscape.js elements split into nodes and edges.
+
+    The output intentionally keeps a small public contract:
+    ``nodes[].data`` has ``id``, ``label``, ``type``, ``status``, and optional
+    ``parent``. ``edges[].data`` has ``id``, ``source``, ``target``, and
+    normalized ``type``.
+    """
+
+    nodes_by_id: dict[str, dict] = {}
+    parent_by_child: dict[str, str] = {}
+
+    for resource in graph.get("resources", []):
+        kind = str(resource.get("kind") or "").strip().lower()
+        if kind not in CYTOSCAPE_NODE_TYPES:
+            continue
+        resource_id = str(resource.get("id") or "").strip()
+        if not resource_id:
+            continue
+        facts = resource.get("facts") if isinstance(resource.get("facts"), dict) else {}
+        state_source = facts.get("status") if kind in {"host", "vm", "container"} else resource.get("state")
+        data = {
+            "id": resource_id,
+            "label": str(resource.get("name") or resource_id),
+            "type": kind,
+            "status": _cytoscape_status(str(state_source or resource.get("state") or "")),
+        }
+        if kind == "pipeline":
+            data.update({"storyRank": 0, "storyLane": 0, "layoutRole": "pipeline"})
+            raw = resource.get("raw") if isinstance(resource.get("raw"), dict) else {}
+            stages = raw.get("stages") if isinstance(raw.get("stages"), list) else []
+            if stages:
+                group_id = _cytoscape_pipeline_group_id(resource_id)
+                nodes_by_id[group_id] = {
+                    "data": {
+                        "id": group_id,
+                        "label": str(resource.get("name") or resource_id),
+                        "type": "pipeline_group",
+                        "status": data["status"],
+                        "layoutRole": "pipeline_group",
+                    }
+                }
+                data["parent"] = group_id
+        if kind in {"vm", "container"}:
+            proxmox_node = str(facts.get("proxmox node") or "").strip()
+            if proxmox_node and proxmox_node != "unset":
+                data["parent"] = _ensure_cytoscape_parent_host(nodes_by_id, proxmox_node)
+        nodes_by_id[resource_id] = {"data": data}
+        if kind == "pipeline":
+            raw = resource.get("raw") if isinstance(resource.get("raw"), dict) else {}
+            stages = raw.get("stages") if isinstance(raw.get("stages"), list) else []
+            for index, stage in enumerate(stages):
+                if isinstance(stage, dict):
+                    stage_name = str(stage.get("name") or stage.get("id") or "").strip()
+                else:
+                    stage_name = str(stage).strip()
+                if not stage_name:
+                    continue
+                stage_id = _cytoscape_stage_id(resource_id, stage_name, index)
+                nodes_by_id[stage_id] = {
+                    "data": {
+                        "id": stage_id,
+                        "label": stage_name,
+                        "type": "stage",
+                        "status": data["status"],
+                        "parentPipeline": resource_id,
+                        "storyRank": index + 1,
+                        "storyLane": _cytoscape_stage_lane(stage_name, index),
+                        "layoutRole": "stage",
+                    }
+                }
+                if data.get("parent"):
+                    nodes_by_id[stage_id]["data"]["parent"] = data["parent"]
+
+    def _short_label(node: dict) -> str:
+        label = str(node.get("data", {}).get("label") or "").strip().lower()
+        return label.split(".", 1)[0]
+
+    pve_id = "host:pve"
+    active_swarm_shorts = {
+        _short_label(node)
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") == "vm"
+        and str(node.get("data", {}).get("status") or "") == "running"
+        and _short_label(node).startswith("swarm")
+    }
+    for node_id, node in list(nodes_by_id.items()):
+        data = node.get("data", {})
+        if str(data.get("type") or "") != "host":
+            continue
+        short = _short_label(node)
+        if short.startswith("swarm") and short in active_swarm_shorts:
+            nodes_by_id.pop(node_id, None)
+
+    swarm_nodes = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
+        and str(node.get("data", {}).get("label") or "").lower().startswith("swarm")
+        and str(node.get("data", {}).get("status") or "") != "inactive"
+    ]
+    inactive_swarm_nodes = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
+        and str(node.get("data", {}).get("label") or "").lower().startswith("swarm")
+        and str(node.get("data", {}).get("status") or "") == "inactive"
+    ]
+    if swarm_nodes:
+        cluster_id = "cluster:docker-swarm"
+        cluster_status = "running" if any(node["data"].get("status") == "running" for node in swarm_nodes) else "success"
+        nodes_by_id[cluster_id] = {
+            "data": {
+                "id": cluster_id,
+                "label": "Docker Swarm",
+                "type": "cluster",
+                "status": cluster_status,
+                "layoutRole": "cluster",
+            }
+        }
+        if pve_id in nodes_by_id:
+            nodes_by_id[cluster_id]["data"]["parent"] = pve_id
+        for node in swarm_nodes:
+            node["data"]["parent"] = cluster_id
+        if inactive_swarm_nodes:
+            legacy_id = "cluster:legacy-proxmox-swarm"
+            nodes_by_id[legacy_id] = {
+                "data": {
+                    "id": legacy_id,
+                    "label": "Legacy / powered off",
+                    "type": "cluster",
+                    "status": "inactive",
+                    "layoutRole": "legacy_cluster",
+                }
+            }
+            if pve_id in nodes_by_id:
+                nodes_by_id[legacy_id]["data"]["parent"] = pve_id
+            for node in inactive_swarm_nodes:
+                node["data"]["parent"] = legacy_id
+        for node in nodes_by_id.values():
+            data = node.get("data", {})
+            if data.get("type") != "container":
+                continue
+            label = str(data.get("label") or "").lower()
+            if label.startswith("blackknight") or label.startswith("registry") or label.startswith("monitoring_"):
+                manager = next(
+                    (
+                        swarm_node
+                        for swarm_node in swarm_nodes
+                        if str(swarm_node.get("data", {}).get("label") or "").lower().startswith("swarm1.")
+                    ),
+                    swarm_nodes[0],
+                )
+                data["parent"] = manager["data"]["id"]
+
+    k3s_nodes = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") in {"host", "vm"}
+        and any(token in str(node.get("data", {}).get("label") or "").lower() for token in ("k3s", "kube"))
+    ]
+    k3s_services = [
+        node
+        for node in nodes_by_id.values()
+        if str(node.get("data", {}).get("type") or "") == "container"
+        and "/" in str(node.get("data", {}).get("label") or "")
+    ]
+    if k3s_nodes or k3s_services:
+        cluster_id = "cluster:k3s"
+        cluster_status = "running" if any(node["data"].get("status") == "running" for node in k3s_nodes) else "success"
+        nodes_by_id[cluster_id] = {
+            "data": {
+                "id": cluster_id,
+                "label": "K3s / Kubernetes",
+                "type": "cluster",
+                "status": cluster_status,
+                "layoutRole": "cluster",
+            }
+        }
+        if pve_id in nodes_by_id:
+            nodes_by_id[cluster_id]["data"]["parent"] = pve_id
+        for node in k3s_nodes + k3s_services:
+            node["data"]["parent"] = cluster_id
+
+    for relationship in graph.get("relationships", []):
+        source_id = str(relationship.get("source_id") or "").strip()
+        target_id = str(relationship.get("target_id") or "").strip()
+        if not source_id or not target_id:
+            continue
+        source = graph.get("resources_by_id", {}).get(source_id, {})
+        target = graph.get("resources_by_id", {}).get(target_id, {})
+        if (
+            str(source.get("kind") or "").strip().lower() == "host"
+            and str(target.get("kind") or "").strip().lower() in {"vm", "container"}
+            and target_id in nodes_by_id
+        ):
+            parent_by_child.setdefault(target_id, source_id)
+
+    for child_id, parent_id in parent_by_child.items():
+        if parent_id in nodes_by_id and child_id in nodes_by_id:
+            nodes_by_id[child_id]["data"].setdefault("parent", parent_id)
+
+    edges = []
+    seen_edges = set()
+    for node in nodes_by_id.values():
+        data = node.get("data", {})
+        if data.get("type") != "stage":
+            continue
+        stage_id = str(data.get("id") or "")
+        parent_pipeline = str(data.get("parentPipeline") or "")
+        rank = int(data.get("storyRank") or 0)
+        source_id = parent_pipeline
+        if rank > 1:
+            source_id = ""
+            prefix = f"stage:{parent_pipeline.removeprefix('pipeline:')}:{rank - 1:02d}:"
+            for candidate in nodes_by_id:
+                if candidate.startswith(prefix):
+                    source_id = candidate
+                    break
+        if not source_id or source_id not in nodes_by_id:
+            continue
+        edge_id = f"edge:{source_id}:pipeline_flow:{stage_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": source_id,
+                    "target": stage_id,
+                    "type": "pipeline_flow",
+                }
+            }
+        )
+    for node in nodes_by_id.values():
+        data = node.get("data", {})
+        parent_id = str(data.get("parent") or "").strip()
+        child_id = str(data.get("id") or "").strip()
+        if not parent_id or not child_id or parent_id not in nodes_by_id:
+            continue
+        edge_id = f"edge:{parent_id}:dependency:{child_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": parent_id,
+                    "target": child_id,
+                    "type": "dependency",
+                }
+            }
+        )
+
+    for relationship in graph.get("relationships", []):
+        source_id = str(relationship.get("source_id") or "").strip()
+        target_id = str(relationship.get("target_id") or "").strip()
+        if source_id not in nodes_by_id or target_id not in nodes_by_id:
+            continue
+        edge_type = _cytoscape_edge_type(str(relationship.get("type") or "dependency"))
+        edge_id = f"edge:{source_id}:{edge_type}:{target_id}"
+        if edge_id in seen_edges:
+            continue
+        seen_edges.add(edge_id)
+        edges.append(
+            {
+                "data": {
+                    "id": edge_id,
+                    "source": source_id,
+                    "target": target_id,
+                    "type": edge_type,
+                }
+            }
+        )
+
+    nodes = sorted(nodes_by_id.values(), key=lambda item: (item["data"].get("type", ""), item["data"].get("label", "")))
+    edges = sorted(edges, key=lambda item: item["data"]["id"])
+    return {"nodes": nodes, "edges": edges}
+
+
+def apply_cytoscape_positions(elements: dict, positions: dict[str, dict[str, float]]) -> dict:
+    """Attach saved Cytoscape positions without changing the public data contract."""
+
+    if not positions:
+        return elements
+    for node in elements.get("nodes", []):
+        node_id = str(node.get("data", {}).get("id") or "")
+        position = positions.get(node_id)
+        if position is None:
+            continue
+        try:
+            node["position"] = {"x": float(position["x"]), "y": float(position["y"])}
+        except (KeyError, TypeError, ValueError):
+            continue
+    return elements

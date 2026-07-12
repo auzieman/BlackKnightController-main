@@ -1,0 +1,7 @@
+{
+  "id": "render-dhcp-defaults",
+  "name": "Render DHCP Interface Defaults",
+  "action": "template.render",
+  "risk": "low",
+  "description": "Render isc-dhcp-server defaults so DHCP binds only to the provisioning interface."
+}

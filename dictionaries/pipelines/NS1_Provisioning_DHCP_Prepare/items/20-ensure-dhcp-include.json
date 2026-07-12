@@ -1,0 +1,7 @@
+{
+  "id": "ensure-dhcp-include",
+  "name": "Ensure DHCP Include",
+  "action": "ssh.file.ensure_line",
+  "risk": "medium",
+  "description": "Ensure the main dhcpd.conf includes the BKC-managed provisioning fragment with backup enabled."
+}

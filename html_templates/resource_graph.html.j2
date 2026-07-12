@@ -27,6 +27,29 @@
         {% endfor %}
     </section>
 
+    <section class="resource-graph-workbench">
+        <div class="resource-graph-toolbar">
+            <div>
+                <p class="eyebrow">Open graph</p>
+                <h3>Cytoscape resource map</h3>
+            </div>
+            <div class="topbar-badges">
+                <input class="input-like graph-filter-search" type="search" placeholder="Filter graph">
+                <button class="button button-quiet graph-filter-button" type="button" data-cy-filter="selected">Selected</button>
+                <button class="button button-quiet graph-filter-button" type="button" data-cy-filter="compute">Compute</button>
+                <button class="button button-quiet graph-filter-button" type="button" data-cy-filter="pipeline">Pipelines</button>
+                <button class="button button-quiet graph-filter-button" type="button" data-cy-filter="all">All</button>
+                <button class="button button-quiet graph-layout-button" type="button" data-cy-layout="map">Map</button>
+                <button class="button button-quiet graph-layout-button" type="button" data-cy-layout="flow">Flow</button>
+                <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="fit">Fit</button>
+                <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="zoom-out">-</button>
+                <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="zoom-in">+</button>
+            </div>
+        </div>
+        <div id="cy" class="resource-cytoscape-canvas" aria-label="Interactive resource graph"></div>
+        <div id="cy-status" class="resource-graph-status" aria-live="polite"></div>
+    </section>
+
     <section class="resource-layout">
         <aside class="form-shell resource-sidebar">
             <div class="section-header compact-header">
@@ -199,4 +222,60 @@
             {% endif %}
         </section>
     </section>
+    <script id="resource-graph-elements" type="application/json">{{ cytoscape_elements_json|safe }}</script>
+    <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+    <script src="{{ url_for('static', filename='js/resource_graph_cytoscape.js') }}"></script>
+    <script>
+        (function () {
+            const status = document.getElementById("cy-status");
+            function setStatus(message) {
+                if (status) {
+                    status.textContent = message || "";
+                }
+            }
+            window.openResourceDrilldown = function (nodeId) {
+                const url = new URL(window.location.href);
+                url.searchParams.set("resource", nodeId);
+                url.searchParams.set("tab", "summary");
+                window.history.replaceState({}, "", url.toString());
+                const target = Array.from(document.querySelectorAll(".resource-node")).find(function (link) {
+                    try {
+                        return new URL(link.href).searchParams.get("resource") === nodeId;
+                    } catch (error) {
+                        return false;
+                    }
+                });
+                if (target) {
+                    target.click();
+                } else {
+                    window.location.href = url.toString();
+                }
+            };
+            try {
+                const elementsNode = document.getElementById("resource-graph-elements");
+                const elements = JSON.parse(elementsNode ? elementsNode.textContent : "{}");
+                window.initBkcCytoscapeGraph({
+                    elements: elements,
+                    savePositionsEndpoint: "{{ url_for('resource_graph.save_resource_graph_positions') }}",
+                    contextActionEndpoint: "{{ url_for('resource_graph.resource_graph_context_action') }}",
+                    layoutControlSelector: ".graph-layout-button",
+                    viewportControlSelector: ".graph-viewport-button",
+                    filterControlSelector: ".graph-filter-button",
+                    filterSearchSelector: ".graph-filter-search",
+                    selectedNodeId: {{ selected_id|tojson }},
+                    defaultFilterMode: "selected",
+                    fitPadding: 90,
+                    autoFlowLayout: true
+                }).then(function () {
+                    setStatus("");
+                }).catch(function (error) {
+                    console.error(error);
+                    setStatus("Graph canvas failed to initialize.");
+                });
+            } catch (error) {
+                console.error(error);
+                setStatus("Graph data could not be parsed.");
+            }
+        })();
+    </script>
 {% endblock %}

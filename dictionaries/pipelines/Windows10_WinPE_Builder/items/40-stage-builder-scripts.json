@@ -1,0 +1,7 @@
+{
+  "id": "stage-builder-scripts",
+  "name": "Stage Builder Scripts",
+  "action": "artifact.stage",
+  "risk": "low",
+  "description": "Copy BKC WinPE build/publish scripts to VMID 113."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "record-windows-pxe-relationships",
+  "name": "Record Windows PXE Relationships",
+  "action": "node.relationships.record",
+  "risk": "low",
+  "description": "Record that ns1 PXE serves the Windows WinPE boot image and VMID 136 boots from it."
+}

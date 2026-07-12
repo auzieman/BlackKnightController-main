@@ -1,0 +1,7 @@
+{
+  "id": "render-windows-ipxe",
+  "name": "Render Windows iPXE",
+  "action": "template.render",
+  "risk": "low",
+  "description": "Render the Windows iPXE script that chainloads wimboot and WinPE."
+}

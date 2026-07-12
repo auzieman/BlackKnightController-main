@@ -1,0 +1,7 @@
+{
+  "id": "prepare-vm132-pxe-target",
+  "name": "Prepare VM132 PXE Target",
+  "action": "proxmox.vm.ensure",
+  "risk": "high",
+  "description": "Prepare disposable VMID 132 as a two-NIC PXE target, guarded by enable_vm_create."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "inspect-adk-tooling",
+  "name": "Inspect ADK Tooling",
+  "action": "windows.adk.inspect",
+  "risk": "low",
+  "description": "Check whether ADK, WinPE add-on, copype, DISM, and MakeWinPEMedia are available."
+}

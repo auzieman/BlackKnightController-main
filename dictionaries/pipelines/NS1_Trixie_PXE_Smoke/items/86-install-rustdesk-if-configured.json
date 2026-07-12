@@ -1,0 +1,5 @@
+{
+  "id": "install-rustdesk-if-configured",
+  "action": "proxmox.guest.exec",
+  "description": "Install RustDesk only when an explicit Debian package URL is configured."
+}

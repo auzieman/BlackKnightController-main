@@ -159,6 +159,48 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "scrape-validate",
             "dashboard-link",
         ]
+    if normalized == "small-office-foobar-reference":
+        return [
+            "load-recipe-intent",
+            "plan-identity-storage",
+            "plan-crm-intranet",
+            "provision-linux-developer-workstations",
+            "provision-windows-helpdesk-workstations",
+            "personalize-workstations",
+            "validate-small-office",
+            "render-demo-lifecycle",
+        ]
+    if normalized == "small-office-foobar-reset":
+        return [
+            "load-reset-scope",
+            "plan-demo-vm-removal",
+            "plan-pxe-route-cleanup",
+            "plan-evidence-archive",
+            "verify-reset-boundary",
+        ]
+    if normalized == "small-office-foobar-app-vms":
+        return [
+            "load-app-vm-plan",
+            "select-trixie-source",
+            "clone-app-vms",
+            "boot-app-vms",
+            "record-app-relationships",
+        ]
+    if normalized == "small-office-foobar-services":
+        return [
+            "load-service-plan",
+            "ensure-identity-vm",
+            "wait-service-guests",
+            "configure-demo-lan",
+            "install-identity-packages",
+            "seed-ldap-directory",
+            "configure-samba-homes",
+            "publish-identity-portal",
+            "provision-suitecrm-service",
+            "provision-kanboard-service",
+            "validate-foobar-services",
+            "record-service-relationships",
+        ]
     if normalized == "demo-swarm-image-registry":
         return [
             "storage-ready",
@@ -257,6 +299,99 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["source-select", "proxmox-clone", "boot", "ssh-validate"]
     if normalized == "blackknight-sync":
         return ["repo-sync", "service-build", "deploy", "health-check"]
+    if normalized == "ns1-provisioning-network-prepare":
+        return [
+            "resolve-ns1-node",
+            "discover-current-network",
+            "select-provisioning-interface",
+            "apply-provisioning-address",
+            "validate-management-still-reachable",
+            "record-network-relationships",
+        ]
+    if normalized == "ns1-provisioning-dhcp-prepare":
+        return [
+            "resolve-ns1-node",
+            "verify-provisioning-network",
+            "ensure-dhcp-include",
+            "render-dhcp-fragment",
+            "render-dhcp-defaults",
+            "install-dhcp-package",
+            "validate-dhcp-config",
+            "keep-dhcp-disabled",
+            "record-dhcp-relationships",
+        ]
+    if normalized == "ns1-trixie-pxe-smoke":
+        return [
+            "resolve-provisioning-context",
+            "verify-ns1-pxe-prereqs",
+            "fetch-trixie-netboot",
+            "render-ipxe-entry",
+            "render-preseed-profile",
+            "prepare-vm132-pxe-target",
+            "pxe-boot-vm132",
+            "observe-installer-handoff",
+            "post-boot-recollect",
+            "record-trixie-relationships",
+        ]
+    if normalized == "windows10-reference-discover":
+        return [
+            "verify-iso",
+            "inspect-vm113",
+            "validate-openssh",
+            "stage-firstboot-artifacts",
+            "record-windows-relationships",
+        ]
+    if normalized == "windows10-pxe-smoke":
+        return [
+            "resolve-windows-pxe-context",
+            "verify-ns1-pxe-prereqs",
+            "verify-windows-iso",
+            "fetch-wimboot",
+            "stage-windows-install-media",
+            "render-windows-ipxe",
+            "configure-windows-media-share",
+            "render-unattend-firstboot",
+            "render-dhcp-windows-route",
+            "prepare-vm136-pxe-target",
+            "pxe-boot-vm136",
+            "observe-winpe-handoff",
+            "post-install-ssh-check",
+            "record-windows-pxe-relationships",
+        ]
+    if normalized == "trixie-workstation-personalize":
+        return [
+            "discover-installed-trixie",
+            "normalize-local-login",
+            "publish-demo-checkpoints",
+            "install-workstation-packages",
+            "install-vscode-if-enabled",
+            "install-rustdesk-if-configured",
+            "enable-graphical-services",
+            "verify-trixie-personality",
+            "record-trixie-personality",
+        ]
+    if normalized == "windows10-workstation-personalize":
+        return [
+            "discover-installed-windows",
+            "normalize-local-login",
+            "publish-demo-checkpoints",
+            "ensure-chocolatey",
+            "install-workstation-packages",
+            "verify-windows-personality",
+            "record-windows-personality",
+        ]
+    if normalized == "windows10-winpe-builder":
+        return [
+            "resolve-builder-context",
+            "inspect-vm113",
+            "validate-builder-ssh",
+            "inspect-adk-tooling",
+            "stage-builder-scripts",
+            "install-adk-if-enabled",
+            "build-winpe-if-enabled",
+            "publish-winpe-if-enabled",
+            "record-winpe-builder-relationships",
+        ]
     if normalized == "host-telemetry":
         if action_mode == "undeploy":
             return ["telemetry-plan", "telemetry-remove", "health-check", "inventory-refresh", "dashboard-link"]

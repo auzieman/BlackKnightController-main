@@ -1,0 +1,7 @@
+{
+  "id": "record-trixie-relationships",
+  "name": "Record Trixie Relationships",
+  "action": "node.relationships.record",
+  "risk": "low",
+  "description": "Record that ns1 PXE serves the Trixie image and VMID 132 boots from it on the provisioning network."
+}

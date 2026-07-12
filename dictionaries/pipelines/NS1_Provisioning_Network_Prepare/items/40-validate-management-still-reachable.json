@@ -1,0 +1,8 @@
+{
+  "id": "validate-management-still-reachable",
+  "name": "Validate Management Reachability",
+  "action": "ssh.network.validate_management",
+  "risk": "low",
+  "description": "Confirm the Spectrum-managed management network remains the route for BKC access."
+}
+

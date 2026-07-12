@@ -1610,6 +1610,117 @@ th {
   align-items: start;
 }
 
+.resource-graph-workbench {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    #0f172a;
+  background-size: 32px 32px, 32px 32px, auto;
+  box-shadow: var(--shadow);
+}
+
+.resource-graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.resource-graph-toolbar h3 {
+  margin: 0;
+}
+
+.resource-cytoscape-canvas {
+  width: 100%;
+  min-height: 560px;
+  height: clamp(420px, 62vh, 760px);
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(226, 232, 240, 0.055) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(226, 232, 240, 0.055) 1px, transparent 1px),
+    #0f172a;
+  background-size: 40px 40px, 40px 40px, auto;
+}
+
+.graph-layout-button,
+.graph-filter-button,
+.graph-viewport-button {
+  min-height: 34px;
+  padding: 7px 11px;
+}
+
+.graph-layout-button.active,
+.graph-filter-button.active {
+  border-color: rgba(56, 189, 248, 0.58);
+  background: rgba(56, 189, 248, 0.16);
+  color: #e0f2fe;
+}
+
+.graph-filter-search {
+  min-width: 180px;
+  max-width: 240px;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.graph-viewport-button {
+  min-width: 36px;
+}
+
+.resource-graph-status {
+  min-height: 1rem;
+  color: #fca5a5;
+  font-size: 0.9rem;
+}
+
+.cy-context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 8px;
+  background: rgba(8, 13, 24, 0.96);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+}
+
+.cy-context-menu[hidden] {
+  display: none;
+}
+
+.cy-context-menu-item {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cy-context-menu-item:hover,
+.cy-context-menu-item:focus {
+  outline: none;
+  background: rgba(56, 189, 248, 0.14);
+  color: #f8fafc;
+}
+
 .inventory-resource-layout {
   display: grid;
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);

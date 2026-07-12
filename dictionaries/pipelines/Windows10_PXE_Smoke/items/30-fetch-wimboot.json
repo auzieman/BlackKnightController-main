@@ -1,0 +1,7 @@
+{
+  "id": "fetch-wimboot",
+  "name": "Fetch Wimboot",
+  "action": "ssh.http.fetch",
+  "risk": "medium",
+  "description": "Cache the iPXE wimboot binary on ns1."
+}

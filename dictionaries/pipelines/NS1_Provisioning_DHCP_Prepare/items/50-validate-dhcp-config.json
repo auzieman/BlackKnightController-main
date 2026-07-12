@@ -1,0 +1,7 @@
+{
+  "id": "validate-dhcp-config",
+  "name": "Validate DHCP Config",
+  "action": "ssh.command.check",
+  "risk": "low",
+  "description": "Run dhcpd syntax validation before any service start."
+}
