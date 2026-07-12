@@ -8768,7 +8768,7 @@ def _run_foobar_service_suitecrm(run_id: str, stage_name: str) -> None:
         "apt-get -o DPkg::Lock::Timeout=600 update; "
         "apt-get -o DPkg::Lock::Timeout=600 install -y "
         "apache2 mariadb-server php libapache2-mod-php php-mysql php-curl php-xml php-mbstring "
-        "php-zip php-gd php-imap php-ldap php-intl php-soap unzip curl wget ca-certificates; "
+        "php-zip php-gd php-ldap php-intl php-soap unzip curl wget ca-certificates; "
         "a2enmod rewrite >/dev/null 2>&1 || true; "
         "systemctl enable --now mariadb apache2; "
         "cat >/tmp/bkc-suitecrm.sql <<'SQL'\n"
