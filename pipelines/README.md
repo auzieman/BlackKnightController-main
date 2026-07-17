@@ -36,6 +36,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `openstack-lab-edge-network-prepare/`: review-first routed edge plan for the
   10.1.x OpenStack lab networks, split DNS, workstation routes, bastion,
   nginx proxy, and service migration targets.
+- `n3048-switch-discovery-prepare/`: read-only Dell PowerConnect N3048
+  discovery scaffold for switch identity, VLAN/port intent, LLDP/MAC-table
+  observations, and PXE-to-node evidence.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.

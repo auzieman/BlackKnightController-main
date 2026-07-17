@@ -27,6 +27,10 @@ Bare metal provisioning starts with these node types:
 - `bmc`: IPMI, Redfish, or vendor management controller endpoint.
 - `network_interface`: NIC identity, MAC address, switch port, VLAN, observed
   DHCP lease, and boot capability.
+- `network_switch`: managed switch identity, model, management endpoint,
+  firmware, read-only observation transport, VLAN intent, and port inventory.
+- `switch_port`: physical port identity, expected role, observed MACs,
+  LLDP/CDP neighbor evidence, VLAN membership, and attached node relationship.
 - `provisioning_profile`: desired installer, boot image, kickstart/preseed,
   unattend file, rescue image, post-install enrollment steps, and validation
   gates.
@@ -47,6 +51,9 @@ from names:
 physical_machine -> controlled_by -> bmc
 physical_machine -> has_interface -> network_interface
 network_interface -> attached_to -> network_switch
+network_switch -> has_port -> switch_port
+switch_port -> observes_mac -> network_interface
+switch_port -> uses_vlan -> network
 network_interface -> uses -> network
 service:dhcpd -> provides_dhcp -> network
 service:pxe -> serves_pxe -> network
@@ -114,6 +121,8 @@ Infrastructure validation:
 - Image checksums match declared values.
 - BMC/IPMI/Redfish endpoint is reachable.
 - Switch/VLAN/network path is plausible.
+- Switch port evidence links the expected physical port to the expected NIC MAC
+  address before destructive PXE install starts.
 
 Installation validation:
 
@@ -214,3 +223,8 @@ The first delivery-day track recipes are
 `pipelines/baremetal-vmware-trial-prepare/`. They extend the same validation
 model into OpenStack and VMware evaluation planning without committing
 operator-specific media or credentials.
+
+The first managed-switch discovery recipe is
+`pipelines/n3048-switch-discovery-prepare/`. It prepares read-only discovery for
+the Dell PowerConnect N3048 so PXE events can be tied back to physical switch
+ports, observed MACs, and declared node intent.

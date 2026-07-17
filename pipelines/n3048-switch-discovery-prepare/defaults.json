@@ -1,0 +1,94 @@
+{
+  "tenant_slug": "lab",
+  "switch_node_id": "node:switch:n3048-lab",
+  "switch_label": "n3048-lab",
+  "vendor": "Dell",
+  "model": "PowerConnect N3048",
+  "management_address": "",
+  "management_network_node_id": "node:network:lab-management",
+  "home_lan_network_node_id": "node:network:home-lan",
+  "credential_ref": "secret:switch:n3048-lab",
+  "preferred_transports": [
+    "ssh",
+    "snmp"
+  ],
+  "read_only": true,
+  "vlan_intent": [
+    {
+      "name": "home-uplink",
+      "role": "operator-home-lan",
+      "network_node_id": "node:network:home-lan",
+      "cidr": "192.168.1.0/24",
+      "vlan_id": null
+    },
+    {
+      "name": "lab-provisioning",
+      "role": "pxe-installer",
+      "network_node_id": "node:network:lab-provisioning",
+      "cidr": "10.1.0.0/24",
+      "vlan_id": null
+    },
+    {
+      "name": "lab-management",
+      "role": "host-management",
+      "network_node_id": "node:network:lab-management",
+      "cidr": "10.1.1.0/24",
+      "vlan_id": null
+    },
+    {
+      "name": "lab-services",
+      "role": "platform-services",
+      "network_node_id": "node:network:lab-services",
+      "cidr": "10.1.2.0/24",
+      "vlan_id": null
+    },
+    {
+      "name": "lab-provider",
+      "role": "tenant-provider-experiment",
+      "network_node_id": "node:network:lab-tenant-provider",
+      "cidr": "10.1.3.0/24",
+      "vlan_id": null
+    }
+  ],
+  "port_intent": [
+    {
+      "port": "gi1/0/1",
+      "role": "home-uplink",
+      "expected_node_id": "node:network:home-lan"
+    },
+    {
+      "port": "gi1/0/2",
+      "role": "ns1-provisioning-uplink",
+      "expected_node_id": "node:vm:ns1"
+    },
+    {
+      "port": "gi1/0/3",
+      "role": "ns1-management-uplink",
+      "expected_node_id": "node:vm:ns1"
+    },
+    {
+      "port": "gi1/0/11",
+      "role": "r630-openstack-01-pxe",
+      "expected_node_id": "node:physical_machine:r630-openstack-01"
+    },
+    {
+      "port": "gi1/0/12",
+      "role": "r630-openstack-02-pxe",
+      "expected_node_id": "node:physical_machine:r630-openstack-02"
+    },
+    {
+      "port": "gi1/0/21",
+      "role": "r630-vmware-01-pxe",
+      "expected_node_id": "node:physical_machine:r630-vmware-01"
+    }
+  ],
+  "expected_observations": [
+    "switch.management_reachable",
+    "switch.identity_observed",
+    "switch.interfaces_observed",
+    "switch.vlans_observed",
+    "switch.lldp_neighbors_observed",
+    "switch.mac_table_observed",
+    "switch.port_node_links_planned"
+  ]
+}

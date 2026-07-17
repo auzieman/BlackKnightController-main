@@ -40,6 +40,12 @@ The exact VLAN IDs can be assigned once the managed switch is in hand. The BKC
 model should store the subnet role independently from the VLAN number so we can
 renumber without breaking pipeline intent.
 
+The first managed switch target is the Dell PowerConnect N3048. BKC should
+discover it read-only first, then connect switch ports, VLAN roles, observed
+MACs, and PXE events to the physical server model. See
+`docs/switch-discovery-and-pxe.md` and
+`pipelines/n3048-switch-discovery-prepare/`.
+
 ## Edge Pattern
 
 Use a small number of intentional entry points:
