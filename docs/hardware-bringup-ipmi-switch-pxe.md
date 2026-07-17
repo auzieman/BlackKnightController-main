@@ -165,6 +165,7 @@ Relevant review-first recipes:
 
 - `pipelines/openstack-lab-edge-network-prepare/`
 - `pipelines/n3048-switch-discovery-prepare/`
+- `pipelines/ns1-lan-mac-pxe-prepare/`
 - `pipelines/baremetal-r630-pxe-validation/`
 - `pipelines/baremetal-openstack-lab-prepare/`
 - `pipelines/baremetal-vmware-trial-prepare/`

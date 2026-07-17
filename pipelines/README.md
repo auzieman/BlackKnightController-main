@@ -16,6 +16,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
   isolated ns1 provisioning NIC before DHCP/PXE is enabled.
 - `ns1-provisioning-dhcp-prepare/`: guarded DHCP configuration scaffold for the
   isolated ns1 provisioning network.
+- `ns1-lan-mac-pxe-prepare/`: temporary LAN-side MAC-only DHCP/PXE bring-up
+  scaffold for one physical server when isolated switch/VLAN cabling is not
+  settled yet.
 - `ns1-trixie-pxe-smoke/`: review-first Debian Trixie netboot and disposable
   VMID 132 PXE smoke lane.
 - `auzix-installed-root-recovery/`: scaffold for installed-root repair and
