@@ -30,6 +30,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `trixie-openstack-host-prepare/`: post-enrollment Debian Trixie host prep for
   Neutron/Open vSwitch packages, kernel networking settings, and validation
   evidence before the OpenStack installer provider runs.
+- `trixie-openstack-package-smoke/`: lab-safe package/config smoke lane that can
+  reuse or clone the foo.bar SuiteCRM Trixie VM to test OpenStack host-prep
+  scripts without claiming bare-metal readiness.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.

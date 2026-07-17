@@ -4,6 +4,11 @@
     "r630-openstack-01",
     "r630-openstack-02"
   ],
+  "smoke_target_hosts": [
+    "foobar-crm-01"
+  ],
+  "smoke_source": "existing foo.bar SuiteCRM Trixie VM or clone",
+  "smoke_mode": false,
   "target_transport": "bkc-ssh",
   "base_os_distribution": "debian",
   "base_os_version": "trixie",

@@ -64,6 +64,11 @@ Neutron host packages, Open vSwitch, kernel module settings, and sysctl values,
 but leaves Neutron agent activation deferred until the control plane provider
 supplies RabbitMQ, auth, and ML2 configuration.
 
+Before touching the R630s, BKC can smoke test the package/config path with
+`pipelines/trixie-openstack-package-smoke/` against a clone or reuse of the
+foo.bar SuiteCRM Trixie VM. That proves the repeatable install/config mechanics
+without claiming the VM can run a real OpenStack role.
+
 ## VMware Evaluation Preparation
 
 The VMware lane should keep repository data sanitized. VMware installation

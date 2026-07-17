@@ -13,6 +13,7 @@ mode="${BKC_NEUTRON_MODE:-ovs}"
 external_bridge="${BKC_NEUTRON_EXTERNAL_BRIDGE:-br-ex}"
 physnet="${BKC_NEUTRON_PHYSNET:-physnet1}"
 enable_network_config="${BKC_ENABLE_NETWORK_CONFIG:-false}"
+smoke_mode="${BKC_OPENSTACK_SMOKE_MODE:-false}"
 
 apt-get update
 # shellcheck disable=SC2086
@@ -26,9 +27,15 @@ openvswitch
 8021q
 EOF
 
-modprobe br_netfilter || true
-modprobe openvswitch || true
-modprobe 8021q || true
+if [[ "${smoke_mode}" == "true" ]]; then
+  modprobe br_netfilter || echo "smoke mode: br_netfilter module unavailable"
+  modprobe openvswitch || echo "smoke mode: openvswitch module unavailable"
+  modprobe 8021q || echo "smoke mode: 8021q module unavailable"
+else
+  modprobe br_netfilter
+  modprobe openvswitch
+  modprobe 8021q
+fi
 
 cat >/etc/sysctl.d/99-bkc-openstack-neutron.conf <<'EOF'
 net.bridge.bridge-nf-call-iptables = 1
@@ -59,6 +66,7 @@ cat >/var/lib/bkc/openstack-neutron-host-prep.json <<EOF
   "mode": "${mode}",
   "external_bridge": "${external_bridge}",
   "physnet": "${physnet}",
+  "smoke_mode": "${smoke_mode}",
   "network_config_enabled": "${enable_network_config}",
   "agent_activation": "deferred-to-openstack-installer-provider"
 }

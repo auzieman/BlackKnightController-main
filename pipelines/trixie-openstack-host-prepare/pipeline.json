@@ -34,6 +34,10 @@
     "enable_network_config": {
       "required": false,
       "default": false
+    },
+    "smoke_mode": {
+      "required": false,
+      "default": false
     }
   },
   "gates": [
@@ -89,7 +93,8 @@
           "BKC_NEUTRON_MODE": "${dictionary.openstack_network_mode}",
           "BKC_NEUTRON_EXTERNAL_BRIDGE": "${dictionary.neutron_external_bridge}",
           "BKC_NEUTRON_PHYSNET": "${dictionary.neutron_physnet}",
-          "BKC_ENABLE_NETWORK_CONFIG": "${inputs.enable_network_config}"
+          "BKC_ENABLE_NETWORK_CONFIG": "${inputs.enable_network_config}",
+          "BKC_OPENSTACK_SMOKE_MODE": "${inputs.smoke_mode}"
         }
       },
       "produces": [
@@ -110,7 +115,8 @@
         "environment": {
           "BKC_NEUTRON_MODE": "${dictionary.openstack_network_mode}",
           "BKC_NEUTRON_EXTERNAL_BRIDGE": "${dictionary.neutron_external_bridge}",
-          "BKC_NEUTRON_PHYSNET": "${dictionary.neutron_physnet}"
+          "BKC_NEUTRON_PHYSNET": "${dictionary.neutron_physnet}",
+          "BKC_OPENSTACK_SMOKE_MODE": "${inputs.smoke_mode}"
         }
       },
       "produces": [

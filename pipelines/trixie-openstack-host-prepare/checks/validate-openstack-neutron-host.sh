@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+smoke_mode="${BKC_OPENSTACK_SMOKE_MODE:-false}"
+
 required_commands=(ip ovs-vsctl sysctl jq)
 for command_name in "${required_commands[@]}"; do
   command -v "${command_name}" >/dev/null 2>&1 || {
@@ -24,15 +26,23 @@ done
 
 for module_name in br_netfilter openvswitch 8021q; do
   if ! lsmod | awk '{print $1}' | grep -qx "${module_name}"; then
+    if [[ "${smoke_mode}" == "true" ]]; then
+      echo "smoke mode: module not currently loaded: ${module_name}"
+      continue
+    fi
     echo "module not currently loaded: ${module_name}" >&2
     exit 1
   fi
 done
 
-[[ "$(sysctl -n net.ipv4.ip_forward)" == "1" ]] || {
-  echo "net.ipv4.ip_forward is not enabled" >&2
-  exit 1
-}
+if [[ "$(sysctl -n net.ipv4.ip_forward)" != "1" ]]; then
+  if [[ "${smoke_mode}" == "true" ]]; then
+    echo "smoke mode: net.ipv4.ip_forward is not enabled"
+  else
+    echo "net.ipv4.ip_forward is not enabled" >&2
+    exit 1
+  fi
+fi
 
 systemctl is-enabled openvswitch-switch >/dev/null
 systemctl is-active openvswitch-switch >/dev/null
@@ -45,5 +55,9 @@ fi
 
 jq -e '.agent_activation == "deferred-to-openstack-installer-provider"' \
   /var/lib/bkc/openstack-neutron-host-prep.json >/dev/null
+
+if [[ "${smoke_mode}" == "true" ]]; then
+  jq -e '.smoke_mode == "true"' /var/lib/bkc/openstack-neutron-host-prep.json >/dev/null
+fi
 
 echo "BKC OpenStack Neutron host validation passed."

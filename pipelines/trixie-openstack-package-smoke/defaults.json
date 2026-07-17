@@ -1,0 +1,33 @@
+{
+  "tenant_slug": "foobar",
+  "target_hosts": [
+    "foobar-crm-01"
+  ],
+  "target_node_id": "node:vm:foobar-crm-01",
+  "source_vm_role": "suitecrm",
+  "recommended_mode": "clone-preferred-existing-vm-allowed",
+  "reuse_warning": "Existing VM reuse is acceptable for a quick dry run but leaves OpenStack packages installed.",
+  "prepare_script": "../trixie-openstack-host-prepare/scripts/prepare-openstack-neutron-host.sh",
+  "validate_script": "../trixie-openstack-host-prepare/checks/validate-openstack-neutron-host.sh",
+  "openstack_network_mode": "ovs",
+  "neutron_external_bridge": "br-ex-smoke",
+  "neutron_physnet": "physnet-smoke",
+  "smoke_mode": true,
+  "enable_network_config": false,
+  "openstack_host_packages": [
+    "crudini",
+    "curl",
+    "jq",
+    "iproute2",
+    "conntrack",
+    "ipset",
+    "ebtables",
+    "bridge-utils",
+    "vlan",
+    "openvswitch-switch",
+    "neutron-common",
+    "neutron-openvswitch-agent",
+    "python3-openstackclient",
+    "python3-neutronclient"
+  ]
+}
