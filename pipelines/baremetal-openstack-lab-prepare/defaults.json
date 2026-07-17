@@ -1,8 +1,14 @@
 {
   "tenant_slug": "lab",
+  "dns_zone": "lab.morgans.home.arpa",
   "rack": "delivery-rack-01",
   "provisioning_network_node_id": "node:network:lab-provisioning",
   "management_network_node_id": "node:network:lab-management",
+  "services_network_node_id": "node:network:lab-services",
+  "tenant_provider_network_node_id": "node:network:lab-tenant-provider",
+  "edge_network_pipeline": "openstack-lab-edge-network-prepare",
+  "workstation_route_cidr": "10.1.0.0/16",
+  "workstation_route_next_hop": "192.168.1.10",
   "dhcp_service_node_id": "node:service:ns1-dhcpd",
   "pxe_service_node_id": "node:service:ns1-pxe",
   "http_image_service_node_id": "node:service:ns1-http-images",
@@ -21,7 +27,8 @@
       "bmc_provider": "redfish-or-ipmi",
       "provisioning_nic_node_id": "node:network_interface:r630-openstack-01-lom1",
       "provisioning_mac": "00:00:00:00:00:00",
-      "management_address": "10.20.0.31"
+      "management_address": "10.1.1.31",
+      "service_address": "10.1.2.31"
     },
     {
       "node_id": "node:physical_machine:r630-openstack-02",
@@ -32,7 +39,8 @@
       "bmc_provider": "redfish-or-ipmi",
       "provisioning_nic_node_id": "node:network_interface:r630-openstack-02-lom1",
       "provisioning_mac": "00:00:00:00:00:00",
-      "management_address": "10.20.0.32"
+      "management_address": "10.1.1.32",
+      "service_address": "10.1.2.32"
     }
   ],
   "validation_events": [

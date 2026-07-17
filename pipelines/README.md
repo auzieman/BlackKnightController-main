@@ -33,6 +33,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `trixie-openstack-package-smoke/`: lab-safe package/config smoke lane that can
   reuse or clone the foo.bar SuiteCRM Trixie VM to test OpenStack host-prep
   scripts without claiming bare-metal readiness.
+- `openstack-lab-edge-network-prepare/`: review-first routed edge plan for the
+  10.1.x OpenStack lab networks, split DNS, workstation routes, bastion,
+  nginx proxy, and service migration targets.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.

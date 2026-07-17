@@ -1,0 +1,173 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "openstack-lab-edge-network-prepare",
+  "name": "OpenStack Lab Edge Network Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Declare and validate the routed edge design for the OpenStack lab: 10.1.x networks, split DNS, workstation route intent, bastion, nginx edge, and service migration targets.",
+  "tags": [
+    "bkc",
+    "openstack",
+    "network",
+    "dns",
+    "bastion",
+    "nginx",
+    "routing",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "route_anchor": "node:vm:ns1",
+    "home_lan": "node:network:home-lan",
+    "lab_services": "node:network:lab-services"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_route_changes": {
+      "required": false,
+      "default": false
+    },
+    "enable_dns_changes": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "route-and-dns-changes-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_route_changes": "${inputs.enable_route_changes}",
+        "enable_dns_changes": "${inputs.enable_dns_changes}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-edge-network-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:openstack_edge.intent_loaded",
+        "fact:lab_networks",
+        "fact:service_migration_targets"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "declare-lab-networks",
+      "action": "node.networks.register.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "home_lan": "${dictionary.home_lan}",
+        "lab_networks": "${dictionary.lab_networks}",
+        "dns_zone": "${dictionary.dns_zone}"
+      },
+      "produces": [
+        "node:network",
+        "node:dns_zone",
+        "relationship:uses_dns_zone"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-ns1-route-anchor",
+      "action": "network.route.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "route_anchor": "${dictionary.route_anchor}",
+        "lab_networks": "${dictionary.lab_networks}",
+        "enabled": "${inputs.enable_route_changes}"
+      },
+      "produces": [
+        "event:route_anchor.plan_created",
+        "relationship:routes_to"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-workstation-access",
+      "action": "workstation.network_access.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "route": "${dictionary.workstation_route}",
+        "enabled": "${inputs.enable_route_changes}",
+        "dns_enabled": "${inputs.enable_dns_changes}",
+        "preferred_managers": [
+          "NetworkManager",
+          "systemd-resolved"
+        ]
+      },
+      "produces": [
+        "artifact:workstation-route-intent",
+        "artifact:workstation-split-dns-intent"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-edge-nodes",
+      "action": "node.vm.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "nodes": "${dictionary.edge_nodes}"
+      },
+      "produces": [
+        "node:vm:bastion",
+        "node:vm:nginx-edge",
+        "relationship:bridges_access_to",
+        "relationship:proxies"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-service-migration-targets",
+      "action": "service.migration.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "services": "${dictionary.service_migration_targets}",
+        "dns_zone": "${dictionary.dns_zone}"
+      },
+      "produces": [
+        "event:service_migration.plan_created",
+        "relationship:planned_for_network"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "record-edge-network-evidence",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "checks": [
+          "home lan remains dhcp owned by home router",
+          "lab subnets route through ns1 or bastion",
+          "split dns zone avoids .local",
+          "bastion has home lan and lab management reachability",
+          "nginx edge can proxy selected lab services"
+        ]
+      },
+      "produces": [
+        "node:validation_evidence",
+        "event:openstack_edge.plan_validated"
+      ],
+      "timeout_seconds": 30
+    }
+  ],
+  "notes": "Review-first edge network plan. Actual route, DNS, VLAN, and VM mutations should stay gated until switch/VLAN facts and ns1 interface mappings are confirmed."
+}

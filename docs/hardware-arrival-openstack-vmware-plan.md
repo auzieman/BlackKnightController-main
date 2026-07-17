@@ -69,6 +69,18 @@ Before touching the R630s, BKC can smoke test the package/config path with
 foo.bar SuiteCRM Trixie VM. That proves the repeatable install/config mechanics
 without claiming the VM can run a real OpenStack role.
 
+The edge network should be planned before migrating BKC into the new platform.
+Use `10.1.0.0/24` for provisioning, `10.1.1.0/24` for management, and
+`10.1.2.0/24` for service/API exposure. Browser-facing services should be
+reached through a planned `nginx-edge-01` proxy, and operator SSH should enter
+through a planned `bastion-01` instead of putting every lab service directly on
+the home LAN.
+
+The preferred DNS suffix is `lab.morgans.home.arpa`, not `.local`, because
+`.local` commonly collides with mDNS. The first draft recipe for this layer is
+`pipelines/openstack-lab-edge-network-prepare/`; the full topology note is
+`docs/openstack-lab-topology.md`.
+
 ## VMware Evaluation Preparation
 
 The VMware lane should keep repository data sanitized. VMware installation

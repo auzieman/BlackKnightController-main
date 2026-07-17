@@ -132,6 +132,25 @@
       "timeout_seconds": 45
     },
     {
+      "id": "plan-openstack-edge-network",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "pipeline_id": "${dictionary.edge_network_pipeline}",
+        "dns_zone": "${dictionary.dns_zone}",
+        "workstation_route": {
+          "cidr": "${dictionary.workstation_route_cidr}",
+          "next_hop": "${dictionary.workstation_route_next_hop}"
+        }
+      },
+      "produces": [
+        "event:openstack_edge_network.planned",
+        "relationship:uses_pipeline"
+      ],
+      "timeout_seconds": 30
+    },
+    {
       "id": "validate-base-os-image",
       "action": "provisioning.image.validate",
       "transport": "internal",
