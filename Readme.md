@@ -79,6 +79,20 @@ templates, inspect stages, queue work, and review recent run state.
 
 ## Core Concepts
 
+### Hardware Bring-Up
+
+BKC is being shaped to manage physical lab hardware before an operating system
+exists. The current hardware path covers IPMI/iDRAC identity, managed switch
+port evidence, PXE validation, OpenStack/VMware tracks, and later service
+migration into the new lab networks.
+
+Start with [docs/hardware-bringup-ipmi-switch-pxe.md](docs/hardware-bringup-ipmi-switch-pxe.md)
+for the operator checklist, then see
+[docs/bare-metal-provisioning-architecture.md](docs/bare-metal-provisioning-architecture.md),
+[docs/openstack-lab-topology.md](docs/openstack-lab-topology.md), and
+[docs/switch-discovery-and-pxe.md](docs/switch-discovery-and-pxe.md) for the
+model details.
+
 ### Resource Graph
 
 BKC treats infrastructure as related resources: hosts, groups, VMs, Docker

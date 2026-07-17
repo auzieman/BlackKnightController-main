@@ -77,6 +77,25 @@ Initial module goals:
 
 The detailed plan lives in `docs/vcenter-simulator-module-plan.md`.
 
+## Priority 1B: Physical Hardware Bring-Up
+
+The incoming R630 servers and Dell PowerConnect N3048 should be brought into BKC
+as managed physical resources before operating systems or hypervisors are
+installed.
+
+Near-term work:
+
+- record IPMI/iDRAC identity, credential references, boot NIC MACs, and switch
+  ports in runtime dictionaries
+- validate the N3048 read-only discovery lane
+- tie switch MAC-table/LLDP observations to BKC NIC nodes
+- require BMC and switch-port evidence before destructive PXE installs
+- keep OpenStack and VMware tracks behind review gates until real hardware
+  identity is confirmed
+
+The operator checklist lives in
+`docs/hardware-bringup-ipmi-switch-pxe.md`.
+
 ## Priority 2: Convert K3s Housekeeping To Actions
 
 The k3s housekeeping pipeline is the best proving ground because it now includes several reusable operation types:
