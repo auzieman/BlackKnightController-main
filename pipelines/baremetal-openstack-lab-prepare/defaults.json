@@ -1,0 +1,48 @@
+{
+  "tenant_slug": "lab",
+  "rack": "delivery-rack-01",
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "management_network_node_id": "node:network:lab-management",
+  "dhcp_service_node_id": "node:service:ns1-dhcpd",
+  "pxe_service_node_id": "node:service:ns1-pxe",
+  "http_image_service_node_id": "node:service:ns1-http-images",
+  "base_os_profile_node_id": "node:provisioning_profile:openstack-base-os",
+  "base_os_image_node_id": "node:image_asset:openstack-base-os-installer",
+  "openstack_installer_provider": "provider:openstack-installer:deferred",
+  "deployment_mode": "two-host-lab",
+  "physical_hosts": [
+    {
+      "node_id": "node:physical_machine:r630-openstack-01",
+      "label": "r630-openstack-01",
+      "model": "Dell PowerEdge R630",
+      "role": "openstack-controller-compute",
+      "bmc_node_id": "node:bmc:r630-openstack-01-idrac",
+      "bmc_provider": "redfish-or-ipmi",
+      "provisioning_nic_node_id": "node:network_interface:r630-openstack-01-lom1",
+      "provisioning_mac": "00:00:00:00:00:00",
+      "management_address": "10.20.0.31"
+    },
+    {
+      "node_id": "node:physical_machine:r630-openstack-02",
+      "label": "r630-openstack-02",
+      "model": "Dell PowerEdge R630",
+      "role": "openstack-compute-storage",
+      "bmc_node_id": "node:bmc:r630-openstack-02-idrac",
+      "bmc_provider": "redfish-or-ipmi",
+      "provisioning_nic_node_id": "node:network_interface:r630-openstack-02-lom1",
+      "provisioning_mac": "00:00:00:00:00:00",
+      "management_address": "10.20.0.32"
+    }
+  ],
+  "validation_events": [
+    "discovery.detected",
+    "bmc.reachable",
+    "dhcp.lease_observed",
+    "pxe.boot_request",
+    "image.checksum_validated",
+    "installer.started",
+    "first_boot.observed",
+    "enrollment.completed",
+    "validation.passed"
+  ]
+}

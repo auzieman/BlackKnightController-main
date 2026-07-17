@@ -1,0 +1,237 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "baremetal-openstack-lab-prepare",
+  "name": "Bare Metal OpenStack Lab Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Prepare the incoming R630-class hardware for an OpenStack lab track through physical identity, PXE readiness, base OS enrollment, and installer handoff validation.",
+  "tags": [
+    "bkc",
+    "bare-metal",
+    "physical",
+    "pxe",
+    "openstack",
+    "r630",
+    "validation",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "controller": "node:vm:ns1",
+    "provisioning_network": "node:network:lab-provisioning",
+    "management_network": "node:network:lab-management",
+    "base_os_profile": "node:provisioning_profile:openstack-base-os",
+    "base_os_image": "node:image_asset:openstack-base-os-installer"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_destructive_install": {
+      "required": false,
+      "default": false
+    },
+    "enable_openstack_install": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-prepared-provisioning-network",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-network-prepare",
+        "network": "${dictionary.provisioning_network_node_id}"
+      }
+    },
+    {
+      "id": "requires-dhcp-pxe-boundary",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-dhcp-prepare",
+        "dhcp_service": "${dictionary.dhcp_service_node_id}"
+      }
+    },
+    {
+      "id": "physical-install-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_destructive_install": "${inputs.enable_destructive_install}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-hardware-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:hardware.intent_loaded",
+        "fact:physical_hosts"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "register-physical-nodes",
+      "action": "node.physical.register.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "rack": "${dictionary.rack}"
+      },
+      "produces": [
+        "node:physical_machine",
+        "node:bmc",
+        "node:network_interface",
+        "relationship:controlled_by",
+        "relationship:has_interface"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-bmc-access",
+      "action": "bmc.reachability.validate",
+      "transport": "bkc-bmc",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "mode": "evidence-only"
+      },
+      "produces": [
+        "event:bmc.reachable",
+        "evidence:bmc_endpoint"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "validate-provisioning-services",
+      "action": "provisioning.services.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "dhcp_service": "${dictionary.dhcp_service_node_id}",
+        "pxe_service": "${dictionary.pxe_service_node_id}",
+        "http_image_service": "${dictionary.http_image_service_node_id}",
+        "network": "${dictionary.provisioning_network_node_id}"
+      },
+      "produces": [
+        "event:dhcp.boundary_validated",
+        "event:pxe.service_ready",
+        "event:http_image_service.ready"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "validate-base-os-image",
+      "action": "provisioning.image.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "image_asset": "${dictionary.base_os_image_node_id}",
+        "checksum_policy": "required"
+      },
+      "produces": [
+        "event:image.checksum_validated",
+        "evidence:image_asset"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "render-openstack-base-boot-intent",
+      "action": "provisioning.ipxe.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "profile": "${dictionary.base_os_profile_node_id}",
+        "hosts": "${dictionary.physical_hosts}",
+        "one_shot": true
+      },
+      "produces": [
+        "event:ipxe.script_rendered",
+        "artifact:openstack-base-boot-intent"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-base-os-install",
+      "action": "provisioning.install.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "profile": "${dictionary.base_os_profile_node_id}",
+        "enabled": "${inputs.enable_destructive_install}"
+      },
+      "produces": [
+        "event:installer.plan_created",
+        "relationship:applies_profile"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-firstboot-enrollment",
+      "action": "enrollment.bkc_ssh.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "expected_network": "${dictionary.management_network_node_id}"
+      },
+      "produces": [
+        "event:enrollment.plan_created",
+        "relationship:managed_by"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-openstack-host-baseline",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "checks": [
+          "bmc reachable",
+          "first boot observed",
+          "bkc ssh enrollment completed",
+          "cpu virtualization flags present",
+          "expected disks visible",
+          "management and provisioning NICs visible",
+          "time sync healthy"
+        ]
+      },
+      "produces": [
+        "event:openstack_host.baseline_validated",
+        "node:validation_evidence"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "plan-openstack-installer-handoff",
+      "action": "openstack.installer.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "provider": "${dictionary.openstack_installer_provider}",
+        "deployment_mode": "${dictionary.deployment_mode}",
+        "hosts": "${dictionary.physical_hosts}",
+        "enabled": "${inputs.enable_openstack_install}"
+      },
+      "produces": [
+        "event:openstack.installer_handoff_planned",
+        "artifact:openstack-inventory"
+      ],
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Delivery-day OpenStack track. Keep destructive installation and OpenStack provider execution disabled until real BMC, MAC, image, and network facts are filled in."
+}

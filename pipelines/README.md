@@ -24,6 +24,12 @@ See `docs/pipeline-folder-layout.md` for the contract.
   canvas, filters, layout controls, context menu, and position persistence.
 - `baremetal-r630-pxe-validation/`: validation-first scaffold for managing a
   powered-off physical server through BMC, NIC/MAC, PXE image, and evidence.
+- `baremetal-openstack-lab-prepare/`: delivery-day OpenStack track scaffold for
+  physical host identity, PXE readiness, base OS enrollment, and installer
+  handoff validation.
+- `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
+  scaffold for operator-supplied installer media, ESXi-style boot intent, first
+  boot validation, and optional vCenter registration.
 - `small-office-foobar-reference/`: recipe-level `foo.bar` small-office demo
   scaffold for identity/storage, CRM, two Windows helpdesk workstations, and
   two Linux developer workstations.
@@ -37,6 +43,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 
 See `docs/small-office-foobar-example.md` for the packaged architecture,
 credentials, validation evidence, and BKC SSH handoff pattern.
+
+See `docs/hardware-arrival-openstack-vmware-plan.md` for the incoming hardware
+OpenStack and VMware evaluation preparation tracks.
 
 ## FooBar Demo Links
 

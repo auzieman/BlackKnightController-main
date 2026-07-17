@@ -1,0 +1,234 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "baremetal-vmware-trial-prepare",
+  "name": "Bare Metal VMware Trial Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Prepare the incoming R630-class hardware for a VMware evaluation track through physical identity, operator-supplied installer media, PXE readiness, first boot validation, and optional vCenter registration.",
+  "tags": [
+    "bkc",
+    "bare-metal",
+    "physical",
+    "pxe",
+    "vmware",
+    "esxi",
+    "r630",
+    "validation",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "controller": "node:vm:ns1",
+    "provisioning_network": "node:network:lab-provisioning",
+    "management_network": "node:network:lab-management",
+    "vmware_profile": "node:provisioning_profile:vmware-esxi-evaluation",
+    "vmware_image": "node:image_asset:vmware-esxi-installer-operator-supplied",
+    "vcenter": "node:service:vcenter-trial"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_destructive_install": {
+      "required": false,
+      "default": false
+    },
+    "enable_vcenter_registration": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-prepared-provisioning-network",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-network-prepare",
+        "network": "${dictionary.provisioning_network_node_id}"
+      }
+    },
+    {
+      "id": "requires-dhcp-pxe-boundary",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "ns1-provisioning-dhcp-prepare",
+        "dhcp_service": "${dictionary.dhcp_service_node_id}"
+      }
+    },
+    {
+      "id": "operator-supplied-media-required",
+      "kind": "manual.approval",
+      "with": {
+        "image_asset": "${dictionary.vmware_image_node_id}",
+        "requires_local_media_reference": true
+      }
+    },
+    {
+      "id": "physical-install-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_destructive_install": "${inputs.enable_destructive_install}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-hardware-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:hardware.intent_loaded",
+        "fact:physical_hosts"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "register-physical-nodes",
+      "action": "node.physical.register.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "rack": "${dictionary.rack}"
+      },
+      "produces": [
+        "node:physical_machine",
+        "node:bmc",
+        "node:network_interface",
+        "relationship:controlled_by",
+        "relationship:has_interface"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-bmc-access",
+      "action": "bmc.reachability.validate",
+      "transport": "bkc-bmc",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "mode": "evidence-only"
+      },
+      "produces": [
+        "event:bmc.reachable",
+        "evidence:bmc_endpoint"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "validate-provisioning-services",
+      "action": "provisioning.services.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "dhcp_service": "${dictionary.dhcp_service_node_id}",
+        "pxe_service": "${dictionary.pxe_service_node_id}",
+        "http_image_service": "${dictionary.http_image_service_node_id}",
+        "network": "${dictionary.provisioning_network_node_id}"
+      },
+      "produces": [
+        "event:dhcp.boundary_validated",
+        "event:pxe.service_ready",
+        "event:http_image_service.ready"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "validate-operator-supplied-media",
+      "action": "provisioning.image.validate",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "image_asset": "${dictionary.vmware_image_node_id}",
+        "checksum_policy": "required",
+        "license_policy": "operator-supplied"
+      },
+      "produces": [
+        "event:image.checksum_validated",
+        "evidence:image_asset"
+      ],
+      "timeout_seconds": 45
+    },
+    {
+      "id": "render-vmware-kickstart-intent",
+      "action": "vmware.esxi.kickstart.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "profile": "${dictionary.vmware_profile_node_id}",
+        "hosts": "${dictionary.physical_hosts}",
+        "one_shot": true,
+        "management_network": "${dictionary.management_network_node_id}"
+      },
+      "produces": [
+        "event:vmware.kickstart_rendered",
+        "artifact:vmware-esxi-boot-intent"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-esxi-install",
+      "action": "provisioning.install.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "hosts": "${dictionary.physical_hosts}",
+        "profile": "${dictionary.vmware_profile_node_id}",
+        "enabled": "${inputs.enable_destructive_install}"
+      },
+      "produces": [
+        "event:installer.plan_created",
+        "relationship:applies_profile"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "validate-vmware-firstboot",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "checks": [
+          "bmc reachable",
+          "one-shot pxe state cleared",
+          "management endpoint reachable",
+          "management NIC configured",
+          "datastore visible",
+          "host API responds",
+          "evaluation or license state recorded"
+        ]
+      },
+      "produces": [
+        "event:vmware_host.baseline_validated",
+        "node:validation_evidence"
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "id": "plan-vcenter-registration",
+      "action": "vmware.vcenter.registration.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "provider": "${dictionary.vmware_provider}",
+        "vcenter": "${dictionary.vcenter_node_id}",
+        "hosts": "${dictionary.physical_hosts}",
+        "enabled": "${inputs.enable_vcenter_registration}"
+      },
+      "produces": [
+        "event:vmware.vcenter_registration_planned",
+        "relationship:managed_by"
+      ],
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Delivery-day VMware evaluation track. Do not commit VMware media, license keys, or secrets; only commit sanitized image references and validation expectations."
+}

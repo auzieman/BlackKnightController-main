@@ -1,0 +1,38 @@
+{
+  "tenant_slug": "lab",
+  "rack": "delivery-rack-01",
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "management_network_node_id": "node:network:lab-management",
+  "dhcp_service_node_id": "node:service:ns1-dhcpd",
+  "pxe_service_node_id": "node:service:ns1-pxe",
+  "http_image_service_node_id": "node:service:ns1-http-images",
+  "vmware_profile_node_id": "node:provisioning_profile:vmware-esxi-evaluation",
+  "vmware_image_node_id": "node:image_asset:vmware-esxi-installer-operator-supplied",
+  "vmware_provider": "provider:vmware:deferred",
+  "vcenter_node_id": "node:service:vcenter-trial",
+  "physical_hosts": [
+    {
+      "node_id": "node:physical_machine:r630-vmware-01",
+      "label": "r630-vmware-01",
+      "model": "Dell PowerEdge R630",
+      "role": "vmware-esxi-host",
+      "bmc_node_id": "node:bmc:r630-vmware-01-idrac",
+      "bmc_provider": "redfish-or-ipmi",
+      "provisioning_nic_node_id": "node:network_interface:r630-vmware-01-lom1",
+      "provisioning_mac": "00:00:00:00:00:00",
+      "management_address": "10.20.0.41",
+      "datastore_policy": "local-lab-datastore"
+    }
+  ],
+  "validation_events": [
+    "discovery.detected",
+    "bmc.reachable",
+    "dhcp.lease_observed",
+    "pxe.boot_request",
+    "image.checksum_validated",
+    "installer.started",
+    "first_boot.observed",
+    "vmware.management_api_reachable",
+    "validation.passed"
+  ]
+}
