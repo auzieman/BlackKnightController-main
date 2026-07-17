@@ -1,0 +1,41 @@
+{
+  "tenant_slug": "lab",
+  "source_platform": "platform:vmware",
+  "requires_pipeline": "baremetal-vmware-trial-prepare",
+  "reused_pipeline": "rx-demo-k3s-redeploy-from-git",
+  "dns_zone": "lab.morgans.home.arpa",
+  "management_network_node_id": "node:network:lab-management",
+  "services_network_node_id": "node:network:lab-services",
+  "registry_node_id": "node:service:lab-registry",
+  "vmware_cluster_node_id": "node:cluster:vmware-lab",
+  "k3s_cluster_node_id": "node:cluster:k3s-on-vmware-lab",
+  "k3s_nodes": [
+    {
+      "node_id": "node:vm:k3s-vmw-01",
+      "name": "k3s-vmw-01",
+      "role": "server",
+      "management_address": "10.1.1.61",
+      "service_address": "10.1.2.61"
+    },
+    {
+      "node_id": "node:vm:k3s-vmw-02",
+      "name": "k3s-vmw-02",
+      "role": "agent",
+      "management_address": "10.1.1.62",
+      "service_address": "10.1.2.62"
+    },
+    {
+      "node_id": "node:vm:k3s-vmw-03",
+      "name": "k3s-vmw-03",
+      "role": "agent",
+      "management_address": "10.1.1.63",
+      "service_address": "10.1.2.63"
+    }
+  ],
+  "reuse_bindings": {
+    "kubernetes_cluster": "node:cluster:k3s-on-vmware-lab",
+    "target_platform": "platform:vmware",
+    "registry_node_id": "node:service:lab-registry",
+    "namespace": "rx-demo"
+  }
+}

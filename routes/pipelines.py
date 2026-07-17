@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from services import bkc_db
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
@@ -11,6 +11,7 @@ from services.automation_runs import get_run, load_runs
 from services.integration_store import load_proxmox_snapshot
 from services.job_queue import SLOW_QUEUE_NAME, enqueue_job, job_queue_enabled
 from services.pipeline_catalog import (
+    catalog_signature,
     create_custom_pipeline,
     demo_pipelines,
     pipeline_by_id,
@@ -29,6 +30,11 @@ from services.pipeline_executor import (
 from services.tenant_context import get_current_tenant_id, get_effective_tenant_slug
 
 pipelines_blueprint = Blueprint("pipelines", __name__)
+
+
+@pipelines_blueprint.route("/api/v1/pipelines/catalog-signature", methods=["GET"])
+def pipeline_catalog_signature_api():
+    return jsonify(catalog_signature())
 
 
 PIPELINE_TAGS = (
@@ -786,6 +792,7 @@ def pipelines():
     return render_template(
         "pipelines.html.j2",
         pipelines=visible_pipelines,
+        catalog_signature=catalog_signature(),
         selected_pipeline=selected_pipeline,
         selected_dictionary=resolve_pipeline_dictionary(selected_pipeline),
         selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),

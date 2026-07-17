@@ -39,6 +39,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.
+- `vmware-k3s-lab-prepare/`: draft composition lane showing how ESXi capacity
+  can bind target nodes and dictionary values, then reuse the existing k3s
+  deployment recipe instead of copying it.
 - `small-office-foobar-reference/`: recipe-level `foo.bar` small-office demo
   scaffold for identity/storage, CRM, two Windows helpdesk workstations, and
   two Linux developer workstations.

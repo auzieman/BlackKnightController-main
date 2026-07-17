@@ -579,6 +579,47 @@ def test_folder_pipeline_defaults_workflow_to_id(monkeypatch, tmp_path):
     assert pipeline["description"] == "Draft recipe without executor wiring."
 
 
+def test_folder_pipeline_catalog_signature_changes_without_restart(monkeypatch, tmp_path):
+    repo_dir = tmp_path / "repo-pipelines" / "Live_Recipe"
+    repo_dir.mkdir(parents=True)
+    pipeline_path = repo_dir / "pipeline.json"
+    pipeline_path.write_text(
+        """{
+  "id": "live-folder-pipeline",
+  "name": "Live Folder Pipeline",
+  "description": "Live recipe.",
+  "stages": ["preflight"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("BKC_REPO_PIPELINE_FOLDERS_PATH", str(tmp_path / "repo-pipelines"))
+    monkeypatch.setenv("BKC_PIPELINE_FOLDERS_PATH", str(tmp_path / "runtime-pipelines"))
+
+    first_signature = pipeline_catalog.catalog_signature()
+    first_pipeline = pipeline_catalog.pipeline_by_id("live-folder-pipeline")
+    assert first_pipeline is not None
+    assert first_pipeline["stages"] == ["preflight"]
+
+    pipeline_path.write_text(
+        """{
+  "id": "live-folder-pipeline",
+  "name": "Live Folder Pipeline",
+  "description": "Live recipe.",
+  "stages": ["preflight", "validate"]
+}
+""",
+        encoding="utf-8",
+    )
+
+    second_signature = pipeline_catalog.catalog_signature()
+    second_pipeline = pipeline_catalog.pipeline_by_id("live-folder-pipeline")
+    assert second_pipeline is not None
+    assert second_pipeline["stages"] == ["preflight", "validate"]
+    assert second_signature != first_signature
+
+
 def test_ns1_dhcp_prepare_pipeline_resolves_runtime_dictionary():
     pipeline = pipeline_by_id("ns1-provisioning-dhcp-prepare")
     assert pipeline is not None

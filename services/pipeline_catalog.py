@@ -850,6 +850,47 @@ def _load_json_file(path: Path) -> dict:
     return dict(payload) if isinstance(payload, dict) else {}
 
 
+def _iter_catalog_files(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    if root.is_file():
+        return [root]
+    if not root.is_dir():
+        return []
+    return sorted(path for path in root.rglob("*.json") if path.is_file())
+
+
+def catalog_signature() -> dict:
+    """Return a lightweight version stamp for live pipeline catalog files."""
+    roots = [
+        ("definitions", _definitions_path()),
+        ("repo-folder", _repo_pipeline_folders_path()),
+        ("runtime-folder", _pipeline_folders_path()),
+    ]
+    file_count = 0
+    newest_mtime_ns = 0
+    total_size = 0
+    source_counts: dict[str, int] = {}
+    for source_type, root in roots:
+        files = _iter_catalog_files(root)
+        source_counts[source_type] = len(files)
+        for path in files:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            file_count += 1
+            newest_mtime_ns = max(newest_mtime_ns, stat.st_mtime_ns)
+            total_size += stat.st_size
+    return {
+        "file_count": file_count,
+        "newest_mtime_ns": newest_mtime_ns,
+        "total_size": total_size,
+        "source_counts": source_counts,
+        "pipeline_count": len(demo_pipelines()),
+    }
+
+
 def _load_catalog_state() -> dict:
     path = _definitions_path()
     if not path.exists():

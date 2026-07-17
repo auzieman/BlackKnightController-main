@@ -46,6 +46,27 @@ That path is visible inside the running BKC containers as `/app/dictionaries`.
 It is the right place for lab-local lane metadata that should be easy to inspect
 from an editor without opening one giant JSON file.
 
+## Live Loading Contract
+
+Folder-backed pipeline definitions are live catalog data, not application code.
+BKC should pick up these edits on the next request without restarting the
+running container:
+
+- `pipelines/<pipeline-id>/pipeline.json`
+- `pipelines/<pipeline-id>/defaults.json`
+- `pipelines/<pipeline-id>/items/*.json`
+- `dictionaries/pipelines/<Pipeline_Name>/pipeline.json`
+- `dictionaries/pipelines/<Pipeline_Name>/dictionary.json`
+- `dictionaries/pipelines/<Pipeline_Name>/items/*.json`
+
+The pipeline page polls `/api/v1/pipelines/catalog-signature` and shows a
+refresh notice when those files change. A BKC service restart should only be
+needed for Python executor behavior, Flask routes, database migrations, frontend
+assets, or other feature code changes.
+
+Runtime folder pipelines override repository folder pipelines with the same
+`id`, so lab-local edits can be tested without changing the Git-backed recipe.
+
 Pipeline variables should follow explicit scope rules so portable recipes can be
 reused with lab-local overrides. See
 [`pipeline-dictionary-scope.md`](pipeline-dictionary-scope.md) for the proposed

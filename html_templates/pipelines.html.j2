@@ -4,9 +4,7 @@
 {% block title %}Pipelines{% endblock %}
 {% block page_heading %}Pipelines{% endblock %}
 
-{% block head_extra %}
-    <meta http-equiv="refresh" content="8">
-{% endblock %}
+{% block head_extra %}{% endblock %}
 
 {% block content %}
     <section class="pipeline-card pipeline-console-filter">
@@ -40,6 +38,13 @@
                 <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Reset</a>
             </div>
         </form>
+        <div id="pipeline-catalog-live-notice"
+             class="workflow-empty top-gap-sm"
+             hidden
+             data-signature="{{ catalog_signature|tojson|forceescape }}"
+             data-endpoint="{{ url_for('pipelines.pipeline_catalog_signature_api') }}">
+            Pipeline catalog files changed. <a href="{{ request.full_path }}">Refresh pipeline view</a>
+        </div>
     </section>
 
     <section class="pipeline-console-layout top-gap">
@@ -394,4 +399,45 @@
             </section>
         {% endfor %}
     </section>
+
+    <script>
+        (function () {
+            const notice = document.getElementById("pipeline-catalog-live-notice");
+            if (!notice || !window.fetch) {
+                return;
+            }
+            let current = {};
+            try {
+                current = JSON.parse(notice.dataset.signature || "{}");
+            } catch (error) {
+                current = {};
+            }
+            const endpoint = notice.dataset.endpoint;
+            function sameSignature(next) {
+                return next
+                    && next.file_count === current.file_count
+                    && next.newest_mtime_ns === current.newest_mtime_ns
+                    && next.total_size === current.total_size
+                    && next.pipeline_count === current.pipeline_count;
+            }
+            async function pollCatalog() {
+                try {
+                    const response = await fetch(endpoint, {
+                        headers: { "Accept": "application/json" },
+                        credentials: "same-origin"
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    const next = await response.json();
+                    if (!sameSignature(next)) {
+                        notice.hidden = false;
+                    }
+                } catch (error) {
+                    // Polling is advisory. The normal page request still loads live catalog state.
+                }
+            }
+            window.setInterval(pollCatalog, 8000);
+        }());
+    </script>
 {% endblock %}
