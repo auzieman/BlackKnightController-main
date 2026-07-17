@@ -63,6 +63,16 @@ The VMware lane should keep repository data sanitized. VMware installation
 media, licenses, and evaluation entitlements are operator-supplied and should
 not be committed.
 
+Current lab media reference:
+
+```text
+/home/auzieman/Projects/blackknightcontroller-vmware/VMware-VMvisor-Installer-8.0U3e-24677879.x86_64.iso
+sha256: 9782c96ffd01cc56da17ec31573da69f4cba2f9402e67c8b55d05d9472c7376a
+```
+
+This path is a local operator media cache. BKC may validate and stage from it,
+but the ISO must remain outside git.
+
 The useful first proof is:
 
 ```text

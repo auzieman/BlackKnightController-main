@@ -8,6 +8,18 @@ supplied by the operator and are not committed to the repository. BKC should
 only store sanitized node identity, boot intent, validation evidence, and
 references to local image assets.
 
+Current lab media reference:
+
+- Source path:
+  `/home/auzieman/Projects/blackknightcontroller-vmware/VMware-VMvisor-Installer-8.0U3e-24677879.x86_64.iso`
+- Version label: `8.0U3e`
+- Build: `24677879`
+- SHA256:
+  `9782c96ffd01cc56da17ec31573da69f4cba2f9402e67c8b55d05d9472c7376a`
+
+The ISO itself remains outside the repository. The repository `.gitignore`
+already excludes `*.iso`.
+
 The runnable version should prove that BKC can:
 
 1. Register a physical host and BMC before an OS exists.

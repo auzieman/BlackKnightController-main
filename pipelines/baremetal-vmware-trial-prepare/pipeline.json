@@ -62,7 +62,9 @@
       "kind": "manual.approval",
       "with": {
         "image_asset": "${dictionary.vmware_image_node_id}",
-        "requires_local_media_reference": true
+        "requires_local_media_reference": true,
+        "expected_filename": "${dictionary.vmware_operator_media.filename}",
+        "commit_policy": "${dictionary.vmware_operator_media.commit_policy}"
       }
     },
     {
@@ -148,6 +150,10 @@
       "risk": "low",
       "with": {
         "image_asset": "${dictionary.vmware_image_node_id}",
+        "source_path": "${dictionary.vmware_operator_media.source_path}",
+        "expected_filename": "${dictionary.vmware_operator_media.filename}",
+        "expected_size_bytes": "${dictionary.vmware_operator_media.size_bytes}",
+        "expected_sha256": "${dictionary.vmware_operator_media.sha256}",
         "checksum_policy": "required",
         "license_policy": "operator-supplied"
       },
