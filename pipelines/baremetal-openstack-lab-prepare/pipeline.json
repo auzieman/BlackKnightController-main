@@ -216,6 +216,22 @@
       "timeout_seconds": 120
     },
     {
+      "id": "prepare-trixie-neutron-hosts",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "pipeline_id": "${dictionary.host_prepare_pipeline}",
+        "hosts": "${dictionary.physical_hosts}",
+        "enabled": "${inputs.enable_openstack_install}"
+      },
+      "produces": [
+        "event:openstack_host.neutron_prepare_planned",
+        "relationship:uses_pipeline"
+      ],
+      "timeout_seconds": 60
+    },
+    {
       "id": "plan-openstack-installer-handoff",
       "action": "openstack.installer.plan",
       "transport": "internal",

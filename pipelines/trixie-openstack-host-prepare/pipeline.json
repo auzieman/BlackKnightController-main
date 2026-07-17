@@ -1,0 +1,149 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "trixie-openstack-host-prepare",
+  "name": "Trixie OpenStack Host Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Prepare an enrolled Debian Trixie host for the OpenStack lab track by installing Neutron/Open vSwitch packages, applying kernel networking settings, and recording validation evidence.",
+  "tags": [
+    "bkc",
+    "debian",
+    "trixie",
+    "openstack",
+    "neutron",
+    "openvswitch",
+    "postinstall",
+    "validation",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "profile": "node:provisioning_profile:openstack-base-os",
+    "network_profile": "profile:networking:openstack-neutron-ovs"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_package_install": {
+      "required": false,
+      "default": false
+    },
+    "enable_network_config": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-enrolled-trixie-hosts",
+      "kind": "node.identity.required",
+      "with": {
+        "hosts": "${dictionary.target_hosts}",
+        "required_facts": [
+          "os.id=debian",
+          "os.version=trixie",
+          "bkc_ssh.enrolled=true"
+        ]
+      }
+    },
+    {
+      "id": "network-config-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_package_install": "${inputs.enable_package_install}",
+        "enable_network_config": "${inputs.enable_network_config}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-openstack-host-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:openstack_host.intent_loaded",
+        "fact:openstack_host_packages"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "prepare-neutron-host-packages",
+      "action": "ssh.script.run",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "hosts": "${dictionary.target_hosts}",
+        "script": "${dictionary.prepare_script}",
+        "enabled": "${inputs.enable_package_install}",
+        "environment": {
+          "BKC_OPENSTACK_PACKAGES": "${dictionary.openstack_host_packages}",
+          "BKC_NEUTRON_MODE": "${dictionary.openstack_network_mode}",
+          "BKC_NEUTRON_EXTERNAL_BRIDGE": "${dictionary.neutron_external_bridge}",
+          "BKC_NEUTRON_PHYSNET": "${dictionary.neutron_physnet}",
+          "BKC_ENABLE_NETWORK_CONFIG": "${inputs.enable_network_config}"
+        }
+      },
+      "produces": [
+        "package:openvswitch-switch",
+        "package:neutron-openvswitch-agent",
+        "event:openstack_host.packages_prepared"
+      ],
+      "timeout_seconds": 1200
+    },
+    {
+      "id": "validate-neutron-host-readiness",
+      "action": "ssh.script.run",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.target_hosts}",
+        "script": "${dictionary.validate_script}",
+        "environment": {
+          "BKC_NEUTRON_MODE": "${dictionary.openstack_network_mode}",
+          "BKC_NEUTRON_EXTERNAL_BRIDGE": "${dictionary.neutron_external_bridge}",
+          "BKC_NEUTRON_PHYSNET": "${dictionary.neutron_physnet}"
+        }
+      },
+      "produces": [
+        "event:openstack_host.neutron_ready",
+        "node:validation_evidence"
+      ],
+      "timeout_seconds": 180
+    },
+    {
+      "id": "record-openstack-network-profile",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "hosts": "${dictionary.target_hosts}",
+        "relationships": [
+          {
+            "type": "has_profile",
+            "target_id": "profile:networking:openstack-neutron-ovs",
+            "confidence": "validated"
+          },
+          {
+            "type": "prepared_for",
+            "target_id": "platform:openstack",
+            "confidence": "planned"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:openstack-network-profile"
+      ],
+      "timeout_seconds": 15
+    }
+  ],
+  "notes": "This prepares Trixie for OpenStack networking only. Neutron agent activation waits for the OpenStack installer provider because it needs controller credentials and message-bus configuration."
+}

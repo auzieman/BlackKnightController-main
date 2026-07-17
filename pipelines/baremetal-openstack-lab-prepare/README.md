@@ -15,9 +15,11 @@ Trixie smoke lane:
 2. Validate BMC, DHCP/PXE, HTTP image assets, and checksums.
 3. Install a supported base OS through one-shot PXE.
 4. Enroll the host with BKC SSH and fact collection.
-5. Validate virtualization extensions, disks, NICs, time sync, and package
+5. Prepare the Trixie host for OpenStack networking with the
+   `trixie-openstack-host-prepare` lane.
+6. Validate virtualization extensions, disks, NICs, time sync, and package
    baseline.
-6. Hand off to the selected OpenStack installer provider.
+7. Hand off to the selected OpenStack installer provider.
 
 Installer-specific choices such as Kolla Ansible, OpenStack Ansible, or another
 provider belong behind provider actions. The node and evidence model should not

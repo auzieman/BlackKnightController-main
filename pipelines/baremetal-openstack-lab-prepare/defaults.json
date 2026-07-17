@@ -8,6 +8,7 @@
   "http_image_service_node_id": "node:service:ns1-http-images",
   "base_os_profile_node_id": "node:provisioning_profile:openstack-base-os",
   "base_os_image_node_id": "node:image_asset:openstack-base-os-installer",
+  "host_prepare_pipeline": "trixie-openstack-host-prepare",
   "openstack_installer_provider": "provider:openstack-installer:deferred",
   "deployment_mode": "two-host-lab",
   "physical_hosts": [
@@ -43,6 +44,7 @@
     "installer.started",
     "first_boot.observed",
     "enrollment.completed",
+    "openstack_host.neutron_ready",
     "validation.passed"
   ]
 }

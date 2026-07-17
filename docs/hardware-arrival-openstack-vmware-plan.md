@@ -50,12 +50,19 @@ physical_machine
   -> one-shot PXE intent rendered
   -> base OS installed
   -> BKC SSH enrolled
+  -> Trixie Neutron/Open vSwitch host prep completed
   -> virtualization, disk, NIC, and time checks passed
   -> OpenStack installer inventory produced
 ```
 
 Installer choice should remain a provider boundary. Kolla Ansible, OpenStack
 Ansible, or another installer can consume the same normalized host facts later.
+
+The first concrete host-prep recipe is
+`pipelines/trixie-openstack-host-prepare/`. It installs the OpenStack client,
+Neutron host packages, Open vSwitch, kernel module settings, and sysctl values,
+but leaves Neutron agent activation deferred until the control plane provider
+supplies RabbitMQ, auth, and ML2 configuration.
 
 ## VMware Evaluation Preparation
 

@@ -27,6 +27,9 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `baremetal-openstack-lab-prepare/`: delivery-day OpenStack track scaffold for
   physical host identity, PXE readiness, base OS enrollment, and installer
   handoff validation.
+- `trixie-openstack-host-prepare/`: post-enrollment Debian Trixie host prep for
+  Neutron/Open vSwitch packages, kernel networking settings, and validation
+  evidence before the OpenStack installer provider runs.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.
