@@ -1,10 +1,16 @@
 {
   "id": "baremetal-proxmox-trial-prepare",
-  "name": "CANDIDATE — Server2 Proxmox Auto-Install",
+  "name": "20 VIDEO — Server2 Proxmox Auto-Install",
+  "status": "proven",
   "repo": "BlackKnightController",
   "workflow": "baremetal-proxmox-deploy",
   "resource_class": "slow",
-  "tags": ["candidate", "bare-metal", "destructive", "proxmox", "proof-required"],
+  "tags": ["20-video", "proven", "bare-metal", "destructive", "proxmox"],
+  "proof": {
+    "run_id": "01019545-3d0c-42b3-ae8d-97588680e47f",
+    "target": "node:physical_machine:r630-proxmox-01",
+    "evidence": "Fresh destructive Proxmox 9.2.2 install, PERC disk boot, SSH, API, KVM, local storage, and local-lvm validated at 10.20.0.41."
+  },
   "inputs": {
     "tenant_slug": {"required": true, "default": "lab"},
     "enable_pxe_arm": {"required": false, "default": true},

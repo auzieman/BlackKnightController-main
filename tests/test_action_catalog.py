@@ -192,14 +192,14 @@ def test_baremetal_candidate_stage_models_are_single_source_consistent():
         assert catalog == executor == recorded
     openstack = pipeline_by_id("baremetal-openstack-lab-prepare")
     assert openstack["name"] == "10 VIDEO — Server1 One-Shot Trixie"
-    assert openstack["status"] == "candidate"
+    assert openstack["status"] == "proven"
     assert "all-drives" in openstack["tags"]
-    assert openstack["proof"]["baremetal_run_id"] == "db7d9430-c814-4056-a024-2277b505964b"
-    assert openstack["proof"]["completion_run_id"] == "6893b7d4-8e78-466a-a12d-9154ee32dafd"
+    assert openstack["proof"]["baremetal_run_id"] == "036929c1-9e83-417c-bd1a-4e8791c16c66"
 
     proxmox = pipeline_by_id("baremetal-proxmox-trial-prepare")
-    assert "candidate" in proxmox["tags"]
-    assert "proof-required" in proxmox["tags"]
+    assert proxmox["name"] == "20 VIDEO — Server2 Proxmox Auto-Install"
+    assert proxmox["status"] == "proven"
+    assert proxmox["proof"]["run_id"] == "01019545-3d0c-42b3-ae8d-97588680e47f"
 
 
 def test_baremetal_candidates_require_mac_scoped_pxe_defaults():
@@ -289,9 +289,32 @@ def test_server1_pxe_arm_rolls_back_if_bmc_reset_fails():
 
 
 def test_native_openstack_component_is_cataloged_and_packaged():
+    import hashlib
+
     pipeline = pipeline_by_id("native-openstack-all-in-one")
     assert pipeline is not None
+    assert pipeline["name"] == "10B VIDEO — Server1 Native OpenStack + Horizon"
+    assert pipeline["status"] == "proven"
+    assert pipeline["proof"]["run_id"] == "937bd124-c8a1-444b-aceb-3761d1a04f5e"
+    assert [stage["id"] for stage in pipeline["stages"]] == [
+        "install-native-openstack",
+        "validate-openstack-services",
+    ]
+    assert [stage["name"] for stage in workflow_stage_definitions(pipeline["workflow"])] == [
+        "install-native-openstack",
+        "validate-openstack-services",
+    ]
     folder = Path(pipeline["source_path"]).parent
+    assert [fragment["id"] for fragment in pipeline["fragments"]] == [
+        "openstack.readiness",
+        "openstack.keystone-horizon",
+        "openstack.glance-placement",
+        "openstack.nova",
+        "openstack.neutron-ovs",
+    ]
+    for fragment in pipeline["fragments"]:
+        payload = (folder / fragment["path"]).read_bytes()
+        assert hashlib.sha256(payload).hexdigest() == fragment["sha256"]
     for script in (
         "01-foundation-keystone-horizon.sh",
         "02-glance-placement.sh",
@@ -348,6 +371,9 @@ def test_proxmox_candidate_waits_for_fresh_handoff_and_platform_readiness():
     assert "filename|next-server|option" in media
     for capability in ("pveversion", "/dev/kvm", "pvesm status", "127.0.0.1:8006"):
         assert capability in validate
+    assert "chpasswd" in validate
+    assert "api2/json/access/ticket" in validate
+    assert "proxmox_root_pam_login=valid" in validate
 
 
 def test_openstack_candidate_hands_installer_reboot_to_disk():

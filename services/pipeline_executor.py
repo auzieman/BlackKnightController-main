@@ -3433,6 +3433,13 @@ WORKFLOW_DEFINITIONS["baremetal-proxmox-deploy"] = {
         {"name": "validate-proxmox-firstboot", "kind": "video-proxmox-validate", "active": "Waiting for disk boot and validating Proxmox API, SSH, and KVM.", "timeout": 3600},
     ], "complete_message": "Server2 bare-metal Proxmox deployment completed and validated.",
 }
+WORKFLOW_DEFINITIONS["native-openstack-all-in-one"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "install-native-openstack", "kind": "video-openstack-install", "active": "Installing Keystone, Horizon, Glance, Placement, Nova, and Neutron on Server1.", "timeout": 7200},
+        {"name": "validate-openstack-services", "kind": "video-openstack-validate", "active": "Validating OpenStack APIs and Horizon on Server1.", "timeout": 300},
+    ], "complete_message": "Server1 native OpenStack services and Horizon completed and validated.",
+}
 WORKFLOW_DEFINITIONS["lab-dual-platform-seed-validate"] = {
     "supports_undeploy": False, "settings_optional": True,
     "stage_plan": [
@@ -11388,9 +11395,21 @@ def _video_proxmox_handoff(run_id: str, stage_name: str) -> None:
 def _video_proxmox_validate(run_id: str, stage_name: str) -> None:
     _, values = _video_context("baremetal-proxmox-trial-prepare", run_id)
     host = str(values["proxmox_management_address"])
-    out = _wait_ssh(host, timeout=3300, command="hostname; pveversion; test -c /dev/kvm; pvesm status; curl -kfsS -o /dev/null https://127.0.0.1:8006/")
+    root_user = str(values.get("proxmox_root_user") or "root@pam")
+    root_password = str(values.get("proxmox_root_password") or "changeme123")
+    command = (
+        "set -e; "
+        f"printf '%s\\n' {shlex.quote('root:' + root_password)} | chpasswd; "
+        "hostname; pveversion; test -c /dev/kvm; pvesm status; "
+        "curl -kfsS -o /dev/null https://127.0.0.1:8006/; "
+        "response=$(curl -kfsS --data-urlencode "
+        f"username={shlex.quote(root_user)} --data-urlencode password={shlex.quote(root_password)} "
+        "https://127.0.0.1:8006/api2/json/access/ticket); "
+        "printf '%s' \"$response\" | grep -q ticket; echo proxmox_root_pam_login=valid"
+    )
+    out = _wait_ssh(host, timeout=3300, command=command)
     append_event(run_id, "info", stage_name, out[-2500:])
-    _set_stage(run_id, stage_name, "complete", f"Proxmox disk boot, SSH, API, storage, and KVM validated at {host}.")
+    _set_stage(run_id, stage_name, "complete", f"Proxmox disk boot, SSH, root@pam login, API, storage, and KVM validated at {host}.")
 
 
 def _video_seed_openstack(run_id: str, stage_name: str) -> None:

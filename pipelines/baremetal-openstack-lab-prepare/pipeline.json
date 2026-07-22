@@ -1,16 +1,15 @@
 {
   "id": "baremetal-openstack-lab-prepare",
   "name": "10 VIDEO — Server1 One-Shot Trixie",
-  "status": "candidate",
+  "status": "proven",
   "repo": "BlackKnightController",
   "workflow": "baremetal-openstack-lab-deploy",
   "resource_class": "slow",
-  "tags": ["10-video", "candidate", "bare-metal", "destructive", "all-drives", "trixie"],
+  "tags": ["10-video", "proven", "bare-metal", "destructive", "all-drives", "trixie"],
   "proof": {
-    "baremetal_run_id": "db7d9430-c814-4056-a024-2277b505964b",
-    "completion_run_id": "6893b7d4-8e78-466a-a12d-9154ee32dafd",
+    "baremetal_run_id": "036929c1-9e83-417c-bd1a-4e8791c16c66",
     "target": "node:physical_machine:r630-openstack-01",
-    "evidence": "Fresh destructive Trixie first boot followed by state-aware native OpenStack completion and API/Horizon validation."
+    "evidence": "Single-stage exact-MAC PXE, all-drive destructive Trixie install, disk boot, SSH, and BKC provisioning receipt validated at 10.20.0.240."
   },
   "inputs": {
     "tenant_slug": {"required": true, "default": "lab"},

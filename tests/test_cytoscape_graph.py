@@ -1,4 +1,13 @@
-from services.resource_graph import cytoscape_elements_from_resource_graph
+from services.resource_graph import _cytoscape_status, cytoscape_elements_from_resource_graph
+
+
+def test_cytoscape_status_palette_separates_health_from_progress():
+    assert _cytoscape_status("known", "host") == "inactive"
+    assert _cytoscape_status("unreachable", "host") == "failed"
+    assert _cytoscape_status("running", "pipeline") == "running"
+    assert _cytoscape_status("pending", "pipeline") == "running"
+    assert _cytoscape_status("running", "host") == "success"
+    assert _cytoscape_status("proven", "pipeline") == "success"
 
 
 def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
@@ -75,7 +84,7 @@ def test_cytoscape_elements_include_compound_nodes_and_normalized_edges():
         "id": "vm:trixie-smoke-132",
         "label": "trixie-smoke-132",
         "type": "vm",
-        "status": "running",
+        "status": "success",
         "parent": "host:pve1",
     }
     assert nodes["container:blackknight_bkc"]["status"] == "failed"

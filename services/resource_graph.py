@@ -709,15 +709,40 @@ def related_to(graph: dict, resource_id: str) -> list[dict]:
 CYTOSCAPE_NODE_TYPES = {"cluster", "host", "vm", "container", "pipeline"}
 
 
-def _cytoscape_status(state: str) -> str:
+def _cytoscape_status(state: str, kind: str = "") -> str:
     normalized = str(state or "").strip().lower()
-    if normalized in {"stopped", "inactive", "legacy", "template", "retired"}:
+    resource_kind = str(kind or "").strip().lower()
+    if normalized in {
+        "",
+        "unknown",
+        "known",
+        "defined",
+        "referenced",
+        "stopped",
+        "inactive",
+        "off",
+        "powered_off",
+        "legacy",
+        "template",
+        "retired",
+    }:
         return "inactive"
     if normalized in {"failed", "failure", "error", "blocked", "needs setup", "unreachable"}:
         return "failed"
+    if resource_kind in {"host", "vm", "container", "cluster"} and normalized in {
+        "running",
+        "active",
+        "ready",
+        "healthy",
+        "up",
+        "configured",
+    }:
+        return "success"
     if normalized in {"running", "active", "queued", "planned", "in_progress", "pending"}:
         return "running"
-    return "success"
+    if normalized in {"success", "healthy", "ready", "complete", "completed", "proven", "configured", "up"}:
+        return "success"
+    return "inactive"
 
 
 def _cytoscape_edge_type(relation_type: str) -> str:
@@ -790,7 +815,7 @@ def cytoscape_elements_from_resource_graph(graph: dict) -> dict:
             "id": resource_id,
             "label": str(resource.get("name") or resource_id),
             "type": kind,
-            "status": _cytoscape_status(str(state_source or resource.get("state") or "")),
+            "status": _cytoscape_status(str(state_source or resource.get("state") or ""), kind),
         }
         if kind == "pipeline":
             data.update({"storyRank": 0, "storyLane": 0, "layoutRole": "pipeline"})

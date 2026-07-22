@@ -265,6 +265,8 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["destructive-one-shot-trixie"]
     if normalized == "baremetal-proxmox-deploy":
         return ["validate-unattended-media", "arm-and-boot-server2", "wipe-install-observe-and-disarm", "validate-proxmox-firstboot"]
+    if normalized == "native-openstack-all-in-one":
+        return ["install-native-openstack", "validate-openstack-services"]
     if normalized == "lab-dual-platform-seed-validate":
         return ["seed-openstack-resources", "seed-proxmox-base-guests", "validate-both-platforms"]
     if normalized == "trixie-openstack-host-prepare":

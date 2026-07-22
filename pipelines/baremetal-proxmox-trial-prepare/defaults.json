@@ -24,6 +24,8 @@
   "proxmox_hostname": "r630-proxmox-01.lab.auzietek.com",
   "proxmox_management_address": "10.20.0.41",
   "proxmox_management_url": "https://10.20.0.41:8006/",
+  "proxmox_root_user": "root@pam",
+  "proxmox_root_password": "changeme123",
   "proxmox_gateway": "10.20.0.9",
   "proxmox_dns": "10.20.0.10",
   "physical_hosts": [
