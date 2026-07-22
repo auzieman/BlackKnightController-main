@@ -1,0 +1,19 @@
+{
+  "id": "baremetal-proxmox-trial-prepare",
+  "name": "CANDIDATE — Server2 Proxmox Auto-Install",
+  "repo": "BlackKnightController",
+  "workflow": "baremetal-proxmox-deploy",
+  "resource_class": "slow",
+  "tags": ["candidate", "bare-metal", "destructive", "proxmox", "proof-required"],
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_pxe_arm": {"required": false, "default": true},
+    "enable_destructive_install": {"required": false, "default": true}
+  },
+  "stages": [
+    {"id": "validate-unattended-media", "action": "proxmox.auto_iso.validate", "transport": "bkc-ssh+http", "risk": "low", "timeout_seconds": 300},
+    {"id": "arm-and-boot-server2", "action": "baremetal.pxe_once.cold_boot", "transport": "redfish+bkc-ssh", "risk": "high", "timeout_seconds": 180},
+    {"id": "wipe-install-observe-and-disarm", "action": "proxmox.auto_install.execute", "transport": "pxe+http+bkc-ssh", "risk": "destructive", "timeout_seconds": 1800},
+    {"id": "validate-proxmox-firstboot", "action": "proxmox.platform.validate", "transport": "bkc-ssh+https", "risk": "low", "timeout_seconds": 3600}
+  ]
+}

@@ -1,0 +1,23 @@
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "r630-proxmox-01.lab.auzietek.com"
+mailto = "admin@lab.auzietek.com"
+timezone = "America/Los_Angeles"
+root-password = "changem123"
+root-ssh-keys = [
+  "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDOdGhrUn8PmFdvy8MUvwojv1ajmqW47MvRqvt8YTYg/5LSal1YCTKoiiyXcICmvWR/DlSe2//tXMq706ncbg8lzZC8u9xGjznGySBPKgygyx2LT1ajRV48z42E+f84wJz9/8YFPEqOGdRfMkYT39pE/KLZNCQJCzs5Joxbeaf5i/Zg413PbeYdmI2gJ0lxWZQTkPG4XhzPz7VuSHQrIV/6F+HiyWmRkiDYv2wioqdz+ZF5LyaHWQ79a6JP/Tiap8jYUW4VhKBGtEiQqAlDL3pSaaO+SCZNYAoS17YCW775m9MVJnUGe9ToQpv7eEVUD1JuKwCy16GSLBOE0I46pqtROxxKQqMTwXHha+L7EsQLx5YaKJmNByIj4mK1xLDRoZScwR87cRZMqZOfPI4KAk0/vYoelIB6aFyDf3WNK2HOADzoJLYLZJPOKbtBumtNABYHrKo9xQyV1SgdGZ5UNNtN8BgvTEPU248fc8aq9BRJgCVRnEIhPZCYG2UQelfrMy6kef7c8YkO/Y6V5kQCUiQtNMpP+KPQWMVi1iwfnP/X1CD3StXLNKH57iS94Q9dp8lFk2+57fCYZez4Jkyzhy17Gc2T8LahcWSoTVED/6wUpAm/VLZ57j/kn4syAR0m6baDzr9e99KTOjuvds9ewPe1Z+2KKOf9iV6QI5oTP1tG1Q== root@ns1.lab.auzietek.com"
+]
+reboot-on-error = false
+reboot-mode = "reboot"
+
+[network]
+source = "from-answer"
+cidr = "10.20.0.41/24"
+dns = "10.20.0.10"
+gateway = "10.20.0.9"
+filter.ID_NET_NAME_MAC = "*20040fe97040"
+
+[disk-setup]
+filesystem = "ext4"
+disk-list = ["sda"]

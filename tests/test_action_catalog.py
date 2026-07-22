@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from services import pipeline_catalog, resource_graph
+import inspect
+from pathlib import Path
+
+from services import pipeline_catalog, pipeline_executor, resource_graph
 from services.action_catalog import action_by_id, actions_for_kind, list_actions
 from services.automation_runs import create_run, default_stages
 from services.pipeline_catalog import pipeline_by_id
@@ -170,6 +173,202 @@ def test_small_office_foobar_run_stages_are_recording_friendly():
 
     assert [stage["name"] for stage in reference["stages"]] == default_stages("small-office-foobar-reference")
     assert [stage["name"] for stage in reset["stages"]] == default_stages("small-office-foobar-reset")
+
+
+def test_baremetal_candidate_stage_models_are_single_source_consistent():
+    for pipeline_id in ("baremetal-openstack-lab-prepare", "baremetal-proxmox-trial-prepare"):
+        pipeline = pipeline_by_id(pipeline_id)
+        workflow = pipeline["workflow"]
+        catalog = [stage["id"] for stage in pipeline["stages"]]
+        executor = [stage["name"] for stage in workflow_stage_definitions(workflow)]
+        run = create_run(
+            tenant_slug="default",
+            requested_by="test",
+            trigger_source="test",
+            repo=pipeline["repo"],
+            workflow=workflow,
+        )
+        recorded = [stage["name"] for stage in run["stages"]]
+        assert catalog == executor == recorded
+    openstack = pipeline_by_id("baremetal-openstack-lab-prepare")
+    assert openstack["name"] == "10 VIDEO — Server1 One-Shot Trixie"
+    assert openstack["status"] == "candidate"
+    assert "all-drives" in openstack["tags"]
+    assert openstack["proof"]["baremetal_run_id"] == "db7d9430-c814-4056-a024-2277b505964b"
+    assert openstack["proof"]["completion_run_id"] == "6893b7d4-8e78-466a-a12d-9154ee32dafd"
+
+    proxmox = pipeline_by_id("baremetal-proxmox-trial-prepare")
+    assert "candidate" in proxmox["tags"]
+    assert "proof-required" in proxmox["tags"]
+
+
+def test_baremetal_candidates_require_mac_scoped_pxe_defaults():
+    for pipeline_id in ("baremetal-openstack-lab-prepare", "baremetal-proxmox-trial-prepare"):
+        values = pipeline_catalog.resolve_pipeline_dictionary(pipeline_by_id(pipeline_id))["values"]
+        assert values["dhcp_broad_fragment_path"] == "/etc/dhcp/dhcpd.d/bkc-provisioning.conf"
+        assert values["dhcp_fragment_path"].endswith("one-shot.conf")
+
+
+def test_default_pxe_boundaries_never_advertise_boot_media():
+    root = Path(__file__).resolve().parents[1]
+    dhcp_template = (
+        root
+        / "pipelines/ns1-default-pxe-diagnostics/templates/dhcpd-default-pxe-diagnostics.conf.tpl"
+    ).read_text()
+    dnsmasq = (root / "docker/pxe/dnsmasq.conf").read_text()
+
+    for unsafe_directive in ("next-server", "filename ", "bootfile-name"):
+        assert unsafe_directive not in "\n".join(
+            line for line in dhcp_template.splitlines() if not line.lstrip().startswith("#")
+        )
+    active_dnsmasq = "\n".join(
+        line for line in dnsmasq.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "dhcp-boot=" not in active_dnsmasq
+    assert "pxe-service=" not in active_dnsmasq
+
+
+def test_server1_trixie_candidate_preserves_proven_vga_installer_console():
+    root = Path(__file__).resolve().parents[1]
+    ipxe = (
+        root
+        / "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie.ipxe.tpl"
+    ).read_text()
+    assert "console=ttyS" not in ipxe
+    assert "preseed/url=${preseed-url}" in ipxe
+
+
+def test_server1_install_reuses_proven_contract_with_explicit_all_drive_wipe():
+    root = Path(__file__).resolve().parents[1]
+    preseed = (
+        root
+        / "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie-preseed.cfg.tpl"
+    ).read_text()
+    assert "partman-auto/disk string ${dictionary.physical_install_disk}" in preseed
+    assert "d-i grub-installer/bootdev string ${dictionary.physical_install_disk}" in preseed
+    assert "preseed/early_command" in preseed
+    assert "for disk in $(list-devices disk)" in preseed
+    assert "wipefs -af" in preseed
+    assert "bs=1M count=16" in preseed
+    assert "for disk in /dev/sd?" not in preseed
+    assert "in-target /usr/sbin/update-grub" not in preseed
+
+    one_shot = inspect.getsource(pipeline_executor._video_openstack_one_shot)
+    assert "_video_openstack_pxe" in one_shot
+    assert "_video_openstack_boot" in one_shot
+    assert "_video_openstack_firstboot" in one_shot
+    pxe = inspect.getsource(pipeline_executor._video_openstack_pxe)
+    assert "enable_destructive_install" in pxe
+    assert "enable_openstack_install" not in pxe
+
+    proven = (
+        root / "pipelines/ns1-trixie-pxe-smoke/templates/trixie-smoke-preseed.cfg.tpl"
+    ).read_text()
+    for directive in (
+        "d-i partman-auto/method string regular",
+        "d-i partman-auto/choose_recipe select atomic",
+        "d-i grub-installer/only_debian boolean true",
+    ):
+        assert directive in preseed
+        assert directive in proven
+
+
+def test_server1_pxe_disarm_retains_mac_lease_without_boot_options():
+    source = inspect.getsource(pipeline_executor._video_openstack_firstboot)
+    assert "persistent lease-only identity" in source
+    assert 'fixed-address {lease}' in source
+    assert "bootfile-name" in source
+
+
+def test_server1_pxe_arm_rolls_back_if_bmc_reset_fails():
+    source = inspect.getsource(pipeline_executor._video_openstack_boot)
+
+    assert "If iDRAC is unavailable" in source
+    assert "persistent lease-only identity" in source
+    assert "systemctl restart dhcpd" in source
+
+
+def test_native_openstack_component_is_cataloged_and_packaged():
+    pipeline = pipeline_by_id("native-openstack-all-in-one")
+    assert pipeline is not None
+    folder = Path(pipeline["source_path"]).parent
+    for script in (
+        "01-foundation-keystone-horizon.sh",
+        "02-glance-placement.sh",
+        "03-nova.sh",
+        "04-neutron-ovs.sh",
+    ):
+        assert (folder / "scripts" / script).is_file()
+    foundation = (folder / "scripts/01-foundation-keystone-horizon.sh").read_text()
+    assert "mariadb-server rabbitmq-server memcached" in foundation
+    assert "install -d -m 0755 /etc/mysql/mariadb.conf.d" in foundation
+    assert 'foundation_failed line=${LINENO}' in foundation
+    assert "bkc_wait_service keystone" in foundation
+    assert "bkc_wait_http keystone" in foundation
+    assert '"http://${management_address}:5000/v3/"' in foundation
+    assert 'curl -kfsSL --max-redirs 5 "http://${public_address}/horizon/"' in foundation
+    readiness = (folder / "scripts/00-bkc-readiness.sh").read_text()
+    assert "bkc_wait_until" in readiness
+    assert "readiness_timeout" in readiness
+    assert "readiness_ready" in readiness
+    nova = (folder / "scripts/03-nova.sh").read_text()
+    assert "systemctl enable --now" not in nova
+    assert "systemctl restart libvirtd" in nova
+    assert "nova-novncproxy || true" in nova
+    assert 'bkc_wait_service "$service" 300' in nova
+
+
+def test_proxmox_candidate_preserves_proven_unattended_contract():
+    root = Path(__file__).resolve().parents[1]
+    folder = root / "pipelines/baremetal-proxmox-trial-prepare"
+    answer = (folder / "templates/answer.toml").read_text()
+    arm = (folder / "scripts/arm-proxmox-one-shot-pxe.sh").read_text()
+    disarm = (folder / "scripts/disarm-proxmox-one-shot-pxe.sh").read_text()
+
+    assert 'root-password = "changem123"' in answer
+    assert 'cidr = "10.20.0.41/24"' in answer
+    assert 'disk-list = ["sda"]' in answer
+    assert 'filter.ID_NET_NAME_MAC = "*20040fe97040"' in answer
+    assert "proxmox-start-auto-installer" in arm
+    assert "console=tty0 console=ttyS1,115200n8" in arm
+    assert "20:04:0f:e9:70:40" in arm
+    assert 'install -m 0644 /dev/null "$fragment"' in disarm
+
+
+def test_proxmox_candidate_waits_for_fresh_handoff_and_platform_readiness():
+    handoff = inspect.getsource(pipeline_executor._video_proxmox_handoff)
+    validate = inspect.getsource(pipeline_executor._video_proxmox_validate)
+    media = inspect.getsource(pipeline_executor._video_proxmox_media)
+
+    assert "proxmox_nginx_log_baseline" in handoff
+    assert 'values["installer_lease_address"]' in handoff
+    assert "initrd" in handoff
+    assert '"BootSourceOverrideTarget": "Hdd"' in handoff
+    assert "server2_next_boot=Hdd" in handoff
+    assert "filename|next-server|option" in media
+    for capability in ("pveversion", "/dev/kvm", "pvesm status", "127.0.0.1:8006"):
+        assert capability in validate
+
+
+def test_openstack_candidate_hands_installer_reboot_to_disk():
+    firstboot = inspect.getsource(pipeline_executor._video_openstack_firstboot)
+
+    assert '"BootSourceOverrideTarget": "Hdd"' in firstboot
+    assert "next boot pinned to Hdd" in firstboot
+
+
+def test_esxi_bonus_lane_boots_intact_vendor_iso_and_stops_at_handoff():
+    pipeline = pipeline_by_id("baremetal-vmware-trial-prepare")
+    assert pipeline["workflow"] == "baremetal-vmware-trial-prepare"
+    assert pipeline["name"] == "BONUS — Server2 ESXi Vendor ISO Handoff"
+    root = Path(__file__).resolve().parents[1]
+    arm = (root / "pipelines/baremetal-vmware-trial-prepare/scripts/arm-esxi-one-shot-pxe.sh").read_text()
+    assert "sanboot --drive 0xe0 --no-describe" in arm
+    assert "bootx64.efi" not in arm
+    assert "boot.cfg" not in arm
+    handoff = inspect.getsource(pipeline_executor._run_vmware_esxi_iso_handoff)
+    assert '"BootSourceOverrideTarget": "Hdd"' in handoff
+    assert "No fresh HTTP read of the intact ESXi ISO" in handoff
 
 
 def test_auzix_vm130_pipeline_has_repeatable_deploy_contract():
@@ -1214,6 +1413,31 @@ def test_pipeline_run_search_matches_catalog_name_for_linked_runs():
 
     assert _run_matches_search(run, "demo:")
     assert _run_matches_search(run, "k3s add node")
+
+
+def test_openstack_kolla_pipeline_uses_explicit_operation_modes():
+    pipeline = pipeline_by_id("openstack-kolla-single-node-install")
+    assert pipeline is not None
+    assert pipeline["name"] == "Bare Metal OpenStack Kolla Install"
+    assert pipeline["inputs"]["operation_mode"]["default"] == "review"
+    assert pipeline["inputs"]["operation_mode"]["choices"] == [
+        "review",
+        "prepare",
+        "precheck",
+        "deploy",
+        "validate",
+    ]
+
+    stages = {stage["name"]: stage for stage in workflow_stage_definitions(pipeline["workflow"])}
+    assert stages["prepare-kolla-dependencies"]["operation_modes"] == ["prepare"]
+    assert stages["install-kolla-ansible"]["operation_modes"] == ["prepare"]
+    assert stages["render-kolla-configuration"]["operation_modes"] == ["precheck"]
+    assert stages["kolla-bootstrap-servers"]["operation_modes"] == ["precheck"]
+    assert stages["kolla-prechecks"]["operation_modes"] == ["precheck"]
+    assert stages["kolla-deploy"]["operation_modes"] == ["deploy"]
+    assert stages["kolla-post-deploy"]["operation_modes"] == ["validate"]
+    assert stages["validate-horizon-keystone"]["operation_modes"] == ["validate"]
+    assert stages["record-kolla-handoff"]["operation_modes"] == ["validate"]
 
 
 def test_resource_graph_includes_action_catalog_resources(monkeypatch):

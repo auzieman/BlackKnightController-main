@@ -19,29 +19,41 @@ See `docs/pipeline-folder-layout.md` for the contract.
 - `ns1-lan-mac-pxe-prepare/`: temporary LAN-side MAC-only DHCP/PXE bring-up
   scaffold for one physical server when isolated switch/VLAN cabling is not
   settled yet.
+- `ns1-default-pxe-diagnostics/`: safe fallback PXE diagnostic profile for
+  unexpected PXE clients, using a bounded PXE-only DHCP pool and RAM-only
+  networked rescue boot intent.
 - `ns1-trixie-pxe-smoke/`: review-first Debian Trixie netboot and disposable
   VMID 132 PXE smoke lane.
 - `auzix-installed-root-recovery/`: scaffold for installed-root repair and
   validation gates.
 - `bkc-resource-graph-ui-review/`: review lane for the Cytoscape Resource Graph
   canvas, filters, layout controls, context menu, and position persistence.
+- `baremetal-bmc-discovery-prepare/`: non-destructive DHCP iDRAC/BMC discovery
+  lane that observes ns1 neighbors and validates Redfish reachability before
+  power/reset automation.
 - `baremetal-r630-pxe-validation/`: validation-first scaffold for managing a
   powered-off physical server through BMC, NIC/MAC, PXE image, and evidence.
+- `baremetal-lab-reset/`: review-first reset boundary for wiping and rerunning
+  physical OpenStack and ESXi provisioning without touching shared services.
 - `baremetal-openstack-lab-prepare/`: delivery-day OpenStack track scaffold for
   physical host identity, PXE readiness, base OS enrollment, and installer
   handoff validation.
 - `trixie-openstack-host-prepare/`: post-enrollment Debian Trixie host prep for
   Neutron/Open vSwitch packages, kernel networking settings, and validation
   evidence before the OpenStack installer provider runs.
+- `openstack-lab-seed-and-validate/`: post-installer OpenStack API ownership
+  lane for Horizon, Keystone auth, demo project/user, provider and tenant
+  networks, image/flavor/keypair/security group, and a smoke VM.
 - `trixie-openstack-package-smoke/`: lab-safe package/config smoke lane that can
   reuse or clone the foo.bar SuiteCRM Trixie VM to test OpenStack host-prep
   scripts without claiming bare-metal readiness.
 - `openstack-lab-edge-network-prepare/`: review-first routed edge plan for the
   10.1.x OpenStack lab networks, split DNS, workstation routes, bastion,
   nginx proxy, and service migration targets.
-- `n3048-switch-discovery-prepare/`: read-only Dell PowerConnect N3048
+- `n3048-switch-discovery-prepare/`: read-only Dell Networking N2024/E04W
   discovery scaffold for switch identity, VLAN/port intent, LLDP/MAC-table
-  observations, and PXE-to-node evidence.
+  observations, and PXE-to-node evidence. The folder name is legacy from the
+  first visual assumption.
 - `baremetal-vmware-trial-prepare/`: delivery-day VMware evaluation track
   scaffold for operator-supplied installer media, ESXi-style boot intent, first
   boot validation, and optional vCenter registration.

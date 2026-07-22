@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import fcntl
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,10 @@ def _runtime_root() -> Path:
 
 def _path() -> Path:
     return _runtime_root() / "automation_runs.local.json"
+
+
+def _lock_path() -> Path:
+    return _runtime_root() / ".automation_runs.lock"
 
 
 def utc_now_iso() -> str:
@@ -200,6 +205,139 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "provision-kanboard-service",
             "validate-foobar-services",
             "record-service-relationships",
+        ]
+    if normalized == "baremetal-bmc-discovery-prepare":
+        return [
+            "load-bmc-discovery-intent",
+            "observe-ns1-neighbors",
+            "probe-redfish-roots",
+            "map-bmcs-to-hosts",
+            "record-discovery-handoff",
+        ]
+    if normalized == "ns1-lan-mac-pxe-prepare":
+        return [
+            "resolve-ns1-node",
+            "validate-lan-interface",
+            "ensure-dhcp-include",
+            "render-lan-mac-pxe-fragment",
+            "render-lan-dhcp-defaults",
+            "validate-dhcp-config",
+            "restart-dhcp-if-enabled",
+            "record-pxe-mac-relationship",
+        ]
+    if normalized == "baremetal-r630-pxe-validation":
+        return [
+            "resolve-physical-identity",
+            "validate-bmc-reachability",
+            "validate-provisioning-services",
+            "validate-image-assets",
+            "validate-storage-visibility",
+            "render-boot-intent",
+            "record-validation-evidence",
+        ]
+    if normalized == "ns1-default-pxe-diagnostics":
+        return [
+            "load-diagnostic-intent",
+            "validate-diagnostic-boundary",
+            "render-default-diagnostic-ipxe",
+            "render-dhcp-diagnostic-fragment",
+            "validate-live-assets",
+            "plan-enable-lease-only-boundary",
+            "record-default-diagnostic-profile",
+        ]
+    if normalized == "baremetal-openstack-lab-prepare":
+        return [
+            "load-hardware-intent",
+            "register-physical-nodes",
+            "validate-bmc-access",
+            "validate-provisioning-services",
+            "plan-openstack-edge-network",
+            "validate-base-os-image",
+            "select-storage-profile",
+            "render-openstack-base-boot-intent",
+            "plan-base-os-install",
+            "plan-firstboot-enrollment",
+            "validate-openstack-host-baseline",
+            "prepare-trixie-neutron-hosts",
+            "plan-openstack-installer-handoff",
+        ]
+    if normalized == "baremetal-openstack-lab-deploy":
+        return ["destructive-one-shot-trixie"]
+    if normalized == "baremetal-proxmox-deploy":
+        return ["validate-unattended-media", "arm-and-boot-server2", "wipe-install-observe-and-disarm", "validate-proxmox-firstboot"]
+    if normalized == "lab-dual-platform-seed-validate":
+        return ["seed-openstack-resources", "seed-proxmox-base-guests", "validate-both-platforms"]
+    if normalized == "trixie-openstack-host-prepare":
+        return [
+            "load-openstack-host-intent",
+            "validate-firstboot-login",
+            "normalize-firstboot-baseline",
+            "validate-network-sides",
+            "prepare-neutron-host-packages",
+            "validate-neutron-host-readiness",
+            "cache-openstack-image-assets",
+            "validate-openstack-web-target",
+            "record-openstack-network-profile",
+        ]
+    if normalized == "openstack-lab-seed-and-validate":
+        return [
+            "load-openstack-seed-intent",
+            "validate-openstack-api-access",
+            "validate-horizon-dashboard",
+            "seed-project-and-user",
+            "seed-networks",
+            "seed-image-flavor-keypair-security",
+            "launch-smoke-instance",
+            "validate-smoke-instance",
+            "record-bkc-openstack-ownership",
+        ]
+    if normalized == "openstack-kolla-single-node-install":
+        return [
+            "load-kolla-install-intent",
+            "validate-kolla-host-readiness",
+            "prepare-kolla-dependencies",
+            "install-kolla-ansible",
+            "render-kolla-configuration",
+            "kolla-bootstrap-servers",
+            "kolla-prechecks",
+            "kolla-deploy",
+            "kolla-post-deploy",
+            "validate-horizon-keystone",
+            "record-kolla-handoff",
+        ]
+    if normalized == "baremetal-vmware-trial-prepare":
+        return [
+            "load-hardware-intent",
+            "register-physical-nodes",
+            "validate-bmc-access",
+            "validate-provisioning-services",
+            "validate-operator-supplied-media",
+            "render-vmware-kickstart-intent",
+            "plan-stage-vmware-installer-media",
+            "plan-esxi-install",
+            "validate-vmware-firstboot",
+            "validate-esxi-web-target",
+            "plan-vcenter-registration",
+        ]
+    if normalized == "baremetal-proxmox-trial-prepare":
+        return [
+            "load-proxmox-intent",
+            "validate-unattended-media",
+            "arm-server2-one-shot-pxe",
+            "plan-server2-install",
+            "validate-proxmox-management",
+            "disarm-server2-one-shot-pxe",
+        ]
+    if normalized == "baremetal-lab-reset":
+        return [
+            "load-reset-scope",
+            "archive-current-evidence",
+            "plan-pxe-state-clear",
+            "plan-unattended-profile-restore",
+            "plan-power-reset",
+            "plan-disk-wipe",
+            "plan-rerun-sequence",
+            "verify-rerun-boundary",
         ]
     if normalized == "demo-swarm-image-registry":
         return [
@@ -475,9 +613,16 @@ def create_run(
 
 
 def append_run(run: dict) -> dict:
-    runs = load_runs()
-    runs.insert(0, run)
-    save_runs(runs)
+    lock_path = _lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            runs = load_runs()
+            runs.insert(0, run)
+            save_runs(runs)
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     return run
 
 
@@ -489,19 +634,26 @@ def get_run(run_id: str) -> dict | None:
 
 
 def update_run(run_id: str, updater) -> dict | None:
-    runs = load_runs()
-    updated = None
-    for idx, run in enumerate(runs):
-        if run.get("id") != run_id:
-            continue
-        candidate = deepcopy(run)
-        updater(candidate)
-        candidate["updated_at"] = utc_now_iso()
-        runs[idx] = candidate
-        updated = candidate
-        break
-    if updated is not None:
-        save_runs(runs)
+    lock_path = _lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            runs = load_runs()
+            updated = None
+            for idx, run in enumerate(runs):
+                if run.get("id") != run_id:
+                    continue
+                candidate = deepcopy(run)
+                updater(candidate)
+                candidate["updated_at"] = utc_now_iso()
+                runs[idx] = candidate
+                updated = candidate
+                break
+            if updated is not None:
+                save_runs(runs)
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
     return updated
 
 
