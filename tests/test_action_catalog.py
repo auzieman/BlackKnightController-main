@@ -228,17 +228,18 @@ def test_default_pxe_boundaries_never_advertise_boot_media():
     assert "pxe-service=" not in active_dnsmasq
 
 
-def test_server1_trixie_candidate_preserves_proven_vga_installer_console():
+def test_server1_trixie_candidate_reuses_known_good_smoke_ipxe_shape():
     root = Path(__file__).resolve().parents[1]
     ipxe = (
         root
         / "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie.ipxe.tpl"
     ).read_text()
-    assert "console=ttyS" not in ipxe
+    assert "console=" not in ipxe
     assert "preseed/url=${preseed-url}" in ipxe
+    assert "url=${preseed-url}" in ipxe
 
 
-def test_server1_install_reuses_proven_contract_with_explicit_all_drive_wipe():
+def test_server1_install_reuses_known_good_smoke_preseed_contract():
     root = Path(__file__).resolve().parents[1]
     preseed = (
         root
@@ -246,11 +247,12 @@ def test_server1_install_reuses_proven_contract_with_explicit_all_drive_wipe():
     ).read_text()
     assert "partman-auto/disk string ${dictionary.physical_install_disk}" in preseed
     assert "d-i grub-installer/bootdev string ${dictionary.physical_install_disk}" in preseed
-    assert "preseed/early_command" in preseed
-    assert "for disk in $(list-devices disk)" in preseed
-    assert "wipefs -af" in preseed
-    assert "bs=1M count=16" in preseed
+    assert "preseed/early_command" not in preseed
+    assert "wipefs" not in preseed
+    assert "for disk in $(list-devices disk)" not in preseed
     assert "for disk in /dev/sd?" not in preseed
+    assert "partman-auto/method string efi" not in preseed
+    assert "force-efi-extra-removable" not in preseed
     assert "in-target /usr/sbin/update-grub" not in preseed
 
     one_shot = inspect.getsource(pipeline_executor._video_openstack_one_shot)
@@ -267,6 +269,8 @@ def test_server1_install_reuses_proven_contract_with_explicit_all_drive_wipe():
     for directive in (
         "d-i partman-auto/method string regular",
         "d-i partman-auto/choose_recipe select atomic",
+        "d-i partman-partitioning/confirm_write_new_label boolean true",
+        "tasksel tasksel/first multiselect standard, ssh-server",
         "d-i grub-installer/only_debian boolean true",
     ):
         assert directive in preseed
@@ -284,8 +288,43 @@ def test_server1_pxe_arm_rolls_back_if_bmc_reset_fails():
     source = inspect.getsource(pipeline_executor._video_openstack_boot)
 
     assert "If iDRAC is unavailable" in source
+    assert "required_boot_mode" in source
+    assert "Server1 firmware drift" in source
+    assert "option architecture-type code 93" in source
+    assert "ipxe-snponly-x86_64.efi" in source
+    assert 'option architecture-type = 00:07' in source
+    assert 'option architecture-type = 00:09' in source
+    defaults = pipeline_by_id("baremetal-openstack-lab-prepare")["defaults"]
+    assert defaults["required_boot_mode"] == "Uefi"
     assert "persistent lease-only identity" in source
     assert "systemctl restart dhcpd" in source
+
+
+def test_run_request_inputs_accept_direct_extra_inputs(monkeypatch):
+    monkeypatch.setattr(
+        pipeline_executor,
+        "get_run",
+        lambda run_id: {
+            "extra": {
+                "inputs": {
+                    "enable_destructive_install": True,
+                    "tenant_slug": "lab",
+                    "reset_type": "ForceRestart",
+                },
+                "request_payload": {
+                    "inputs": {
+                        "tenant_slug": "override-lab",
+                    }
+                },
+            }
+        },
+    )
+
+    inputs = pipeline_executor._run_request_inputs("run-with-extra-inputs")
+
+    assert inputs["enable_destructive_install"] is True
+    assert inputs["tenant_slug"] == "override-lab"
+    assert inputs["reset_type"] == "ForceRestart"
 
 
 def test_native_openstack_component_is_cataloged_and_packaged():

@@ -1,0 +1,56 @@
+{
+  "fragments": [
+    {
+      "id": "dhcp.arch-aware-ipxe-handoff",
+      "status": "known-good-pattern",
+      "source_paths": [
+        "pipelines/ns1-lan-mac-pxe-prepare/templates/dhcpd-lan-mac-pxe.conf.tpl",
+        "pipelines/baremetal-r630-pxe-validation/templates/server2-trixie-control.conf"
+      ],
+      "applies_to": [
+        "pipelines/baremetal-openstack-lab-prepare"
+      ],
+      "contract": "If user-class is iPXE, boot the HTTP iPXE script. If DHCP architecture type is 00:07 or 00:09, boot ipxe-snponly-x86_64.efi. Only legacy clients receive undionly.kpxe.",
+      "why_it_matters": "The Server1 Debian lane requires UEFI. Chainloading BIOS iPXE can let the installer run but produce a disk that does not boot as expected under UEFI firmware.",
+      "do_not_repeat": "Do not hardcode undionly.kpxe as the default first-stage handoff for a UEFI-required bare-metal installer."
+    },
+    {
+      "id": "firmware.required-boot-mode",
+      "status": "required-gate",
+      "source_paths": [
+        "pipelines/baremetal-openstack-lab-prepare/defaults.json",
+        "services/pipeline_executor.py"
+      ],
+      "contract": "Before arming destructive PXE, Redfish BIOS Attributes.BootMode must equal defaults.required_boot_mode.",
+      "why_it_matters": "Server1 spent a troubleshooting loop in Legacy/BIOS behavior after ESXi experiments. Installer/preseed edits should not compensate for firmware drift."
+    },
+    {
+      "id": "installer.serial-console-baud",
+      "status": "known-good-observed",
+      "source_paths": [
+        "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie.ipxe.tpl"
+      ],
+      "contract": "Do not pass console= arguments in the filming installer lane. Match the known-good ns1-trixie-pxe-smoke iPXE shape unless actively debugging serial.",
+      "why_it_matters": "The VM smoke lane installed Trixie repeatedly without console overrides. Serial/VGA ordering made the physical R630 harder to observe and likely hid installer prompts."
+    },
+    {
+      "id": "installer.uefi-grub-fallback",
+      "status": "candidate-from-manual-install",
+      "source_paths": [
+        "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie-preseed.cfg.tpl"
+      ],
+      "contract": "Use the known-good ns1-trixie-pxe-smoke preseed mechanics first: partman-auto/method regular, atomic recipe, partman-partitioning/confirm_write_new_label, and grub-installer/bootdev on the declared disk.",
+      "why_it_matters": "The office/demo VM lane repeatedly installed Trixie through PXE. Deviating to method efi and extra installer logic reintroduced prompts instead of reducing risk."
+    },
+    {
+      "id": "installer.lab-access-explicit-late-command",
+      "status": "candidate-from-manual-install",
+      "source_paths": [
+        "pipelines/baremetal-openstack-lab-prepare/defaults.json",
+        "pipelines/baremetal-openstack-lab-prepare/templates/r630-openstack-01-trixie-preseed.cfg.tpl"
+      ],
+      "contract": "The installed OS must leave root and the lab user reachable with the shared lab password over SSH. Late-command explicitly writes sshd config and re-applies root/user passwords with chpasswd.",
+      "why_it_matters": "A manual Debian install booted cleanly and exposed SSH, but rejected the expected password. The pipeline should not depend on an installer UI checkbox or ambiguous remote-login prompt."
+    }
+  ]
+}

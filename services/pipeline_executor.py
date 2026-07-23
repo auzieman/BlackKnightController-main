@@ -8223,8 +8223,10 @@ def _run_request_inputs(run_id: str) -> dict:
     run = get_run(run_id) or {}
     extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
     payload = extra.get("request_payload") if isinstance(extra.get("request_payload"), dict) else {}
+    extra_inputs = extra.get("inputs") if isinstance(extra.get("inputs"), dict) else {}
     inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
-    merged = dict(inputs)
+    merged = dict(extra_inputs)
+    merged.update(inputs)
     ignored_payload_keys = {"repo", "workflow", "ref", "commit", "notes", "inputs"}
     for key, value in payload.items():
         if key in ignored_payload_keys or key in merged:
@@ -11072,10 +11074,48 @@ def _video_openstack_pxe(run_id: str, stage_name: str) -> None:
 def _video_openstack_boot(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_destructive_install")
     _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    bmc_definition = values["physical_hosts"][0]
+    bmc_address = str(bmc_definition["bmc_observed_address"])
+    bmc_user, bmc_password = _resolve_bmc_credentials(str(bmc_definition["bmc_credential_ref"]))
+    _, bios_body = _redfish_request_via_ns1(
+        values,
+        bmc_address,
+        "/redfish/v1/Systems/System.Embedded.1/Bios",
+        bmc_user,
+        bmc_password,
+    )
+    bios = json.loads(bios_body or "{}")
+    actual_boot_mode = str((bios.get("Attributes") or {}).get("BootMode") or "").strip()
+    required_boot_mode = str(values.get("required_boot_mode") or "Uefi").strip()
+    if actual_boot_mode.lower() != required_boot_mode.lower():
+        raise PipelineExecutionError(
+            f"Server1 firmware drift: BootMode is {actual_boot_mode or 'unknown'}, "
+            f"but pipeline 10 requires {required_boot_mode}. Correct iDRAC BIOS settings before arming PXE."
+        )
+    append_event(run_id, "info", stage_name, f"server1_firmware_boot_mode={actual_boot_mode}")
     mac = str(values["physical_hosts"][0]["provisioning_mac"])
     lease, http_host = str(values["installer_lease_address"]), str(values["physical_pxe_http_host"])
     fragment, main = str(values["dhcp_fragment_path"]), str(values["dhcp_main_path"])
-    content = f'''# BKC Server1 one-shot Debian lane. Exact LOM only.\nhost r630-openstack-01-pxe {{\n  hardware ethernet {mac};\n  fixed-address {lease};\n  next-server {http_host};\n  if exists user-class and option user-class = "iPXE" {{ filename "http://{http_host}/pxe/debian-trixie.ipxe"; }} else {{ filename "undionly.kpxe"; }}\n}}\n'''
+    content = f'''# BKC Server1 one-shot Debian lane. Exact LOM only.
+option architecture-type code 93 = unsigned integer 16;
+host r630-openstack-01-pxe {{
+  hardware ethernet {mac};
+  fixed-address {lease};
+  next-server {http_host};
+  if exists user-class and option user-class = "iPXE" {{
+    filename "http://{http_host}/pxe/debian-trixie.ipxe";
+  }} elsif option architecture-type = 00:07 {{
+    filename "ipxe-snponly-x86_64.efi";
+    option bootfile-name "ipxe-snponly-x86_64.efi";
+  }} elsif option architecture-type = 00:09 {{
+    filename "ipxe-snponly-x86_64.efi";
+    option bootfile-name "ipxe-snponly-x86_64.efi";
+  }} else {{
+    filename "undionly.kpxe";
+    option bootfile-name "undionly.kpxe";
+  }}
+}}
+'''
     upload_remote_bytes(host=str(values["target_host"]), user="root", remote_path=fragment, content=content.encode(), mode=0o644, timeout=60)
     include_line = f'include "{fragment}";'
     command = f"set -e; grep -Fqx {shlex.quote(include_line)} {shlex.quote(main)} || printf '%s\\n' {shlex.quote(include_line)} >> {shlex.quote(main)}; dhcpd -t -cf {shlex.quote(main)}; systemctl restart dhcpd"

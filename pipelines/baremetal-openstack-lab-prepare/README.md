@@ -71,6 +71,33 @@ installer contract on the declared install disk. Destructive disk preparation
 must not mutate other firmware-visible disks inside this installer profile;
 controller layout and disk selection belong in a separate validated preflight.
 
+## Known-good filming baseline
+
+Run `447058a3-52df-4baa-a325-6254798b197e` completed on July 23, 2026:
+
+- Server1 iDRAC/BMC: `10.20.0.119`
+- PXE/install address: `10.20.0.240`
+- PXE MAC: `80:18:44:de:fd:38`
+- Installed hostname: `r630-openstack-01`
+- Boot result: UEFI `Boot0004* debian`, `BootCurrent: 0004`
+- Disk result: `/dev/sda` on PERC H730P Mini with EFI, ext4 root, and swap
+- Enrollment: SSH as root and `/var/lib/bkc/base-provisioning.json`
+
+Protect this baseline. The successful installer shape intentionally mirrors
+`pipelines/ns1-trixie-pxe-smoke`:
+
+- no `console=` kernel arguments in the filming lane;
+- architecture-aware UEFI iPXE handoff from DHCP;
+- `partman-auto/method string regular`;
+- atomic Partman recipe with Debian's own confirmations;
+- `tasksel tasksel/first multiselect standard, ssh-server`;
+- `grub-installer/bootdev string /dev/sda`;
+- no custom `grub-install`, no `method efi` detour, and no broad disk-wipe loop.
+
+Evidence and firmware captures live in `memory/`. If this lane regresses, compare
+against the known-good memory files and the smoke-lane templates before changing
+installer semantics.
+
 ## Debian Installer contract
 
 The base installation follows Debian Trixie's official automated-installation
@@ -80,7 +107,9 @@ appendix and example preseed:
 - <https://www.debian.org/releases/trixie/example-preseed.txt>
 
 Keep the installer lane narrow: pass initial network selection on the kernel
-command line, erase every installer-visible disk under this explicitly
-destructive lab profile, let Partman own the declared `/dev/sda`, and let
-Debian's `grub-installer` install to that same device. Do not duplicate
-`grub-install`. Hardware-controller normalization can remain a separate concern.
+command line, let Partman own the declared `/dev/sda`, and let Debian's
+`grub-installer` install to that same device. Do not duplicate `grub-install`.
+This profile is destructive to the declared install disk only; do not wipe every
+installer-visible disk because rescue USB media and temporary console devices
+may be attached during filming. Hardware-controller normalization can remain a
+separate concern.

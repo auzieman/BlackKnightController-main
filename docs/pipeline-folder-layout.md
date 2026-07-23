@@ -14,6 +14,7 @@ pipelines/<pipeline-id>/
   pipeline.json
   assets/
   checks/
+  memory/
   templates/
   outputs.example.json
 ```
@@ -24,10 +25,40 @@ The folder owns the whole lane:
   and expected outputs.
 - `assets/`: small static inputs used by the lane.
 - `checks/`: reusable validation scripts or check definitions.
+- `memory/`: compact operational traces, decisions, and known-good fragment
+  receipts that should travel with the lane.
 - `templates/`: rendered shell, YAML, service, or config templates.
 - `outputs.example.json`: sample produced facts and relationships for tests and
   UI work.
 - `README.md`: operator notes, known risks, links, and recovery hints.
+
+## Operational Memory
+
+Each serious pipeline should keep a small machine-readable memory folder beside
+the recipe:
+
+```text
+pipelines/<pipeline-id>/memory/
+  traces.jsonl
+  fragments.json
+```
+
+`traces.jsonl` is append-only JSON Lines. Each line should be compact enough for
+an assistant or retrieval tool to load with the pipeline context before changing
+the lane:
+
+```json
+{"id":"trace-2026-07-22-server1-uefi-drift","date":"2026-07-22","status":"active-risk","question":"Why did a previously working Server1 Trixie PXE lane fall into GRUB rescue?","retrieved_context":["pipeline:baremetal-openstack-lab-prepare","run:d54be704-0e04-4a44-a4aa-bc618d6f80dc"],"evidence":["Redfish BIOS BootMode was Bios while defaults required Uefi","SOL showed legacy Broadcom UNDI PXE","Screen showed grub rescue after installer handoff"],"decision":"Treat firmware mode as drift and gate the pipeline before arming PXE.","selected_tools":["redfish","idrac-sol","bkc-pipeline-run"],"result":"UEFI restore remained outstanding; no partitioning recipe change is proven."}
+```
+
+`fragments.json` records reusable known-good pieces. Use stable IDs, paths,
+proof run IDs, and SHA-256 digests when the digest matters. A fragment is not
+known-good because it ran; it is known-good because the target reached its
+validated end state.
+
+The goal is grounding, not fine-tuning. A general model should be able to open a
+pipeline folder and find stable names, evidence, decisions, resources, and the
+permissions boundary before it starts proposing changes.
 
 Runtime dictionary state follows the same shape under the mounted dictionary
 volume:

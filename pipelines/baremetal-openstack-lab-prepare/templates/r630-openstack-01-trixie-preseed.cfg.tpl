@@ -22,10 +22,6 @@ d-i clock-setup/utc boolean true
 d-i time/zone string US/Pacific
 d-i clock-setup/ntp boolean true
 
-# Lab cattle contract: this PXE profile owns every installer-visible disk.
-d-i preseed/early_command string \
-  /bin/sh -c 'for disk in $(list-devices disk); do wipefs -af "$disk" || true; dd if=/dev/zero of="$disk" bs=1M count=16 conv=fsync; sectors=$(blockdev --getsz "$disk"); if [ "$sectors" -gt 32768 ]; then dd if=/dev/zero of="$disk" bs=512 seek=$((sectors - 32768)) count=32768 conv=fsync; fi; done'
-
 d-i partman-auto/disk string ${dictionary.physical_install_disk}
 d-i partman-auto/method string regular
 d-i partman-lvm/device_remove_lvm boolean true
@@ -43,7 +39,7 @@ d-i apt-setup/non-free-firmware boolean true
 d-i apt-setup/contrib boolean true
 d-i apt-setup/non-free boolean true
 tasksel tasksel/first multiselect standard, ssh-server
-d-i pkgsel/include string ${dictionary.physical_base_packages}
+d-i pkgsel/include string openssh-server sudo facter curl git ca-certificates
 d-i pkgsel/upgrade select none
 popularity-contest popularity-contest/participate boolean false
 
@@ -66,6 +62,8 @@ d-i preseed/late_command string \
   in-target /bin/sh -c "printf '%s\n' '${dictionary.target_install_user} ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-bkc-${dictionary.target_install_user}"; \
   in-target /bin/sh -c "printf '%s\n' 'Defaults:${dictionary.target_install_user} !requiretty' >> /etc/sudoers.d/90-bkc-${dictionary.target_install_user}"; \
   in-target /bin/chmod 440 /etc/sudoers.d/90-bkc-${dictionary.target_install_user}; \
+  in-target /bin/sh -c "mkdir -p /etc/ssh/sshd_config.d"; \
+  in-target /bin/sh -c "printf '%s\n' 'PermitRootLogin yes' 'PasswordAuthentication yes' > /etc/ssh/sshd_config.d/90-bkc-lab-access.conf"; \
   in-target /bin/sh -c "mkdir -p /var/lib/bkc"; \
   in-target /bin/sh -c "printf '%s\n' '{\"node_id\":\"node:physical_machine:r630-openstack-01\",\"profile\":\"openstack-base-os\",\"installer\":\"debian-preseed\",\"hostname\":\"${dictionary.physical_install_hostname}\"}' > /var/lib/bkc/base-provisioning.json"; \
   in-target /bin/systemctl enable ssh
