@@ -3455,6 +3455,9 @@ WORKFLOW_DEFINITIONS["openstack-local-ai-openwebui-preflight"] = {
     "stage_plan": [
         {"name": "preflight-server1-ai-capacity", "kind": "video-local-ai-capacity", "active": "Measuring Server1/OpenStack capacity, egress, and container/runtime state for the local-AI bonus lane.", "timeout": 300},
         {"name": "ensure-openstack-ai-vm", "kind": "video-local-ai-vm", "active": "Ensuring the cattle OpenStack AI VM flavor, security group, keypair, and server exist.", "timeout": 1800},
+        {"name": "install-ollama-baremetal", "kind": "video-local-ai-ollama", "active": "Installing and validating Ollama as a Server1 systemd service.", "timeout": 1800},
+        {"name": "deploy-openwebui-container", "kind": "video-local-ai-openwebui", "active": "Installing Podman if needed and running OpenWebUI against Server1 Ollama.", "timeout": 1800},
+        {"name": "validate-local-ai-stack", "kind": "video-local-ai-validate", "active": "Validating Ollama API, OpenWebUI HTTP, and local-AI service receipts.", "timeout": 300},
         {"name": "record-ollama-openwebui-fragments", "kind": "video-local-ai-fragments", "active": "Recording the Ollama, OpenWebUI, benchmark, and Cytoscape layout fragments for promotion review.", "timeout": 60},
     ], "complete_message": "Local-AI/OpenWebUI candidate preflight completed.",
 }
@@ -11614,6 +11617,109 @@ openstack server show {shlex.quote(server_name)} -f json
     _set_stage(run_id, stage_name, "complete", f"OpenStack AI VM {server_name} is ACTIVE with flavor {flavor_name} on {network_name}.")
 
 
+def _video_local_ai_ollama(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_baremetal_ollama")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ollama = values.get("ollama") if isinstance(values.get("ollama"), dict) else {}
+    bind = str(ollama.get("bind") or "127.0.0.1:11434")
+    model = str(ollama.get("model") or "").strip()
+    model_storage = str(ollama.get("model_storage") or "/var/lib/ollama")
+    model_pull = ""
+    if model:
+        model_pull = f"ollama list | awk '{{print $1}}' | grep -Fx {shlex.quote(model)} >/dev/null || ollama pull {shlex.quote(model)}"
+    command = f'''
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl
+if ! command -v ollama >/dev/null 2>&1; then
+  curl -fsSL https://ollama.com/install.sh | sh
+fi
+install -d -o ollama -g ollama -m 0755 {shlex.quote(model_storage)}
+install -d -m 0755 /etc/systemd/system/ollama.service.d
+cat >/etc/systemd/system/ollama.service.d/bkc.conf <<'EOF'
+[Service]
+Environment="OLLAMA_HOST={bind}"
+Environment="OLLAMA_MODELS={model_storage}"
+EOF
+systemctl daemon-reload
+systemctl reset-failed ollama >/dev/null 2>&1 || true
+systemctl enable --now ollama
+systemctl restart ollama
+deadline=$((SECONDS+180))
+until curl -fsS http://{bind}/api/tags >/dev/null; do
+  [ "$SECONDS" -lt "$deadline" ] || exit 1
+  sleep 3
+done
+{model_pull}
+ollama --version
+curl -fsS http://{bind}/api/tags
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1800)
+    append_event(run_id, "info", stage_name, out[-5000:])
+    _store_run_extra(run_id, {"local_ai_ollama": out[-5000:]})
+    _set_stage(run_id, stage_name, f"complete", f"Ollama is running on Server1 at {bind}{f' with model {model}' if model else ''}.")
+
+
+def _video_local_ai_openwebui(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_openwebui_container")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openwebui = values.get("openwebui") if isinstance(values.get("openwebui"), dict) else {}
+    image = str(openwebui.get("image") or "ghcr.io/open-webui/open-webui:main")
+    listen = str(openwebui.get("listen") or "0.0.0.0:8080")
+    ollama_base_url = str(openwebui.get("ollama_base_url") or "http://127.0.0.1:11434")
+    listen_port = int(listen.rsplit(":", 1)[-1])
+    command = f'''
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl podman
+install -d -m 0755 /var/lib/open-webui
+podman rm -f bkc-openwebui >/dev/null 2>&1 || true
+podman pull {shlex.quote(image)}
+podman run -d --name bkc-openwebui --replace --restart=always \\
+  -p {listen_port}:8080 \\
+  -e OLLAMA_BASE_URL={shlex.quote(ollama_base_url)} \\
+  -v /var/lib/open-webui:/app/backend/data:Z \\
+  {shlex.quote(image)}
+deadline=$((SECONDS+300))
+until curl -fsS http://127.0.0.1:{listen_port}/ >/dev/null; do
+  [ "$SECONDS" -lt "$deadline" ] || {{ podman logs --tail 80 bkc-openwebui || true; exit 1; }}
+  sleep 5
+done
+podman ps --filter name=bkc-openwebui --format '{{{{.Names}}}} {{{{.Status}}}} {{{{.Ports}}}}'
+curl -fsSI http://127.0.0.1:{listen_port}/ | sed -n '1,8p'
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1800)
+    append_event(run_id, "info", stage_name, out[-5000:])
+    _store_run_extra(run_id, {"local_ai_openwebui": out[-5000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenWebUI container is running on Server1 port {listen_port}.")
+
+
+def _video_local_ai_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ollama = values.get("ollama") if isinstance(values.get("ollama"), dict) else {}
+    openwebui = values.get("openwebui") if isinstance(values.get("openwebui"), dict) else {}
+    bind = str(ollama.get("bind") or "127.0.0.1:11434")
+    listen = str(openwebui.get("listen") or "0.0.0.0:8080")
+    listen_port = int(listen.rsplit(":", 1)[-1])
+    command = f'''
+set -euo pipefail
+systemctl is-active --quiet ollama
+curl -fsS http://{bind}/api/tags
+podman inspect bkc-openwebui --format '{{{{.State.Status}}}}'
+curl -fsSI http://127.0.0.1:{listen_port}/ | sed -n '1,8p'
+ss -ltnp | grep -E '(:11434|:{listen_port})'
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    _store_run_extra(run_id, {"local_ai_validate": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "Ollama API, OpenWebUI HTTP, container state, and listening sockets validated on Server1.")
+
+
 def _video_local_ai_fragments(run_id: str, stage_name: str) -> None:
     _, values = _video_local_ai_context(run_id)
     fragments = {
@@ -11840,6 +11946,9 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             "video-seed-validate": _video_seed_validate,
             "video-local-ai-capacity": _video_local_ai_capacity,
             "video-local-ai-vm": _video_local_ai_vm,
+            "video-local-ai-ollama": _video_local_ai_ollama,
+            "video-local-ai-openwebui": _video_local_ai_openwebui,
+            "video-local-ai-validate": _video_local_ai_validate,
             "video-local-ai-fragments": _video_local_ai_fragments,
         }
         if kind in video_runners:

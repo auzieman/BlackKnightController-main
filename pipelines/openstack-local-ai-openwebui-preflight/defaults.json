@@ -31,14 +31,14 @@
     "bind": "127.0.0.1:11434",
     "model": "llama3.2:3b",
     "model_storage": "/var/lib/ollama",
-    "enabled_by_default": false
+    "enabled_by_default": true
   },
   "openwebui": {
     "install_mode": "container",
     "image": "ghcr.io/open-webui/open-webui:main",
     "listen": "0.0.0.0:8080",
     "ollama_base_url": "http://127.0.0.1:11434",
-    "enabled_by_default": false
+    "enabled_by_default": true
   },
   "known_good_fragments": [
     "openstack.resources.seed from 30 VIDEO",

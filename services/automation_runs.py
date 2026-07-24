@@ -273,6 +273,9 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return [
             "preflight-server1-ai-capacity",
             "ensure-openstack-ai-vm",
+            "install-ollama-baremetal",
+            "deploy-openwebui-container",
+            "validate-local-ai-stack",
             "record-ollama-openwebui-fragments",
         ]
     if normalized == "trixie-openstack-host-prepare":
