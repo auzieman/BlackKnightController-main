@@ -4,10 +4,12 @@ services:
   nginx:
     image: nginx:1.27-alpine
     configs:
-      - source: lab_edge_nginx_v5
+      - source: lab_edge_nginx_v7
         target: /etc/nginx/nginx.conf
       - source: lab_edge_index_v3
         target: /usr/share/nginx/html/index.html
+      - source: lab_edge_proxmoxlib_v1
+        target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
     ports:
       - target: 8080
         published: 8080
@@ -50,7 +52,9 @@ services:
         condition: on-failure
 
 configs:
-  lab_edge_nginx_v5:
+  lab_edge_nginx_v7:
     file: ./nginx.conf
   lab_edge_index_v3:
     file: ./index.html
+  lab_edge_proxmoxlib_v1:
+    file: ./proxmoxlib.js
