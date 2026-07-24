@@ -32,6 +32,11 @@
     "install_mode": "baremetal-systemd",
     "bind": "127.0.0.1:11434",
     "model": "llama3.2:3b",
+    "models": [
+      "llama3.2:3b",
+      "qwen2.5-coder:1.5b",
+      "nomic-embed-text"
+    ],
     "model_storage": "/var/lib/ollama",
     "enabled_by_default": true
   },

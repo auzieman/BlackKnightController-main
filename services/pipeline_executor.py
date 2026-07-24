@@ -11648,11 +11648,18 @@ def _video_local_ai_ollama(run_id: str, stage_name: str) -> None:
     host = str(values.get("openstack_host") or "10.20.0.240")
     ollama = values.get("ollama") if isinstance(values.get("ollama"), dict) else {}
     bind = str(ollama.get("bind") or "127.0.0.1:11434")
-    model = str(ollama.get("model") or "").strip()
+    model_values = ollama.get("models") if isinstance(ollama.get("models"), list) else []
+    models = [str(item).strip() for item in model_values if str(item).strip()]
+    legacy_model = str(ollama.get("model") or "").strip()
+    if legacy_model and legacy_model not in models:
+        models.insert(0, legacy_model)
     model_storage = str(ollama.get("model_storage") or "/var/lib/ollama")
     model_pull = ""
-    if model:
-        model_pull = f"ollama list | awk '{{print $1}}' | grep -Fx {shlex.quote(model)} >/dev/null || ollama pull {shlex.quote(model)}"
+    if models:
+        model_pull = "\n".join(
+            f"ollama list | awk '{{print $1}}' | grep -Fx {shlex.quote(model)} >/dev/null || ollama pull {shlex.quote(model)}"
+            for model in models
+        )
     command = f'''
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -11684,7 +11691,8 @@ curl -fsS http://{bind}/api/tags
     out = run_remote_command(host=host, user="root", command=command, timeout=1800)
     append_event(run_id, "info", stage_name, out[-5000:])
     _store_run_extra(run_id, {"local_ai_ollama": out[-5000:]})
-    _set_stage(run_id, stage_name, f"complete", f"Ollama is running on Server1 at {bind}{f' with model {model}' if model else ''}.")
+    model_detail = f" with models {', '.join(models)}" if models else ""
+    _set_stage(run_id, stage_name, "complete", f"Ollama is running on Server1 at {bind}{model_detail}.")
 
 
 def _video_local_ai_openwebui(run_id: str, stage_name: str) -> None:
