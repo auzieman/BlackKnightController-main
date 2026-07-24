@@ -35,11 +35,13 @@ from services.integration_store import (
     load_proxmox_snapshot,
     save_ansible_snapshot,
     save_docker_snapshot,
+    save_integrations,
+    save_proxmox_snapshot,
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.kubernetes_api import kubectl_text
 from services.pipeline_catalog import pipeline_by_id, resolve_pipeline_dictionary
-from services.proxmox import ProxmoxClient, load_proxmox_config
+from services.proxmox import ProxmoxClient, load_proxmox_config, summarize_inventory, sync_inventory_to_rules
 from services.remote_ops import (
     download_remote_file,
     run_remote_command,
@@ -11574,15 +11576,36 @@ def _video_seed_proxmox(run_id: str, stage_name: str) -> None:
 
 def _video_seed_validate(run_id: str, stage_name: str) -> None:
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
-    prox = run_remote_command(host=str(values["proxmox_target_host"]), user="root", command="test -c /dev/kvm; qm status 201 | grep -F running; qm status 202 | grep -F running; curl -kfsS -o /dev/null https://127.0.0.1:8006/; qm list", timeout=120)
+    prox_host = str(values["proxmox_target_host"])
+    prox_password = str(values.get("proxmox_target_password") or "changeme123")
+    prox_user = str(values.get("proxmox_root_user") or "root@pam")
+    prox_api = str(values.get("proxmox_management_url") or f"https://{prox_host}:8006/").rstrip("/")
+    if not prox_api.endswith("/api2/json"):
+        prox_api = prox_api.rstrip("/") + "/api2/json"
+    prox = run_remote_command(host=prox_host, user="root", password=prox_password, command="test -c /dev/kvm; qm status 201 | grep -F running; qm status 202 | grep -F running; curl -kfsS -o /dev/null https://127.0.0.1:8006/; qm list", timeout=120)
+    integrations = load_integrations()
+    integrations["proxmox"].update({
+        "api_url": prox_api,
+        "username": prox_user,
+        "password": prox_password,
+        "token_name": "",
+        "token_value": "",
+        "verify_ssl": False,
+    })
+    save_integrations(integrations)
+    inventory = summarize_inventory(ProxmoxClient(load_proxmox_config()))
+    save_proxmox_snapshot(inventory)
+    rules = load_rules()
+    sync_result = sync_inventory_to_rules(rules, inventory)
+    save_rules(rules)
     cloud_host = str(values.get("openstack_host") or "10.20.0.240")
     smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
     smoke_name = str(smoke.get("name") or "bkc-openstack-smoke-01")
     cloud = run_remote_command(host=cloud_host, user="root", command=f". /root/admin-openrc; openstack token issue -f value -c id; openstack server show {shlex.quote(smoke_name)} -f value -c status", timeout=120)
     urls = values.get("edge_validation_urls") if isinstance(values.get("edge_validation_urls"), list) else []
     edge = "\n".join(f"{url}={urllib.request.urlopen(url, timeout=15).status}" for url in urls)
-    append_event(run_id, "info", stage_name, (cloud + "\n" + prox + "\n" + edge)[-4000:])
-    _set_stage(run_id, stage_name, "complete", "Both hypervisors, seeded guests, OpenStack API, and edge dashboards validated.")
+    append_event(run_id, "info", stage_name, (cloud + "\n" + prox + "\n" + edge + f"\nproxmox_inventory_sync={sync_result}")[-4000:])
+    _set_stage(run_id, stage_name, "complete", "Both hypervisors, seeded guests, OpenStack API, BKC Proxmox inventory, and edge dashboards validated.")
 
 
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
