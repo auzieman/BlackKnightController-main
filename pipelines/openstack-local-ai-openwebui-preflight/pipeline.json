@@ -10,6 +10,7 @@
   "inputs": {
     "tenant_slug": {"required": true, "default": "lab"},
     "enable_openstack_ai_vm": {"required": false, "default": true},
+    "enable_replace_ai_vm": {"required": false, "default": false},
     "enable_baremetal_ollama": {"required": false, "default": true},
     "enable_openwebui_container": {"required": false, "default": true}
   },

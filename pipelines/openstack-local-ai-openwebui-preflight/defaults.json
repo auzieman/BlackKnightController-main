@@ -24,6 +24,8 @@
   "ai_server": {
     "name": "bkc-local-ai-01",
     "user": "admin-deploy",
+    "console_password": "changeme123",
+    "ssh_password_auth": true,
     "root_disk_gb": 40
   },
   "ollama": {

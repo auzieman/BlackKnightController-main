@@ -148,6 +148,16 @@ if re.search(r'^USE_X_FORWARDED_HOST\s*=', text, flags=re.M):
     text = re.sub(r'^USE_X_FORWARDED_HOST\s*=.*$', 'USE_X_FORWARDED_HOST = True', text, flags=re.M)
 else:
     text += "\nUSE_X_FORWARDED_HOST = True\n"
+single_domain_settings = {
+    'OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT': 'False',
+    'OPENSTACK_KEYSTONE_DEFAULT_DOMAIN': "'Default'",
+    'OPENSTACK_KEYSTONE_DEFAULT_ROLE': "'member'",
+}
+for key, value in single_domain_settings.items():
+    if re.search(rf'^{key}\s*=', text, flags=re.M):
+        text = re.sub(rf'^{key}\s*=.*$', f'{key} = {value}', text, flags=re.M)
+    else:
+        text += f"\n{key} = {value}\n"
 path.write_text(text)
 PY
 

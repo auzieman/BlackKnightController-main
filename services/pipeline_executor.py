@@ -11530,7 +11530,7 @@ printf 'networks\\n'; openstack network list -f value -c Name -c Subnets || true
 
 
 def _video_local_ai_vm(run_id: str, stage_name: str) -> None:
-    _require_video_gates(run_id, "enable_openstack_ai_vm")
+    inputs = _require_video_gates(run_id, "enable_openstack_ai_vm")
     _, values = _video_local_ai_context(run_id)
     host = str(values.get("openstack_host") or "10.20.0.240")
     openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
@@ -11543,6 +11543,9 @@ def _video_local_ai_vm(run_id: str, stage_name: str) -> None:
     key_name = str(values.get("ai_keypair") or "bkc-demo-key")
     server_name = str(server.get("name") or "bkc-local-ai-01")
     admin_user = str(server.get("user") or "admin-deploy")
+    console_password = str(server.get("console_password") or "changeme123")
+    ssh_password_auth = _truthy(server.get("ssh_password_auth", True))
+    replace_server = _truthy(inputs.get("enable_replace_ai_vm"))
     secgroup_name = str(secgroup.get("name") or "bkc-local-ai-allow")
     ssh = load_integrations()["ssh"]
     public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
@@ -11568,11 +11571,14 @@ users:
   - name: {admin_user}
     groups: sudo
     shell: /bin/bash
-    lock_passwd: true
+    lock_passwd: false
+    plain_text_passwd: {console_password}
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
       - {public_key}
-ssh_pwauth: false
+chpasswd:
+  expire: false
+ssh_pwauth: {str(ssh_password_auth).lower()}
 disable_root: true
 package_update: true
 packages:
@@ -11598,6 +11604,14 @@ rm -f "$key_tmp"
 {chr(10).join(secgroup_commands)}
 user_data=$(mktemp)
 printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
+if [ {shlex.quote("1" if replace_server else "0")} = "1" ] && openstack server show {shlex.quote(server_name)} >/dev/null 2>&1; then
+  openstack server delete {shlex.quote(server_name)}
+  deadline=$((SECONDS+300))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    openstack server show {shlex.quote(server_name)} >/dev/null 2>&1 || break
+    sleep 5
+  done
+fi
 if ! openstack server show {shlex.quote(server_name)} >/dev/null 2>&1; then
   openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(flavor_name)} --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" {shlex.quote(server_name)} >/dev/null
 fi
