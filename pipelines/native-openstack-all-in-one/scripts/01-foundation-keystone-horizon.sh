@@ -115,6 +115,9 @@ export OS_AUTH_URL=http://${public_address}:5000/v3
 export OS_IDENTITY_API_VERSION=3
 EOF
 chmod 0600 /root/admin-openrc
+. /root/admin-openrc
+openstack role show member >/dev/null 2>&1 || openstack role create member >/dev/null
+openstack role add --user admin --project admin member >/dev/null 2>&1 || true
 
 python3 - "$public_address" <<'PY'
 from pathlib import Path

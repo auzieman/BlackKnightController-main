@@ -39,6 +39,7 @@
     "install_mode": "container",
     "image": "ghcr.io/open-webui/open-webui:main",
     "listen": "0.0.0.0:8080",
+    "public_url": "http://swarm1.lab.auzietek.com:8088",
     "ollama_base_url": "http://127.0.0.1:11434",
     "enabled_by_default": true
   },

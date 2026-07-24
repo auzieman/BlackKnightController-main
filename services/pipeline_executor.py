@@ -11684,6 +11684,7 @@ def _video_local_ai_openwebui(run_id: str, stage_name: str) -> None:
     openwebui = values.get("openwebui") if isinstance(values.get("openwebui"), dict) else {}
     image = str(openwebui.get("image") or "ghcr.io/open-webui/open-webui:main")
     listen = str(openwebui.get("listen") or "0.0.0.0:8080")
+    public_url = str(openwebui.get("public_url") or "http://swarm1.lab.auzietek.com:8088").rstrip("/")
     ollama_base_url = str(openwebui.get("ollama_base_url") or "http://127.0.0.1:11434")
     listen_port = int(listen.rsplit(":", 1)[-1])
     command = f'''
@@ -11696,6 +11697,9 @@ podman rm -f bkc-openwebui >/dev/null 2>&1 || true
 podman pull {shlex.quote(image)}
 podman run -d --name bkc-openwebui --replace --restart=always \\
   -p {listen_port}:8080 \\
+  -e WEBUI_URL={shlex.quote(public_url)} \\
+  -e CORS_ALLOW_ORIGIN={shlex.quote(public_url)} \\
+  -e FORWARDED_ALLOW_IPS='*' \\
   -e OLLAMA_BASE_URL={shlex.quote(ollama_base_url)} \\
   -v /var/lib/open-webui:/app/backend/data:Z \\
   {shlex.quote(image)}
