@@ -1,0 +1,21 @@
+{
+  "id": "openstack-lab-seed-and-validate",
+  "name": "30 VIDEO — Seed Both Systems + Validate",
+  "repo": "BlackKnightController",
+  "workflow": "lab-dual-platform-seed-validate",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": ["30-video", "candidate", "openstack", "proxmox", "seed", "validate"],
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_openstack_seed": {"required": false, "default": true},
+    "enable_smoke_instance": {"required": false, "default": true},
+    "enable_proxmox_seed": {"required": false, "default": true},
+    "enable_destroy_seed": {"required": false, "default": false}
+  },
+  "stages": [
+    {"id": "seed-openstack-resources", "action": "openstack.resources.seed", "transport": "bkc-ssh+openstack-api", "risk": "medium", "timeout_seconds": 1800},
+    {"id": "seed-proxmox-base-guests", "action": "proxmox.vm132.migrate_clone", "transport": "bkc-ssh+proxmox", "risk": "medium", "timeout_seconds": 3600},
+    {"id": "validate-both-platforms", "action": "lab.dual_platform.validate", "transport": "bkc-ssh+http", "risk": "low", "timeout_seconds": 600}
+  ]
+}

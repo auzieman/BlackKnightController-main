@@ -44,15 +44,15 @@
     "transport": "bkc-ssh",
     "ssh_user": "root",
     "fallback_ssh_user": "auzieman",
-    "temporary_lan_address": "192.168.1.242",
+    "temporary_lan_address": "10.20.0.240",
     "expected_hostname": "r630-openstack-01",
     "expected_login_user": "auzieman",
     "expected_password_ref": "demo-value:changeme123",
     "expected_networks": [
       {
-        "id": "temporary-home-lan",
-        "cidr": "192.168.1.0/24",
-        "role": "bootstrap-pxe-ssh-ui-api",
+        "id": "lab-control",
+        "cidr": "10.20.0.0/24",
+        "role": "bootstrap-pxe-ssh-ui-api-through-ns1-edge",
         "state": "active-tonight"
       }
     ]
@@ -94,7 +94,7 @@
       "bmc_credential_ref": "secret:bmc/r630-openstack-01/idrac",
       "provisioning_nic_node_id": "node:network_interface:r630-openstack-01-lom1",
       "provisioning_mac": "80:18:44:de:fd:38",
-      "observed_service_lan_address": "192.168.1.242",
+      "observed_service_lan_address": "10.20.0.240",
       "base_os": "debian-trixie",
       "post_enrollment_pipeline": "trixie-openstack-host-prepare",
       "storage_profile": {
@@ -112,8 +112,8 @@
           "install disk selected"
         ]
       },
-      "management_address": "10.20.0.31",
-      "service_address": "192.168.1.242"
+      "management_address": "10.20.0.240",
+      "service_address": "10.20.0.240"
     }
   ],
   "validation_events": [

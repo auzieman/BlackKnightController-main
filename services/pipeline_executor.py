@@ -11267,10 +11267,22 @@ def _video_openstack_install(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_openstack_install")
     _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
     host = str(values["installer_lease_address"])
+    public_address = str(values.get("openstack_public_address") or host)
+    management_address = str(values.get("openstack_management_address") or host)
+    management_cidr = str(values.get("openstack_management_cidr") or f"{management_address}/24")
+    internal_vip = str(values.get("openstack_internal_vip") or management_address)
+    management_gateway = str(values.get("openstack_management_gateway") or values.get("proxmox_gateway") or "10.20.0.9")
     native = pipeline_by_id("native-openstack-all-in-one")
     if not native:
         raise PipelineExecutionError("Native OpenStack pipeline is missing.")
-    env = {"BKC_OPENSTACK_PUBLIC_ADDRESS": "192.168.1.242", "BKC_OPENSTACK_MANAGEMENT_ADDRESS": "10.20.0.31", "BKC_OPENSTACK_MANAGEMENT_CIDR": "10.20.0.31/24", "BKC_OPENSTACK_INTERNAL_VIP": "10.20.0.30", "BKC_OPENSTACK_MANAGEMENT_GATEWAY": "10.20.0.9", "BKC_OPENSTACK_LAB_PASSWORD": "changeme123"}
+    env = {
+        "BKC_OPENSTACK_PUBLIC_ADDRESS": public_address,
+        "BKC_OPENSTACK_MANAGEMENT_ADDRESS": management_address,
+        "BKC_OPENSTACK_MANAGEMENT_CIDR": management_cidr,
+        "BKC_OPENSTACK_INTERNAL_VIP": internal_vip,
+        "BKC_OPENSTACK_MANAGEMENT_GATEWAY": management_gateway,
+        "BKC_OPENSTACK_LAB_PASSWORD": str(values.get("target_install_password") or "changeme123"),
+    }
     for name in ("01-foundation-keystone-horizon.sh", "02-glance-placement.sh", "03-nova.sh", "04-neutron-ovs.sh"):
         output = _upload_and_run_pipeline_script(native, {}, name, host=host, env=env, timeout=2400)
         append_event(run_id, "info", stage_name, f"{name}: {output[-1600:]}")
@@ -11280,7 +11292,16 @@ def _video_openstack_install(run_id: str, stage_name: str) -> None:
 def _video_openstack_validate(run_id: str, stage_name: str) -> None:
     _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
     host = str(values["installer_lease_address"])
-    command = ". /root/admin-openrc; openstack token issue -f value -c id; openstack compute service list; openstack network agent list; curl -fsS -o /dev/null http://192.168.1.242/horizon/; curl -fsS -o /dev/null http://10.20.0.31:5000/v3"
+    public_address = str(values.get("openstack_public_address") or host)
+    management_address = str(values.get("openstack_management_address") or host)
+    command = (
+        ". /root/admin-openrc; "
+        "openstack token issue -f value -c id; "
+        "openstack compute service list; "
+        "openstack network agent list; "
+        f"curl -fsS -o /dev/null {shlex.quote(f'http://{public_address}/horizon/')}; "
+        f"curl -fsS -o /dev/null {shlex.quote(f'http://{management_address}:5000/v3')}"
+    )
     output = run_remote_command(host=host, user="root", command=command, timeout=180)
     append_event(run_id, "info", stage_name, output[-3000:])
     _set_stage(run_id, stage_name, "complete", "Keystone, Horizon, Nova, Glance, and Neutron responded successfully.")
@@ -11455,17 +11476,30 @@ def _video_proxmox_validate(run_id: str, stage_name: str) -> None:
 def _video_seed_openstack(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_openstack_seed", "enable_smoke_instance")
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
-    host = "10.20.0.240"
-    script = r'''set -euo pipefail
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    project = str(values.get("seed_project") or "bkc-demo")
+    user = str(values.get("seed_user") or "bkc-demo-admin")
+    password = _secret_ref_literal(values.get("seed_user_password_ref"), default="changeme123")
+    flavor = values.get("demo_flavor") if isinstance(values.get("demo_flavor"), dict) else {}
+    image = values.get("demo_image") if isinstance(values.get("demo_image"), dict) else {}
+    network = values.get("self_service_network") if isinstance(values.get("self_service_network"), dict) else {}
+    smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
+    image_name = str(image.get("name") or smoke.get("image") or "cirros-bkc-smoke")
+    image_url = str(image.get("url") or "https://download.cirros-cloud.net/0.6.3/cirros-0.6.3-x86_64-disk.img")
+    image_filename = Path(urllib.parse.urlparse(image_url).path).name or f"{image_name}.qcow2"
+    script = f'''set -euo pipefail
 . /root/admin-openrc
-openstack project show bkc-demo >/dev/null 2>&1 || openstack project create --domain Default bkc-demo
-openstack user show bkc-demo-admin >/dev/null 2>&1 || openstack user create --domain Default --password changeme123 bkc-demo-admin
-openstack role add --project bkc-demo --user bkc-demo-admin member
-openstack flavor show bkc.nano >/dev/null 2>&1 || openstack flavor create --ram 512 --disk 1 --vcpus 1 bkc.nano
-openstack network show tenant-demo-net >/dev/null 2>&1 || openstack network create tenant-demo-net
-openstack subnet show tenant-demo-subnet >/dev/null 2>&1 || openstack subnet create --network tenant-demo-net --subnet-range 172.16.10.0/24 tenant-demo-subnet
-openstack image show cirros-bkc-smoke >/dev/null 2>&1 || openstack image create --disk-format qcow2 --container-format bare --public --file /var/lib/bkc/openstack-images/debian-13-genericcloud-amd64.qcow2 cirros-bkc-smoke
-openstack server show bkc-openstack-smoke-01 >/dev/null 2>&1 || openstack server create --image cirros-bkc-smoke --flavor bkc.nano --network tenant-demo-net bkc-openstack-smoke-01
+install -d -m 0755 /var/lib/bkc/openstack-images
+image_file=/var/lib/bkc/openstack-images/{shlex.quote(image_filename)}
+test -s "$image_file" || curl -fL --retry 3 -o "$image_file" {shlex.quote(image_url)}
+openstack project show {shlex.quote(project)} >/dev/null 2>&1 || openstack project create --domain {shlex.quote(str(values.get("seed_domain") or "Default"))} {shlex.quote(project)}
+openstack user show {shlex.quote(user)} >/dev/null 2>&1 || openstack user create --domain {shlex.quote(str(values.get("seed_domain") or "Default"))} --password {shlex.quote(password)} {shlex.quote(user)}
+openstack role add --project {shlex.quote(project)} --user {shlex.quote(user)} member || true
+openstack flavor show {shlex.quote(str(flavor.get("name") or "bkc.nano"))} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 512)} --disk {int(flavor.get("disk_gb") or 1)} --vcpus {int(flavor.get("vcpus") or 1)} {shlex.quote(str(flavor.get("name") or "bkc.nano"))}
+openstack network show {shlex.quote(str(network.get("name") or "tenant-demo-net"))} >/dev/null 2>&1 || openstack network create {shlex.quote(str(network.get("name") or "tenant-demo-net"))}
+openstack subnet show {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))} >/dev/null 2>&1 || openstack subnet create --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} --subnet-range {shlex.quote(str(network.get("cidr") or "172.16.10.0/24"))} {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))}
+openstack image show {shlex.quote(image_name)} >/dev/null 2>&1 || openstack image create --disk-format {shlex.quote(str(image.get("disk_format") or "qcow2"))} --container-format {shlex.quote(str(image.get("container_format") or "bare"))} --public --file "$image_file" {shlex.quote(image_name)}
+openstack server show {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))} >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(str(flavor.get("name") or "bkc.nano"))} --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))}
 openstack server list
 '''
     out = run_remote_command(host=host, user="root", command=script, timeout=1200)
