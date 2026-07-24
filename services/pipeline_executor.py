@@ -11696,7 +11696,8 @@ install -d -m 0755 /var/lib/open-webui
 podman rm -f bkc-openwebui >/dev/null 2>&1 || true
 podman pull {shlex.quote(image)}
 podman run -d --name bkc-openwebui --replace --restart=always \\
-  -p {listen_port}:8080 \\
+  --network host \\
+  -e PORT={listen_port} \\
   -e WEBUI_URL={shlex.quote(public_url)} \\
   -e CORS_ALLOW_ORIGIN={shlex.quote(public_url)} \\
   -e FORWARDED_ALLOW_IPS='*' \\
