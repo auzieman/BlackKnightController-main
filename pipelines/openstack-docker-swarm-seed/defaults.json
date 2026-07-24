@@ -1,0 +1,45 @@
+{
+  "tenant_slug": "lab",
+  "openstack_host": "10.20.0.240",
+  "admin_openrc": "/root/admin-openrc",
+  "project": "bkc-demo",
+  "network": "lab-internal",
+  "base_image": "debian-13-genericcloud",
+  "keypair": "bkc-demo-key",
+  "admin_user": "admin-deploy",
+  "console_password": "changeme123",
+  "docker_static_url": "https://download.docker.com/linux/static/stable/x86_64/docker-28.3.3.tgz",
+  "flavor": {
+    "name": "bkc.swarm.small",
+    "ram_mb": 2048,
+    "disk_gb": 20,
+    "vcpus": 2
+  },
+  "security_group": {
+    "name": "bkc-openstack-swarm-allow",
+    "rules": [
+      {"protocol": "icmp", "remote_ip_prefix": "10.20.0.0/24"},
+      {"protocol": "tcp", "dst_port": 22, "remote_ip_prefix": "10.20.0.0/24"},
+      {"protocol": "icmp", "remote_ip_prefix": "172.24.10.0/24"},
+      {"protocol": "tcp", "dst_port": 22, "remote_ip_prefix": "172.24.10.0/24"},
+      {"protocol": "tcp", "dst_port": 2377, "remote_ip_prefix": "172.24.10.0/24"},
+      {"protocol": "tcp", "dst_port": 7946, "remote_ip_prefix": "172.24.10.0/24"},
+      {"protocol": "udp", "dst_port": 7946, "remote_ip_prefix": "172.24.10.0/24"},
+      {"protocol": "udp", "dst_port": 4789, "remote_ip_prefix": "172.24.10.0/24"}
+    ]
+  },
+  "nodes": [
+    {"name": "bkc-swarm-01", "role": "manager"},
+    {"name": "bkc-swarm-02", "role": "worker"},
+    {"name": "bkc-swarm-03", "role": "worker"}
+  ],
+  "fedora_image": {
+    "name": "fedora-44-cloud-candidate",
+    "status": "planned",
+    "note": "Disabled by default. Select/cache an official Fedora cloud image before enabling."
+  },
+  "enable_openstack_swarm_vms": true,
+  "enable_replace_swarm_vms": false,
+  "enable_bootstrap_swarm": true,
+  "enable_fedora_image_import": false
+}

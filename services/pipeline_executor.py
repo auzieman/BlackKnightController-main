@@ -3461,6 +3461,16 @@ WORKFLOW_DEFINITIONS["openstack-local-ai-openwebui-preflight"] = {
         {"name": "record-ollama-openwebui-fragments", "kind": "video-local-ai-fragments", "active": "Recording the Ollama, OpenWebUI, benchmark, and Cytoscape layout fragments for promotion review.", "timeout": 60},
     ], "complete_message": "Local-AI/OpenWebUI candidate preflight completed.",
 }
+WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-openstack-swarm-base", "kind": "video-openstack-swarm-preflight", "active": "Validating OpenStack API, Debian cloud image, lab network, keypair source, and optional Fedora metadata.", "timeout": 300},
+        {"name": "ensure-openstack-swarm-vms", "kind": "video-openstack-swarm-vms", "active": "Ensuring the three Debian OpenStack VMs for the cattle Docker Swarm exist and are ACTIVE.", "timeout": 1800},
+        {"name": "bootstrap-openstack-docker-swarm", "kind": "video-openstack-swarm-bootstrap", "active": "Installing Docker, initializing the manager, and joining the two worker VMs.", "timeout": 2400},
+        {"name": "validate-openstack-docker-swarm", "kind": "video-openstack-swarm-validate", "active": "Validating SSH, Docker, swarm membership, and OpenStack server state.", "timeout": 600},
+        {"name": "record-openstack-swarm-fragments", "kind": "video-openstack-swarm-fragments", "active": "Recording known-good OpenStack swarm image, VM, SSH, and bootstrap fragments.", "timeout": 60},
+    ], "complete_message": "OpenStack-hosted three-node Docker Swarm seed completed and validated.",
+}
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
     "settings_optional": True,
@@ -11766,6 +11776,311 @@ def _video_local_ai_fragments(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "Local-AI and graph-layout candidate fragments recorded for 40 VIDEO promotion review.")
 
 
+def _video_openstack_swarm_context(run_id: str) -> tuple[dict, dict]:
+    return _video_context("openstack-docker-swarm-seed", run_id)
+
+
+def _video_openstack_swarm_preflight(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    image_name = shlex.quote(str(values.get("base_image") or "debian-13-genericcloud"))
+    network_name = shlex.quote(str(values.get("network") or "lab-internal"))
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack swarm cloud-init/keypair injection.")
+    fedora = values.get("fedora_image") if isinstance(values.get("fedora_image"), dict) else {}
+    fedora_note = "disabled"
+    if _truthy(values.get("enable_fedora_image_import", False)):
+        fedora_note = str(fedora.get("name") or "fedora-cloud-candidate")
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack token issue -f value -c id >/tmp/bkc-openstack-swarm-token
+printf 'token_bytes='; wc -c </tmp/bkc-openstack-swarm-token
+openstack image show {image_name} -f value -c status
+openstack network show {network_name} -f value -c name
+openstack hypervisor list -f value || true
+printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
+printf 'fedora_import=%s\\n' {shlex.quote(fedora_note)}
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    if "active" not in out.lower():
+        raise PipelineExecutionError("OpenStack swarm preflight did not prove an active base image.")
+    _store_run_extra(run_id, {"openstack_swarm_preflight": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "OpenStack API, Debian base image, lab network, and BKC SSH key are ready for the three-node swarm.")
+
+
+def _video_openstack_swarm_vms(run_id: str, stage_name: str) -> None:
+    inputs = _require_video_gates(run_id, "enable_openstack_swarm_vms")
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    flavor = values.get("flavor") if isinstance(values.get("flavor"), dict) else {}
+    secgroup = values.get("security_group") if isinstance(values.get("security_group"), dict) else {}
+    nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
+    if len(nodes) < 3:
+        raise PipelineExecutionError("OpenStack swarm seed requires at least three node definitions.")
+    flavor_name = str(flavor.get("name") or "bkc.swarm.small")
+    image_name = str(values.get("base_image") or "debian-13-genericcloud")
+    network_name = str(values.get("network") or "lab-internal")
+    key_name = str(values.get("keypair") or "bkc-demo-key")
+    admin_user = str(values.get("admin_user") or "admin-deploy")
+    console_password = str(values.get("console_password") or "changeme123")
+    secgroup_name = str(secgroup.get("name") or "bkc-openstack-swarm-allow")
+    replace_vms = _truthy(inputs.get("enable_replace_swarm_vms"))
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack swarm cloud-init/keypair injection.")
+    secgroup_commands = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "172.24.10.0/24").strip()
+        if proto == "icmp":
+            secgroup_commands.append(f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+        elif proto in {"tcp", "udp"}:
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(f"openstack security group rule create --proto {proto} --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+    cloud_init = f"""#cloud-config
+users:
+  - name: {admin_user}
+    groups: sudo
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: {console_password}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {public_key}
+chpasswd:
+  expire: false
+ssh_pwauth: true
+disable_root: true
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - openssh-server
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent || true
+  - mkdir -p /var/lib/bkc
+  - echo openstack-docker-swarm-base > /var/lib/bkc/role.txt
+"""
+    encoded = b64encode(cloud_init.encode()).decode()
+    node_names = " ".join(shlex.quote(str(node.get("name") or "")) for node in nodes if isinstance(node, dict))
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack image show {shlex.quote(image_name)} >/dev/null
+openstack network show {shlex.quote(network_name)} >/dev/null
+openstack flavor show {shlex.quote(flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 2048)} --disk {int(flavor.get("disk_gb") or 20)} --vcpus {int(flavor.get("vcpus") or 2)} {shlex.quote(flavor_name)}
+key_tmp=$(mktemp)
+printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
+openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
+rm -f "$key_tmp"
+{chr(10).join(secgroup_commands)}
+user_data=$(mktemp)
+printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
+for name in {node_names}; do
+  [ -n "$name" ] || continue
+  if [ {shlex.quote("1" if replace_vms else "0")} = "1" ] && openstack server show "$name" >/dev/null 2>&1; then
+    openstack server delete "$name"
+    deadline=$((SECONDS+300))
+    while [ "$SECONDS" -lt "$deadline" ]; do openstack server show "$name" >/dev/null 2>&1 || break; sleep 5; done
+  fi
+  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(flavor_name)} --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
+done
+rm -f "$user_data"
+deadline=$((SECONDS+1200))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  pending=0
+  for name in {node_names}; do
+    status=$(openstack server show "$name" -f value -c status 2>/dev/null || echo MISSING)
+    [ "$status" = ACTIVE ] || pending=1
+  done
+  [ "$pending" = 0 ] && break
+  sleep 10
+done
+openstack server list --name '^bkc-swarm-' -f table
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1500)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _store_run_extra(run_id, {"openstack_swarm_vms": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenStack swarm VMs are ACTIVE on {network_name} with flavor {flavor_name}.")
+
+
+def _openstack_swarm_remote_script(values: dict, *, remote_key_path: str, validate_only: bool = False) -> str:
+    nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
+    admin_user = str(values.get("admin_user") or "admin-deploy")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    docker_static_url = str(values.get("docker_static_url") or "https://download.docker.com/linux/static/stable/x86_64/docker-28.3.3.tgz")
+    docker_archive_name = Path(urllib.parse.urlparse(docker_static_url).path).name or "docker.tgz"
+    node_names = " ".join(shlex.quote(str(node.get("name") or "")) for node in nodes if isinstance(node, dict))
+    bootstrap = "true" if validate_only else r'''
+docker_archive=/var/lib/bkc/openstack-swarm/__DOCKER_ARCHIVE_NAME__
+install -d -m 0755 /var/lib/bkc/openstack-swarm
+test -s "$docker_archive" || curl -fL --retry 3 -o "$docker_archive" __DOCKER_STATIC_URL__
+test -s "$docker_archive"
+install_docker() {
+  ip="$1"
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" 'mkdir -p /tmp/bkc-docker'
+  ip netns exec "$tenant_netns" scp -i "$remote_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no "$docker_archive" "$admin_user@$ip:/tmp/bkc-docker/docker.tgz"
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" 'set -euo pipefail
+    sudo tar -C /usr/local/bin -xzf /tmp/bkc-docker/docker.tgz --strip-components=1
+    sudo groupadd -f docker
+    sudo usermod -aG docker "$USER" || true
+    sudo install -d -m 0755 /etc/docker /var/lib/docker
+    sudo tee /etc/systemd/system/docker.service >/dev/null <<'"'"'EOF'"'"'
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+After=network-online.target firewalld.service containerd.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/dockerd --host=unix:///var/run/docker.sock
+ExecReload=/bin/kill -s HUP $MAINPID
+TimeoutStartSec=0
+RestartSec=2
+Restart=always
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+Delegate=yes
+KillMode=process
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now docker
+    sudo docker info >/dev/null
+    sudo docker version
+  '
+}
+for ip in "${ips[@]}"; do install_docker "$ip"; done
+manager="${ips[0]}"
+"${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$manager" "sudo docker swarm leave --force >/dev/null 2>&1 || true; sudo docker swarm init --advertise-addr $manager >/dev/null"
+token=$("${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$manager" 'sudo docker swarm join-token -q worker')
+for ip in "${ips[@]:1}"; do
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" "sudo docker swarm leave --force >/dev/null 2>&1 || true; sudo docker swarm join --token $token $manager:2377 >/dev/null"
+done
+'''.replace("__DOCKER_ARCHIVE_NAME__", shlex.quote(docker_archive_name)).replace("__DOCKER_STATIC_URL__", shlex.quote(docker_static_url))
+    return f'''
+set -euo pipefail
+. {openrc}
+admin_user={shlex.quote(admin_user)}
+remote_key={shlex.quote(remote_key_path)}
+test -s "$remote_key"
+chmod 0600 "$remote_key"
+tenant_netns=""
+for candidate_ns in $(ip netns list | awk '{{print $1}}'); do
+  if ip netns exec "$candidate_ns" ip -4 addr show | grep -q '172\\.24\\.10\\.'; then
+    tenant_netns="$candidate_ns"
+    break
+  fi
+done
+[ -n "$tenant_netns" ] || {{ echo "missing_tenant_netns=172.24.10.0/24"; exit 1; }}
+ssh_cmd=(ip netns exec "$tenant_netns" ssh)
+ssh_opts=(-i "$remote_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/root/.ssh/known_hosts)
+printf 'tenant_netns=%s\\n' "$tenant_netns"
+names=({node_names})
+ips=()
+for name in "${{names[@]}}"; do
+  ip=$(openstack server show "$name" -f json | python3 -c 'import json,re,sys; data=json.load(sys.stdin); nets=str(data.get("addresses","")); m=re.search(r"\\b(?:172\\.24\\.10|10\\.20\\.0)\\.\\d+\\b", nets); print(m.group(0) if m else "")')
+  [ -n "$ip" ] || {{ echo "missing_ip=$name"; exit 1; }}
+  ips+=("$ip")
+done
+for ip in "${{ips[@]}}"; do
+  deadline=$((SECONDS+900))
+  while true; do
+    ssh_probe=$("${{ssh_cmd[@]}}" "${{ssh_opts[@]}}" -o ConnectTimeout=8 "$admin_user@$ip" 'cloud-init status --wait >/dev/null 2>&1 || true; hostname; true' 2>&1) && break
+    printf 'ssh_probe_failed=%s %s\\n' "$ip" "$ssh_probe"
+    if printf '%s\\n' "$ssh_probe" | grep -qi 'Permission denied'; then
+      exit 1
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || {{ echo "ssh_timeout=$ip"; exit 1; }}
+    sleep 10
+  done
+done
+{bootstrap}
+manager="${{ips[0]}}"
+"${{ssh_cmd[@]}}" "${{ssh_opts[@]}}" "$admin_user@$manager" 'sudo docker node ls'
+printf 'openstack_swarm_ips=%s\\n' "${{ips[*]}}"
+'''
+
+
+def _video_openstack_swarm_bootstrap(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_bootstrap_swarm")
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key_path = str(key_info["private_key_path"])
+    if not private_key_path or not Path(private_key_path).exists():
+        raise PipelineExecutionError("BKC SSH private key is missing; cannot bootstrap OpenStack swarm from Server1.")
+    remote_key_path = f"/var/tmp/bkc-openstack-swarm-{run_id[:8]}"
+    upload_remote_file(host=host, user="root", remote_path=remote_key_path, local_path=private_key_path, mode=0o600, timeout=60)
+    out = run_remote_command(host=host, user="root", command=_openstack_swarm_remote_script(values, remote_key_path=remote_key_path), timeout=2400)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _store_run_extra(run_id, {"openstack_swarm_bootstrap": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", "Docker is installed and the three OpenStack VMs have formed a swarm.")
+
+
+def _video_openstack_swarm_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key_path = str(key_info["private_key_path"])
+    if not private_key_path or not Path(private_key_path).exists():
+        raise PipelineExecutionError("BKC SSH private key is missing; cannot validate OpenStack swarm from Server1.")
+    remote_key_path = f"/var/tmp/bkc-openstack-swarm-{run_id[:8]}"
+    upload_remote_file(host=host, user="root", remote_path=remote_key_path, local_path=private_key_path, mode=0o600, timeout=60)
+    out = run_remote_command(host=host, user="root", command=_openstack_swarm_remote_script(values, remote_key_path=remote_key_path, validate_only=True), timeout=900)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    if out.count(" Ready ") < 3 and out.count(" Ready") < 3:
+        raise PipelineExecutionError("Docker swarm validation did not report three Ready nodes.")
+    _store_run_extra(run_id, {"openstack_swarm_validate": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", "OpenStack-hosted Docker Swarm reports three Ready nodes.")
+
+
+def _video_openstack_swarm_fragments(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    fragments = {
+        "openstack.swarm.debian-base": {
+            "rating": "candidate-known-good",
+            "image": values.get("base_image") or "debian-13-genericcloud",
+            "contract": "Debian cloud-init VM must be created with config-drive enabled and must reach SSH before Docker bootstrap starts.",
+        },
+        "openstack.swarm.security-group": {
+            "rating": "candidate",
+            "contract": "Allow SSH from management and Docker Swarm ports 2377/tcp, 7946/tcp+udp, 4789/udp inside tenant CIDR.",
+        },
+        "openstack.swarm.bootstrap": {
+            "rating": "candidate",
+            "contract": "Stage the official Docker static archive from Server1, install dockerd with systemd on each VM, swarm init on node1, join node2/node3, validate docker node ls.",
+        },
+        "fedora.cloud-image": {
+            "rating": "planned",
+            "contract": "Keep optional until an official Fedora cloud image URL is selected and cached.",
+        },
+    }
+    append_event(run_id, "info", stage_name, json.dumps(fragments, indent=2, sort_keys=True))
+    _store_run_extra(run_id, {"openstack_swarm_fragments": fragments})
+    _set_stage(run_id, stage_name, "complete", "OpenStack Docker Swarm candidate fragments recorded for future reuse and anti-regression context.")
+
+
 def _video_seed_openstack(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_openstack_seed", "enable_smoke_instance")
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
@@ -11970,6 +12285,11 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             "video-local-ai-openwebui": _video_local_ai_openwebui,
             "video-local-ai-validate": _video_local_ai_validate,
             "video-local-ai-fragments": _video_local_ai_fragments,
+            "video-openstack-swarm-preflight": _video_openstack_swarm_preflight,
+            "video-openstack-swarm-vms": _video_openstack_swarm_vms,
+            "video-openstack-swarm-bootstrap": _video_openstack_swarm_bootstrap,
+            "video-openstack-swarm-validate": _video_openstack_swarm_validate,
+            "video-openstack-swarm-fragments": _video_openstack_swarm_fragments,
         }
         if kind in video_runners:
             video_runners[kind](run_id, stage_name)

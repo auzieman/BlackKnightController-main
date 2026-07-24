@@ -278,6 +278,14 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "validate-local-ai-stack",
             "record-ollama-openwebui-fragments",
         ]
+    if normalized == "openstack-docker-swarm-seed":
+        return [
+            "preflight-openstack-swarm-base",
+            "ensure-openstack-swarm-vms",
+            "bootstrap-openstack-docker-swarm",
+            "validate-openstack-docker-swarm",
+            "record-openstack-swarm-fragments",
+        ]
     if normalized == "trixie-openstack-host-prepare":
         return [
             "load-openstack-host-intent",

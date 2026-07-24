@@ -1,0 +1,37 @@
+{
+  "id": "openstack-docker-swarm-seed",
+  "name": "40 VIDEO — OpenStack Docker Swarm Seed",
+  "repo": "BlackKnightController",
+  "workflow": "openstack-docker-swarm-seed",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": ["40-video", "candidate", "openstack", "docker-swarm", "cloud-init", "bkc-ssh", "fragments"],
+  "summary": "Use the proven Server1 OpenStack API lane to create three Debian cloud VMs, install Docker, form a small swarm, validate it, and record reusable known-good fragments.",
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_openstack_swarm_vms": {"required": false, "default": true},
+    "enable_replace_swarm_vms": {"required": false, "default": false},
+    "enable_bootstrap_swarm": {"required": false, "default": true},
+    "enable_fedora_image_import": {"required": false, "default": false}
+  },
+  "stages": [
+    {"id": "preflight-openstack-swarm-base", "action": "openstack.swarm.preflight", "transport": "bkc-ssh+openstack-api", "risk": "low", "timeout_seconds": 300},
+    {"id": "ensure-openstack-swarm-vms", "action": "openstack.swarm.vm.ensure", "transport": "bkc-ssh+openstack-api+cloud-init", "risk": "medium", "timeout_seconds": 1800},
+    {"id": "bootstrap-openstack-docker-swarm", "action": "docker.swarm.bootstrap", "transport": "bkc-ssh+ssh", "risk": "medium", "timeout_seconds": 2400},
+    {"id": "validate-openstack-docker-swarm", "action": "docker.swarm.validate", "transport": "bkc-ssh+ssh+openstack-api", "risk": "low", "timeout_seconds": 600},
+    {"id": "record-openstack-swarm-fragments", "action": "fragments.openstack_swarm.record", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "dashboards": [
+    {
+      "name": "BKC Activity",
+      "summary": "Watch the OpenStack swarm VM creation and bootstrap stages.",
+      "url": "http://swarm1.lab.auzietek.com:8085/d/bfppoy5unfpxcf/blackknightcontroller-activity?orgId=1&refresh=30s"
+    },
+    {
+      "name": "Horizon",
+      "summary": "Confirm bkc-swarm-01/02/03 in the OpenStack instance view.",
+      "url": "http://swarm1.lab.auzietek.com:8082/"
+    }
+  ],
+  "notes": "Debian is the default base because it is already proven in this lab. Fedora import remains disabled until an official cloud-image URL is selected and cached."
+}

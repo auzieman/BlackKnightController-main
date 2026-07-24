@@ -1,0 +1,22 @@
+{
+  "fragments": [
+    {
+      "id": "openstack.swarm.debian-cloudinit-vm",
+      "rating": "candidate",
+      "source": "pipeline:openstack-docker-swarm-seed",
+      "contract": "Create cattle Debian cloud VMs with BKC SSH key, admin-deploy/changeme123 console access, qemu guest agent, and cloud-init completion before post-boot automation.",
+      "do_not_regress": [
+        "Create OpenStack cloud-init guests with --config-drive true in this lab; metadata service fallback produced DataSourceNone and no authorized keys.",
+        "Do not replace VMs unless enable_replace_swarm_vms is true.",
+        "Do not make Fedora the default until its official image URL is verified and cached.",
+        "Do not claim success before SSH and Docker swarm membership are validated."
+      ]
+    },
+    {
+      "id": "docker.swarm.ordinary-ssh-bootstrap",
+      "rating": "candidate",
+      "source": "pipeline:openstack-docker-swarm-seed",
+      "contract": "Download the official Docker static archive on Server1, copy it through the tenant namespace, install dockerd as a systemd service, run swarm init on bkc-swarm-01, join bkc-swarm-02 and bkc-swarm-03, then validate with docker node ls."
+    }
+  ]
+}
