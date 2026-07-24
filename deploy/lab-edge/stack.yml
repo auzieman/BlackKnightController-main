@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    configs:
+      - source: lab_edge_nginx_v5
+        target: /etc/nginx/nginx.conf
+      - source: lab_edge_index_v3
+        target: /usr/share/nginx/html/index.html
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: ingress
+      - target: 8082
+        published: 8082
+        protocol: tcp
+        mode: ingress
+      - target: 8083
+        published: 8083
+        protocol: tcp
+        mode: ingress
+      - target: 8084
+        published: 8084
+        protocol: tcp
+        mode: ingress
+      - target: 8085
+        published: 8085
+        protocol: tcp
+        mode: ingress
+      - target: 8086
+        published: 8086
+        protocol: tcp
+        mode: ingress
+      - target: 8087
+        published: 8087
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+configs:
+  lab_edge_nginx_v5:
+    file: ./nginx.conf
+  lab_edge_index_v3:
+    file: ./index.html
