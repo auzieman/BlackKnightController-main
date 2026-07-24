@@ -32,10 +32,10 @@
     ]
   },
   "self_service_network": {
-    "name": "tenant-demo-net",
-    "subnet_name": "tenant-demo-subnet",
-    "cidr": "172.16.10.0/24",
-    "gateway": "172.16.10.1",
+    "name": "lab-internal",
+    "subnet_name": "lab-internal-v4",
+    "cidr": "172.24.10.0/24",
+    "gateway": "172.24.10.1",
     "router_name": "tenant-demo-router"
   },
   "demo_flavor": {
@@ -73,7 +73,7 @@
     "name": "bkc-openstack-smoke-01",
     "image": "cirros-bkc-smoke",
     "flavor": "bkc.nano",
-    "network": "tenant-demo-net",
+    "network": "lab-internal",
     "key_name": "bkc-demo-key"
   },
   "proxmox_management_url": "https://10.20.0.41:8006/",
@@ -83,6 +83,7 @@
   "proxmox_source_vmid": 132,
   "proxmox_source_name": "trixie-smoke-132",
   "proxmox_target_host": "10.20.0.41",
+  "proxmox_target_password": "changeme123",
   "proxmox_target_storage": "local-lvm",
   "proxmox_target_bridge": "vmbr0",
   "proxmox_base_guests": [

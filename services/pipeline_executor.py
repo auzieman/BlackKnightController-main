@@ -11482,11 +11482,46 @@ def _video_seed_openstack(run_id: str, stage_name: str) -> None:
     password = _secret_ref_literal(values.get("seed_user_password_ref"), default="changeme123")
     flavor = values.get("demo_flavor") if isinstance(values.get("demo_flavor"), dict) else {}
     image = values.get("demo_image") if isinstance(values.get("demo_image"), dict) else {}
+    keypair = values.get("demo_keypair") if isinstance(values.get("demo_keypair"), dict) else {}
+    security_group = values.get("demo_security_group") if isinstance(values.get("demo_security_group"), dict) else {}
     network = values.get("self_service_network") if isinstance(values.get("self_service_network"), dict) else {}
     smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
     image_name = str(image.get("name") or smoke.get("image") or "cirros-bkc-smoke")
     image_url = str(image.get("url") or "https://download.cirros-cloud.net/0.6.3/cirros-0.6.3-x86_64-disk.img")
     image_filename = Path(urllib.parse.urlparse(image_url).path).name or f"{image_name}.qcow2"
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    key_name = str(keypair.get("name") or smoke.get("key_name") or "bkc-demo-key")
+    secgroup_name = str(security_group.get("name") or "bkc-demo-allow-ssh-icmp")
+    secgroup_rules = security_group.get("rules") if isinstance(security_group.get("rules"), list) else []
+    secgroup_commands: list[str] = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup_rules:
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "0.0.0.0/0").strip()
+        if proto == "icmp":
+            secgroup_commands.append(
+                f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true"
+            )
+        elif proto == "tcp":
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(
+                f"openstack security group rule create --proto tcp --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true"
+            )
+    keypair_command = "true"
+    if public_key.startswith("ssh-"):
+        keypair_command = (
+            f"openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || "
+            "{ "
+            f"key_tmp=$(mktemp); printf '%s\\n' {shlex.quote(public_key)} > \"$key_tmp\"; "
+            f"openstack keypair create --public-key \"$key_tmp\" {shlex.quote(key_name)} >/dev/null; "
+            "rm -f \"$key_tmp\"; "
+            "}"
+        )
+    server_key_arg = f"--key-name {shlex.quote(key_name)}" if public_key.startswith("ssh-") else ""
     script = f'''set -euo pipefail
 . /root/admin-openrc
 install -d -m 0755 /var/lib/bkc/openstack-images
@@ -11498,8 +11533,10 @@ openstack role add --project {shlex.quote(project)} --user {shlex.quote(user)} m
 openstack flavor show {shlex.quote(str(flavor.get("name") or "bkc.nano"))} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 512)} --disk {int(flavor.get("disk_gb") or 1)} --vcpus {int(flavor.get("vcpus") or 1)} {shlex.quote(str(flavor.get("name") or "bkc.nano"))}
 openstack network show {shlex.quote(str(network.get("name") or "tenant-demo-net"))} >/dev/null 2>&1 || openstack network create {shlex.quote(str(network.get("name") or "tenant-demo-net"))}
 openstack subnet show {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))} >/dev/null 2>&1 || openstack subnet create --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} --subnet-range {shlex.quote(str(network.get("cidr") or "172.16.10.0/24"))} {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))}
+{keypair_command}
+{chr(10).join(secgroup_commands)}
 openstack image show {shlex.quote(image_name)} >/dev/null 2>&1 || openstack image create --disk-format {shlex.quote(str(image.get("disk_format") or "qcow2"))} --container-format {shlex.quote(str(image.get("container_format") or "bare"))} --public --file "$image_file" {shlex.quote(image_name)}
-openstack server show {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))} >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(str(flavor.get("name") or "bkc.nano"))} --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))}
+openstack server show {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))} >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(str(flavor.get("name") or "bkc.nano"))} --network {shlex.quote(str(smoke.get("network") or network.get("name") or "lab-internal"))} {server_key_arg} --security-group {shlex.quote(secgroup_name)} {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))}
 openstack server list
 '''
     out = run_remote_command(host=host, user="root", command=script, timeout=1200)
@@ -11511,13 +11548,26 @@ def _video_seed_proxmox(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_proxmox_seed")
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
     source, target = str(values["proxmox_source_host"]), str(values["proxmox_target_host"])
-    pub = run_remote_command(host=source, user="root", command="set -e; test -s /root/.ssh/bkc-migrate || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/bkc-migrate; cat /root/.ssh/bkc-migrate.pub", timeout=30).strip()
-    run_remote_command(host=target, user="root", command=f"mkdir -p /root/.ssh; touch /root/.ssh/authorized_keys; grep -Fqx {shlex.quote(pub)} /root/.ssh/authorized_keys || printf '%s\\n' {shlex.quote(pub)} >> /root/.ssh/authorized_keys", timeout=30)
+    source_password = str(load_proxmox_config().get("password") or "").strip()
+    target_password = str(values.get("proxmox_target_password") or "changeme123").strip()
+    pub = run_remote_command(host=source, user="root", password=source_password, command="set -e; test -s /root/.ssh/bkc-migrate || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/bkc-migrate; cat /root/.ssh/bkc-migrate.pub", timeout=30).strip()
+    run_remote_command(host=target, user="root", password=target_password, command=f"mkdir -p /root/.ssh; touch /root/.ssh/authorized_keys; grep -Fqx {shlex.quote(pub)} /root/.ssh/authorized_keys || printf '%s\\n' {shlex.quote(pub)} >> /root/.ssh/authorized_keys", timeout=30)
     source_vmid = int(values["proxmox_source_vmid"])
-    migrate = f"set -euo pipefail; if ! ssh -i /root/.ssh/bkc-migrate -o StrictHostKeyChecking=no root@{shlex.quote(target)} qm status 201 >/dev/null 2>&1; then vzdump {source_vmid} --mode stop --compress zstd --stdout | ssh -i /root/.ssh/bkc-migrate -o StrictHostKeyChecking=no root@{shlex.quote(target)} 'qmrestore - 201 --storage local-lvm'; fi"
-    out = run_remote_command(host=source, user="root", command=migrate, timeout=3300)
+    target_q = shlex.quote(target)
+    migrate = (
+        "set -euo pipefail; "
+        f"target={target_q}; "
+        "ssh_opts='-i /root/.ssh/bkc-migrate -o StrictHostKeyChecking=no'; "
+        "if ssh $ssh_opts root@$target \"qm config 201 2>/dev/null | grep -Eq '^(scsi|virtio|sata|ide)[0-9]:'\"; then "
+        "  echo vm201=already-restored; "
+        "else "
+        "  ssh $ssh_opts root@$target 'qm unlock 201 >/dev/null 2>&1 || true; qm destroy 201 --purge >/dev/null 2>&1 || true'; "
+        f"  vzdump {source_vmid} --mode stop --compress 0 --stdout | ssh $ssh_opts root@$target 'qmrestore - 201 --storage local-lvm'; "
+        "fi"
+    )
+    out = run_remote_command(host=source, user="root", password=source_password, command=migrate, timeout=3300)
     configure = "set -e; qm set 201 --name ns1-trixie-base --memory 2048 --cores 2 --delete net1 >/dev/null 2>&1 || true; qm set 201 --net0 virtio,bridge=vmbr0; qm status 202 >/dev/null 2>&1 || qm clone 201 202 --name swarm1-trixie-base --full --storage local-lvm; qm set 202 --memory 4096 --cores 2 --net0 virtio,bridge=vmbr0; qm start 201 || true; qm start 202 || true; qm list"
-    out += "\n" + run_remote_command(host=target, user="root", command=configure, timeout=1200)
+    out += "\n" + run_remote_command(host=target, user="root", password=target_password, command=configure, timeout=1200)
     append_event(run_id, "info", stage_name, out[-3500:])
     _set_stage(run_id, stage_name, "complete", "Proxmox VM132 migrated to VM201 and cloned to VM202 with vmbr0 networking.")
 
@@ -11525,7 +11575,10 @@ def _video_seed_proxmox(run_id: str, stage_name: str) -> None:
 def _video_seed_validate(run_id: str, stage_name: str) -> None:
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
     prox = run_remote_command(host=str(values["proxmox_target_host"]), user="root", command="test -c /dev/kvm; qm status 201 | grep -F running; qm status 202 | grep -F running; curl -kfsS -o /dev/null https://127.0.0.1:8006/; qm list", timeout=120)
-    cloud = run_remote_command(host="10.20.0.240", user="root", command=". /root/admin-openrc; openstack token issue -f value -c id; openstack server show bkc-openstack-smoke-01 -f value -c status", timeout=120)
+    cloud_host = str(values.get("openstack_host") or "10.20.0.240")
+    smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
+    smoke_name = str(smoke.get("name") or "bkc-openstack-smoke-01")
+    cloud = run_remote_command(host=cloud_host, user="root", command=f". /root/admin-openrc; openstack token issue -f value -c id; openstack server show {shlex.quote(smoke_name)} -f value -c status", timeout=120)
     urls = values.get("edge_validation_urls") if isinstance(values.get("edge_validation_urls"), list) else []
     edge = "\n".join(f"{url}={urllib.request.urlopen(url, timeout=15).status}" for url in urls)
     append_event(run_id, "info", stage_name, (cloud + "\n" + prox + "\n" + edge)[-4000:])

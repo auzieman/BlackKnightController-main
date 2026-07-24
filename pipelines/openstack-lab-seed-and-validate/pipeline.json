@@ -4,8 +4,13 @@
   "repo": "BlackKnightController",
   "workflow": "lab-dual-platform-seed-validate",
   "resource_class": "slow",
-  "status": "candidate",
-  "tags": ["30-video", "candidate", "openstack", "proxmox", "seed", "validate"],
+  "status": "proven",
+  "tags": ["30-video", "proven", "openstack", "proxmox", "seed", "validate"],
+  "proof": {
+    "run_id": "6f1853bd-2160-410a-baa6-271a1e4ae2e0",
+    "result": "OpenStack smoke server ACTIVE on lab-internal, Proxmox VM201/VM202 running on Server2, edge Horizon/Proxmox/Grafana URLs validated",
+    "completed_at": "2026-07-24T14:12:13+00:00"
+  },
   "inputs": {
     "tenant_slug": {"required": true, "default": "lab"},
     "enable_openstack_seed": {"required": false, "default": true},
