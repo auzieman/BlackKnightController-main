@@ -11078,6 +11078,28 @@ def _video_bmc_pxe_reset(values: dict) -> str:
     return address
 
 
+def _video_bmc_ipmi_pxe_reset_via_ns1(values: dict, address: str, username: str, password: str) -> str:
+    """Fallback for older iDRACs whose Redfish HTTPS stack is not responding."""
+    quoted = {
+        "address": shlex.quote(address),
+        "username": shlex.quote(username),
+        "password": shlex.quote(password),
+    }
+    command = (
+        "set -e; "
+        "command -v ipmitool >/dev/null; "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis bootdev pxe options=efiboot; "
+        f"state=$(ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power status || true); "
+        "case \"$state\" in *on*) "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power cycle; "
+        ";; *) "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power on; "
+        ";; esac; "
+        "printf 'ipmi_pxe_reset=%s\\n' \"$state\""
+    )
+    return _run_ns1_command(values, command, timeout=60)
+
+
 def _video_openstack_pxe(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_destructive_install")
     _run_openstack_base_boot_render(run_id, stage_name)
@@ -11100,22 +11122,30 @@ def _video_openstack_boot(run_id: str, stage_name: str) -> None:
     bmc_definition = values["physical_hosts"][0]
     bmc_address = str(bmc_definition["bmc_observed_address"])
     bmc_user, bmc_password = _resolve_bmc_credentials(str(bmc_definition["bmc_credential_ref"]))
-    _, bios_body = _redfish_request_via_ns1(
-        values,
-        bmc_address,
-        "/redfish/v1/Systems/System.Embedded.1/Bios",
-        bmc_user,
-        bmc_password,
-    )
-    bios = json.loads(bios_body or "{}")
-    actual_boot_mode = str((bios.get("Attributes") or {}).get("BootMode") or "").strip()
-    required_boot_mode = str(values.get("required_boot_mode") or "Uefi").strip()
-    if actual_boot_mode.lower() != required_boot_mode.lower():
-        raise PipelineExecutionError(
-            f"Server1 firmware drift: BootMode is {actual_boot_mode or 'unknown'}, "
-            f"but pipeline 10 requires {required_boot_mode}. Correct iDRAC BIOS settings before arming PXE."
+    try:
+        _, bios_body = _redfish_request_via_ns1(
+            values,
+            bmc_address,
+            "/redfish/v1/Systems/System.Embedded.1/Bios",
+            bmc_user,
+            bmc_password,
         )
-    append_event(run_id, "info", stage_name, f"server1_firmware_boot_mode={actual_boot_mode}")
+        bios = json.loads(bios_body or "{}")
+        actual_boot_mode = str((bios.get("Attributes") or {}).get("BootMode") or "").strip()
+        required_boot_mode = str(values.get("required_boot_mode") or "Uefi").strip()
+        if actual_boot_mode.lower() != required_boot_mode.lower():
+            raise PipelineExecutionError(
+                f"Server1 firmware drift: BootMode is {actual_boot_mode or 'unknown'}, "
+                f"but pipeline 10 requires {required_boot_mode}. Correct iDRAC BIOS settings before arming PXE."
+            )
+        append_event(run_id, "info", stage_name, f"server1_firmware_boot_mode={actual_boot_mode}")
+    except PipelineExecutionError as exc:
+        append_event(
+            run_id,
+            "warning",
+            stage_name,
+            f"Server1 Redfish BIOS guard unavailable; continuing with IPMI PXE fallback after DHCP validation: {exc}",
+        )
     mac = str(values["physical_hosts"][0]["provisioning_mac"])
     lease, http_host = str(values["installer_lease_address"]), str(values["physical_pxe_http_host"])
     fragment, main = str(values["dhcp_fragment_path"]), str(values["dhcp_main_path"])
@@ -11151,7 +11181,11 @@ host r630-openstack-01-pxe {{
     _store_run_extra(run_id, {"openstack_nginx_log_baseline": baseline})
 
     try:
-        bmc = _video_bmc_pxe_reset(values)
+        try:
+            bmc = _video_bmc_pxe_reset(values)
+        except PipelineExecutionError as exc:
+            append_event(run_id, "warning", stage_name, f"Server1 Redfish PXE reset unavailable; using IPMI fallback: {exc}")
+            bmc = _video_bmc_ipmi_pxe_reset_via_ns1(values, bmc_address, bmc_user, bmc_password)
     except Exception:
         # Arming DHCP precedes the Redfish reset.  If iDRAC is unavailable,
         # restore the exact-MAC fragment to lease-only so a later manual boot
@@ -11934,6 +11968,9 @@ def _openstack_swarm_remote_script(values: dict, *, remote_key_path: str, valida
     bootstrap = "true" if validate_only else r'''
 docker_archive=/var/lib/bkc/openstack-swarm/__DOCKER_ARCHIVE_NAME__
 install -d -m 0755 /var/lib/bkc/openstack-swarm
+if ! getent hosts download.docker.com >/dev/null 2>&1; then
+  printf '%s\n' 'nameserver 10.20.0.10' 'nameserver 1.1.1.1' >/etc/resolv.conf
+fi
 test -s "$docker_archive" || curl -fL --retry 3 -o "$docker_archive" __DOCKER_STATIC_URL__
 test -s "$docker_archive"
 install_docker() {
