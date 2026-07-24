@@ -18,7 +18,8 @@
       "id": "seed.proxmox-vm132-to-base-guests",
       "status": "known-good-proven",
       "proof_run_ids": [
-        "6f1853bd-2160-410a-baa6-271a1e4ae2e0"
+        "6f1853bd-2160-410a-baa6-271a1e4ae2e0",
+        "f220c742-7d16-4dae-8adc-43f9c55a2bad"
       ],
       "source_paths": [
         {
@@ -27,9 +28,9 @@
         },
         "services/pipeline_executor.py"
       ],
-      "contract": "Use the old Proxmox source host 192.168.1.9 and source VMID 132 as the known-good Trixie source, stream an uncompressed VMA restore into target VM201 on 10.20.0.41, clone VM202, attach vmbr0 networking, and start both guests.",
+      "contract": "Use the old Proxmox source host 192.168.1.9 and source VMID 132 as the known-good Trixie source. Source auth is BKC SSH key based unless proxmox_source_password is explicitly set. Stream an uncompressed VMA restore into target VM201 on 10.20.0.41, clone VM202, attach vmbr0 networking, and start both guests.",
       "why_it_matters": "The simple source-to-target migration is the reusable Proxmox model: API/SSH pull a VM from the old hypervisor and push it into the new one.",
-      "do_not_repeat": "Do not couple the migration source password to the global BKC Proxmox integration; the global integration should point to the current target after validation."
+      "do_not_repeat": "Do not couple the migration source password to the global BKC Proxmox integration; the old source should use BKC key auth and the global integration should point to the current target after validation."
     },
     {
       "id": "edge.proxmox-http-cookie-bridge",

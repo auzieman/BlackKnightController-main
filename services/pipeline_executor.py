@@ -11550,7 +11550,10 @@ def _video_seed_proxmox(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_proxmox_seed")
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
     source, target = str(values["proxmox_source_host"]), str(values["proxmox_target_host"])
-    source_password = str(values.get("proxmox_source_password") or load_proxmox_config().get("password") or "").strip()
+    if "proxmox_source_password" in values:
+        source_password = str(values.get("proxmox_source_password") or "").strip()
+    else:
+        source_password = str(load_proxmox_config().get("password") or "").strip()
     target_password = str(values.get("proxmox_target_password") or "changeme123").strip()
     pub = run_remote_command(host=source, user="root", password=source_password, command="set -e; test -s /root/.ssh/bkc-migrate || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/bkc-migrate; cat /root/.ssh/bkc-migrate.pub", timeout=30).strip()
     run_remote_command(host=target, user="root", password=target_password, command=f"mkdir -p /root/.ssh; touch /root/.ssh/authorized_keys; grep -Fqx {shlex.quote(pub)} /root/.ssh/authorized_keys || printf '%s\\n' {shlex.quote(pub)} >> /root/.ssh/authorized_keys", timeout=30)
