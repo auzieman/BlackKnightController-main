@@ -1,0 +1,50 @@
+{
+  "fragments": [
+    {
+      "id": "openstack.native-service-stack",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "3e022d9f-4dfb-4c76-9838-71b4f2137892"
+      ],
+      "source_paths": [
+        {
+          "path": "pipelines/native-openstack-all-in-one/scripts/00-bkc-readiness.sh",
+          "sha256": "376a3b0063d68c6dd595d69d94c436457f90e972bd779b14eaeb8b7f1c93d9f2"
+        },
+        {
+          "path": "pipelines/native-openstack-all-in-one/scripts/01-foundation-keystone-horizon.sh",
+          "sha256": "26df14cd16215bffed2b05602d4ff7590ed1016f073549bb2919cc5082d62062"
+        },
+        {
+          "path": "pipelines/native-openstack-all-in-one/scripts/02-glance-placement.sh",
+          "sha256": "d8c3e8808ace33a3353c4774349a356771c403ccbc642b04eef6fdccedd3834a"
+        },
+        {
+          "path": "pipelines/native-openstack-all-in-one/scripts/03-nova.sh",
+          "sha256": "cd39f2f708c8020c2124493069f370798eabf68f26326205c29f04a711ff59da"
+        },
+        {
+          "path": "pipelines/native-openstack-all-in-one/scripts/04-neutron-ovs.sh",
+          "sha256": "bb7c2dd63418d994c4a24d6a32e70ebd0d564b3a4ff1e12c834890b5eb91a332"
+        }
+      ],
+      "contract": "On the clean 10 VIDEO Trixie base, install native Keystone, Horizon, Glance, Placement, Nova, and Neutron/OVS through BKC SSH scripts and validate Horizon, Keystone token issue, Nova compute, Neutron endpoints, and Neutron agents.",
+      "why_it_matters": "The native script path replaced the earlier Kolla rabbit hole for this lab. It is simple, direct, and closer to the normal sysctl/config-file/service model BKC is meant to automate.",
+      "do_not_repeat": "Do not reintroduce Kolla, Kubernetes, or a second local OpenStack control plane as the default lab path unless a new pipeline explicitly proves that provider."
+    },
+    {
+      "id": "openstack.horizon-edge-session",
+      "status": "known-risk-observed",
+      "proof_run_ids": [
+        "3e022d9f-4dfb-4c76-9838-71b4f2137892"
+      ],
+      "source_paths": [
+        "deploy/lab-edge/nginx.conf",
+        "pipelines/native-openstack-all-in-one/scripts/01-foundation-keystone-horizon.sh"
+      ],
+      "contract": "Horizon must be reachable through the lab edge at http://swarm1.lab.auzietek.com:8082/ and may require browser-session validation in addition to curl redirect checks.",
+      "why_it_matters": "A curl 302/200 proves service routing, but browser login/session behavior can still differ because Horizon/Django depends on host, forwarded host, CSRF, and cookie behavior.",
+      "do_not_repeat": "Do not treat a browser double-login symptom as proof that Keystone/Nova/Neutron are broken. First isolate edge headers and Horizon cookie behavior."
+    }
+  ]
+}

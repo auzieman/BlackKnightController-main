@@ -31,6 +31,12 @@ The install is deliberately protected by two controls:
 
 Expected result: `r630-proxmox-01.lab.auzietek.com` at `10.20.0.41`, with the
 Proxmox web/API endpoint on `https://10.20.0.41:8006/`.
+
+Operational memory lives in `memory/fragments.json` and `memory/traces.jsonl`.
+Read those files before changing this lane; they record the supported
+auto-installer contract, one-shot PXE boundary, disk-boot validation, and the
+known traps around repeated PXE boots.
+
 The candidate owns the full one-shot lifecycle: verify the checksum-pinned
 unattended ISO and embedded answer, require deny-by-default broad DHCP, arm only
 Server2's exact LOM MAC, require fresh HTTP initrd evidence from `.241`, empty

@@ -1,0 +1,50 @@
+{
+  "fragments": [
+    {
+      "id": "proxmox.supported-auto-installer-pxe",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "01019545-3d0c-42b3-ae8d-97588680e47f"
+      ],
+      "source_paths": [
+        {
+          "path": "pipelines/baremetal-proxmox-trial-prepare/scripts/build-proxmox-pxe-initrd.sh",
+          "sha256": "1d7ddb706fa44fc465b9fb8310033bb9645f1b9e6f8eb50565e20b6369144714"
+        },
+        {
+          "path": "pipelines/baremetal-proxmox-trial-prepare/scripts/arm-proxmox-one-shot-pxe.sh",
+          "sha256": "5834f010a52c2d351dd92cc7dda0511166a983b02c20a70d24ed32bda13ee4d4"
+        },
+        {
+          "path": "pipelines/baremetal-proxmox-trial-prepare/scripts/disarm-proxmox-one-shot-pxe.sh",
+          "sha256": "be865bb0130800497b8f8f8294cc917d8fafb465b241b05e4cdddf0d8422062d"
+        },
+        {
+          "path": "pipelines/baremetal-proxmox-trial-prepare/templates/answer.toml",
+          "sha256": "b0b8709f4159c417d5a04ea30a1b5b31c9da85d0ea5d9b1170c4192618a256a4"
+        },
+        {
+          "path": "pipelines/baremetal-proxmox-trial-prepare/templates/server2-proxmox.ipxe",
+          "sha256": "1ebc71774354b5b44c28bc0c03daeb13488365a0bec3edba7eef5fc543dc9106"
+        }
+      ],
+      "contract": "Install Server2 using Proxmox's supported auto-installer flow: checksum-gated ISO assets, embedded answer file, exact-MAC one-shot PXE, observe HTTP initrd handoff, disarm PXE, then validate disk boot, SSH, root@pam API login, KVM, local storage, and local-lvm.",
+      "why_it_matters": "The successful Proxmox path came from letting the commercial installer own the install semantics while BKC controls boot, evidence, handoff, and validation.",
+      "do_not_repeat": "Do not dissect the Proxmox installer into unrelated Debian preseed logic. Do not leave the exact-MAC PXE fragment armed after handoff."
+    },
+    {
+      "id": "proxmox.boot-order-disk-after-install",
+      "status": "known-good-observed",
+      "proof_run_ids": [
+        "01019545-3d0c-42b3-ae8d-97588680e47f"
+      ],
+      "source_paths": [
+        "pipelines/baremetal-proxmox-trial-prepare/defaults.json",
+        "services/pipeline_executor.py"
+      ],
+      "contract": "After installer handoff, DHCP/PXE must be disarmed and the host must boot from PERC/local disk rather than entering another PXE installer loop.",
+      "why_it_matters": "During rehearsal, Server2 appeared to reinstall or hang at PXE when boot order and PXE state were not cleanly separated.",
+      "do_not_repeat": "Do not debug Proxmox disk contents before checking whether the machine simply booted PXE again."
+    }
+  ]
+}

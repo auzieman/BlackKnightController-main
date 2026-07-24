@@ -11,6 +11,11 @@ run its focused validation, then prove the complete 10B pipeline before
 updating the recorded digest. Do not casually rewrite a proven fragment while
 debugging orchestration around it.
 
+Operational memory lives in `memory/fragments.json` and `memory/traces.jsonl`.
+Read those files before changing this lane; they record why the native
+OpenStack path is the proven baseline and what not to regress while debugging
+edge or orchestration symptoms.
+
 The current composition is:
 
 1. `openstack.readiness` — shared target-side readiness/wait primitives.

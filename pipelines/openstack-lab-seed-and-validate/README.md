@@ -35,3 +35,8 @@ base hardware rebuilt
 The same seed model is also the basis for a wipe/rebuild loop. After the cloud
 can be seeded and a smoke VM can boot, the bare-metal reset lane should wipe the
 host and repeat the full path from PXE through API validation.
+
+Operational memory lives in `memory/fragments.json` and `memory/traces.jsonl`.
+Read those files before changing this lane; they record the known-good
+OpenStack smoke instance, Proxmox old-to-new VM migration, lab-edge Proxmox
+cookie fix, and final BKC inventory-sync contract.
