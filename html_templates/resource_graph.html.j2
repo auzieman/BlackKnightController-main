@@ -41,6 +41,7 @@
                 <button class="button button-quiet graph-filter-button" type="button" data-cy-filter="all">All</button>
                 <button class="button button-quiet graph-layout-button" type="button" data-cy-layout="map">Map</button>
                 <button class="button button-quiet graph-layout-button" type="button" data-cy-layout="flow">Flow</button>
+                <button class="button button-quiet graph-ai-layout-button" type="button">AI Layout</button>
                 <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="fit">Fit</button>
                 <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="zoom-out">-</button>
                 <button class="button button-quiet graph-viewport-button" type="button" data-cy-viewport="zoom-in">+</button>
@@ -257,6 +258,8 @@
                 window.initBkcCytoscapeGraph({
                     elements: elements,
                     savePositionsEndpoint: "{{ url_for('resource_graph.save_resource_graph_positions') }}",
+                    aiLayoutEndpoint: "{{ url_for('resource_graph.ai_resource_graph_layout') }}",
+                    aiLayoutSelector: ".graph-ai-layout-button",
                     contextActionEndpoint: "{{ url_for('resource_graph.resource_graph_context_action') }}",
                     layoutControlSelector: ".graph-layout-button",
                     viewportControlSelector: ".graph-viewport-button",

@@ -659,6 +659,66 @@
     });
   }
 
+  function installAiLayoutControl(cy, options) {
+    if (!options.aiLayoutSelector || !options.aiLayoutEndpoint) {
+      return;
+    }
+    const button = document.querySelector(options.aiLayoutSelector);
+    if (!button) {
+      return;
+    }
+    button.addEventListener("click", async function () {
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = "AI thinking…";
+      try {
+        const response = await window.fetch(options.aiLayoutEndpoint, {
+          method: "POST",
+          headers: Object.assign(
+            { "Content-Type": "application/json", Accept: "application/json" },
+            csrfHeader(),
+            options.fetchHeaders || {}
+          ),
+          credentials: "same-origin",
+          body: JSON.stringify({
+            save: true,
+            width: Math.max(1400, cy.width() * 2),
+            height: Math.max(900, cy.height() * 2),
+          }),
+        });
+        const payload = await response.json().catch(function () {
+          return {};
+        });
+        if (!response.ok) {
+          throw new Error(payload.detail || payload.error || `AI layout failed with HTTP ${response.status}`);
+        }
+        (payload.positions || []).forEach(function (position) {
+          const node = cy.getElementById(String(position.id || ""));
+          if (node.length && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) {
+            node.animate({ position: { x: Number(position.x), y: Number(position.y) } }, { duration: 420 });
+          }
+        });
+        window.setTimeout(function () {
+          fitGraph(cy, options.fitPadding);
+        }, 460);
+        button.textContent = `AI Layout (${payload.position_count || (payload.positions || []).length})`;
+      } catch (error) {
+        console.error("BKC AI graph layout failed", error);
+        button.textContent = "AI failed";
+        window.setTimeout(function () {
+          button.textContent = originalText;
+        }, 2200);
+      } finally {
+        window.setTimeout(function () {
+          button.disabled = false;
+          if (button.textContent !== originalText) {
+            button.textContent = originalText;
+          }
+        }, 2600);
+      }
+    });
+  }
+
   function nodeMatchesText(node, query) {
     if (!query) {
       return true;
@@ -1051,6 +1111,7 @@
     installContextMenu(cy, config);
     installLayoutControls(cy, config);
     installViewportControls(cy, config);
+    installAiLayoutControl(cy, config);
     installFilterControls(cy, config);
     cy.ready(function () {
       window.setTimeout(function () {

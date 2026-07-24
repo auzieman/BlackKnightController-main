@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_login import current_user
 from services import bkc_db
 from services.access_control import Perm, require_perm
+from services.ai_graph_layout import AIGraphLayoutError, propose_cytoscape_layout
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
 from services.job_queue import enqueue_job, job_queue_enabled
 from services.pipeline_catalog import pipeline_by_id
@@ -120,6 +121,39 @@ def save_resource_graph_positions():
         )
         return jsonify({"error": "position_save_failed"}), 500
     return jsonify({"status": "ok", "saved": saved, "tenant_slug": get_effective_tenant_slug()})
+
+
+@resource_graph_blueprint.post("/resources/graph/ai-layout")
+@require_perm(Perm.INVENTORY_WRITE)
+def ai_resource_graph_layout():
+    tenant_id = get_current_tenant_id()
+    if tenant_id is None:
+        return jsonify({"error": "tenant_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    graph = build_resource_graph()
+    elements = cytoscape_elements_from_resource_graph(graph)
+    try:
+        proposal = propose_cytoscape_layout(
+            elements,
+            host=str(payload.get("ollama_host") or "10.20.0.240"),
+            model=str(payload.get("model") or "qwen2.5-coder:1.5b"),
+            width=float(payload.get("width") or 1800),
+            height=float(payload.get("height") or 1200),
+            max_nodes=int(payload.get("max_nodes") or 90),
+        )
+    except (AIGraphLayoutError, ValueError) as exc:
+        return jsonify({"error": "ai_layout_failed", "detail": str(exc)}), 502
+    if payload.get("save") is True:
+        try:
+            proposal["saved"] = bkc_db.save_graph_positions(int(tenant_id), proposal["positions"])
+        except Exception:
+            current_app.logger.exception(
+                "Failed to save AI Cytoscape graph positions for tenant %s",
+                get_effective_tenant_slug(),
+            )
+            return jsonify({"error": "position_save_failed"}), 500
+    proposal["tenant_slug"] = get_effective_tenant_slug()
+    return jsonify(proposal)
 
 
 def _pipeline_from_node_id(node_id: str):
