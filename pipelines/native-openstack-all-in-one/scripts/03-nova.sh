@@ -4,6 +4,7 @@ bkc_component_trap nova
 
 public_address="${BKC_OPENSTACK_PUBLIC_ADDRESS:-192.168.1.242}"
 management_address="${BKC_OPENSTACK_MANAGEMENT_ADDRESS:-10.20.0.31}"
+novnc_base_url="${BKC_OPENSTACK_NOVNC_BASE_URL:-http://${public_address}:6080/vnc_auto.html}"
 lab_password="${BKC_OPENSTACK_LAB_PASSWORD:-changeme123}"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -78,7 +79,7 @@ crudini --set "$conf" service_user password "$lab_password"
 crudini --set "$conf" vnc enabled true
 crudini --set "$conf" vnc server_listen 0.0.0.0
 crudini --set "$conf" vnc server_proxyclient_address "$management_address"
-crudini --set "$conf" vnc novncproxy_base_url "http://${public_address}:6080/vnc_auto.html"
+crudini --set "$conf" vnc novncproxy_base_url "$novnc_base_url"
 crudini --set "$conf" spice enabled false
 crudini --set "$conf" glance api_servers "http://${management_address}:9292"
 crudini --set "$conf" oslo_concurrency lock_path /var/lib/nova/tmp

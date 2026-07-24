@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AuziX Lab Edge</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 900px; margin: 8vh auto; padding: 0 24px; background: #10141c; color: #edf2f7; }
+    h1 { color: #65d9ff; }
+    p { color: #a9b6c8; }
+    main { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; margin-top: 32px; }
+    a { display: block; padding: 20px; border: 1px solid #334155; border-radius: 12px; color: #edf2f7; text-decoration: none; background: #182131; }
+    a:hover { border-color: #65d9ff; transform: translateY(-1px); }
+    strong { display: block; color: #65d9ff; margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <h1>AuziX Lab Edge</h1>
+  <p>One operator entry point for the BlackKnightController bare-metal lab.</p>
+  <main>
+    <a href=":8084/"><strong>BlackKnightController</strong>Automation and resource graph</a>
+    <a href=":8081/"><strong>Proxmox VE</strong>Server2 hypervisor</a>
+    <a href=":8082/"><strong>OpenStack Horizon</strong>Server1 cloud dashboard</a>
+    <a href=":8083/"><strong>Dell Switch</strong>N2000 management UI</a>
+    <a href=":8085/d/bfppoy5unfpxcf/blackknightcontroller-activity?orgId=1&amp;refresh=30s"><strong>BlackKnightController Activity</strong>Growing lab fleet overview</a>
+    <a href=":8086/"><strong>Portainer</strong>Docker Swarm management</a>
+    <a href=":8087/"><strong>VMware ESXi</strong>Server2 pre-Proxmox capture</a>
+    <a href=":8088/"><strong>OpenWebUI</strong>Server1 local AI with Ollama</a>
+    <a href=":8089/vnc_auto.html"><strong>OpenStack noVNC</strong>Console proxy for Horizon instances</a>
+  </main>
+  <script>
+    for (const link of document.querySelectorAll('a')) {
+      link.href = `${location.protocol}//${location.hostname}${link.getAttribute('href')}`;
+    }
+  </script>
+</body>
+</html>

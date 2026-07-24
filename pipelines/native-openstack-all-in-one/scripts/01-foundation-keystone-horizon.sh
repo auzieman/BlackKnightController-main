@@ -122,11 +122,32 @@ import re
 import sys
 
 address = sys.argv[1]
+allowed_hosts = [
+    address,
+    'r630-openstack-01',
+    'r630-openstack-01.lab.auzietek.com',
+    'swarm1.lab.auzietek.com',
+    '192.168.1.15',
+    'localhost',
+]
+csrf_trusted_origins = [
+    'http://swarm1.lab.auzietek.com:8082',
+    'http://192.168.1.15:8082',
+    f'http://{address}',
+]
 path = Path('/etc/openstack-dashboard/local_settings.py')
 text = path.read_text()
-text = re.sub(r'^ALLOWED_HOSTS\s*=.*$', f"ALLOWED_HOSTS = ['{address}', 'r630-openstack-01', 'localhost']", text, flags=re.M)
+text = re.sub(r'^ALLOWED_HOSTS\s*=.*$', f"ALLOWED_HOSTS = {allowed_hosts!r}", text, flags=re.M)
 text = re.sub(r'^OPENSTACK_HOST\s*=.*$', f'OPENSTACK_HOST = "{address}"', text, flags=re.M)
 text = re.sub(r'^OPENSTACK_KEYSTONE_URL\s*=.*$', 'OPENSTACK_KEYSTONE_URL = "http://%s:5000/v3" % OPENSTACK_HOST', text, flags=re.M)
+if re.search(r'^CSRF_TRUSTED_ORIGINS\s*=', text, flags=re.M):
+    text = re.sub(r'^CSRF_TRUSTED_ORIGINS\s*=.*$', f"CSRF_TRUSTED_ORIGINS = {csrf_trusted_origins!r}", text, flags=re.M)
+else:
+    text += f"\nCSRF_TRUSTED_ORIGINS = {csrf_trusted_origins!r}\n"
+if re.search(r'^USE_X_FORWARDED_HOST\s*=', text, flags=re.M):
+    text = re.sub(r'^USE_X_FORWARDED_HOST\s*=.*$', 'USE_X_FORWARDED_HOST = True', text, flags=re.M)
+else:
+    text += "\nUSE_X_FORWARDED_HOST = True\n"
 path.write_text(text)
 PY
 

@@ -11294,6 +11294,7 @@ def _video_openstack_install(run_id: str, stage_name: str) -> None:
         "BKC_OPENSTACK_MANAGEMENT_CIDR": management_cidr,
         "BKC_OPENSTACK_INTERNAL_VIP": internal_vip,
         "BKC_OPENSTACK_MANAGEMENT_GATEWAY": management_gateway,
+        "BKC_OPENSTACK_NOVNC_BASE_URL": str(values.get("openstack_novnc_base_url") or "http://swarm1.lab.auzietek.com:8089/vnc_auto.html"),
         "BKC_OPENSTACK_LAB_PASSWORD": str(values.get("target_install_password") or "changeme123"),
     }
     for name in ("01-foundation-keystone-horizon.sh", "02-glance-placement.sh", "03-nova.sh", "04-neutron-ovs.sh"):

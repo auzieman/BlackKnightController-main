@@ -7,6 +7,7 @@
   "services_network_node_id": "node:network:home-lan",
   "tenant_provider_network_node_id": "node:network:deferred-openstack-provider",
   "edge_network_pipeline": "openstack-lab-edge-network-prepare",
+  "openstack_novnc_base_url": "http://swarm1.lab.auzietek.com:8089/vnc_auto.html",
   "workstation_route_cidr": "",
   "workstation_route_next_hop": "192.168.1.10",
   "dhcp_service_node_id": "node:service:ns1-dhcpd",
