@@ -1,0 +1,34 @@
+{
+  "id": "openstack-local-ai-openwebui-preflight",
+  "name": "40 CANDIDATE — OpenStack Local AI + OpenWebUI Preflight",
+  "repo": "BlackKnightController",
+  "workflow": "openstack-local-ai-openwebui-preflight",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": ["40-video", "candidate", "openstack", "ollama", "openwebui", "docker-swarm-remix", "bkc-ssh", "fragments"],
+  "summary": "Preflight the bonus-video lane that turns the proven OpenStack host into a local-AI target: measure Server1, create a cattle AI VM, and publish the next OpenWebUI/Ollama actions as guarded fragments.",
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_openstack_ai_vm": {"required": false, "default": true},
+    "enable_baremetal_ollama": {"required": false, "default": false},
+    "enable_openwebui_container": {"required": false, "default": false}
+  },
+  "stages": [
+    {"id": "preflight-server1-ai-capacity", "action": "server1.ai.capacity.preflight", "transport": "bkc-ssh+openstack-api", "risk": "low", "timeout_seconds": 300},
+    {"id": "ensure-openstack-ai-vm", "action": "openstack.local_ai.vm.ensure", "transport": "bkc-ssh+openstack-api+cloud-init", "risk": "medium", "timeout_seconds": 1800},
+    {"id": "record-ollama-openwebui-fragments", "action": "fragments.local_ai.record", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "dashboards": [
+    {
+      "name": "BKC Activity",
+      "summary": "Watch the pipeline stages and OpenStack resource graph while recording the bonus setup.",
+      "url": "http://swarm1.lab.auzietek.com:8085/d/bfppoy5unfpxcf/blackknightcontroller-activity?orgId=1&refresh=30s"
+    },
+    {
+      "name": "Horizon",
+      "summary": "Confirm the bkc-local-ai-01 VM, image, flavor, security group, and network from the OpenStack UI.",
+      "url": "http://swarm1.lab.auzietek.com:8082/"
+    }
+  ],
+  "notes": "Candidate only. Promote to 40 VIDEO after two clean runs plus Ollama/OpenWebUI health without direct repair."
+}

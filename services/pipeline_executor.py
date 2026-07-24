@@ -3450,6 +3450,14 @@ WORKFLOW_DEFINITIONS["lab-dual-platform-seed-validate"] = {
         {"name": "validate-both-platforms", "kind": "video-seed-validate", "active": "Validating OpenStack, Proxmox guests, KVM, and edge dashboards.", "timeout": 600},
     ], "complete_message": "Both lab platforms were seeded with real resources and validated.",
 }
+WORKFLOW_DEFINITIONS["openstack-local-ai-openwebui-preflight"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-server1-ai-capacity", "kind": "video-local-ai-capacity", "active": "Measuring Server1/OpenStack capacity, egress, and container/runtime state for the local-AI bonus lane.", "timeout": 300},
+        {"name": "ensure-openstack-ai-vm", "kind": "video-local-ai-vm", "active": "Ensuring the cattle OpenStack AI VM flavor, security group, keypair, and server exist.", "timeout": 1800},
+        {"name": "record-ollama-openwebui-fragments", "kind": "video-local-ai-fragments", "active": "Recording the Ollama, OpenWebUI, benchmark, and Cytoscape layout fragments for promotion review.", "timeout": 60},
+    ], "complete_message": "Local-AI/OpenWebUI candidate preflight completed.",
+}
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
     "settings_optional": True,
@@ -11475,6 +11483,163 @@ def _video_proxmox_validate(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", f"Proxmox disk boot, SSH, root@pam login, API, storage, and KVM validated at {host}.")
 
 
+def _video_local_ai_context(run_id: str) -> tuple[dict, dict]:
+    return _video_context("openstack-local-ai-openwebui-preflight", run_id)
+
+
+def _video_local_ai_capacity(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    command = f'''
+set -euo pipefail
+printf 'host='; hostname -f || hostname
+printf 'kernel='; uname -r
+printf 'uptime='; uptime -p
+printf 'disk_root='; df -h / | tail -1
+printf 'mem='; free -h | awk '/Mem:/ {{print $2" total "$7" available"}}'
+printf 'cpu_count='; nproc
+printf 'virt_flags='; (grep -m1 -oE 'vmx|svm' /proc/cpuinfo || true) | head -1
+printf 'docker='; command -v docker || true
+printf 'podman='; command -v podman || true
+printf 'ollama='; command -v ollama || true
+printf 'egress_debian='; curl -fsSI --max-time 8 https://deb.debian.org/debian/ >/dev/null && echo ok || echo fail
+printf 'egress_ollama='; curl -fsSI --max-time 8 https://ollama.com/ >/dev/null && echo ok || echo fail
+. {openrc}
+printf 'openstack_token_bytes='; openstack token issue -f value -c id >/tmp/bkc-local-ai-token && wc -c </tmp/bkc-local-ai-token
+printf 'hypervisors\\n'; openstack hypervisor list -f value || true
+printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
+printf 'flavors\\n'; openstack flavor list -f value -c Name -c RAM -c VCPUs -c Disk || true
+printf 'images\\n'; openstack image list -f value -c Name -c Status || true
+printf 'networks\\n'; openstack network list -f value -c Name -c Subnets || true
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    if "egress_debian=ok" not in out or "egress_ollama=ok" not in out:
+        raise PipelineExecutionError("Server1 local-AI preflight needs Debian and Ollama egress before install stages are enabled.")
+    if "debian-13-genericcloud active" not in out:
+        raise PipelineExecutionError("OpenStack Debian 13 generic cloud image is missing or inactive.")
+    if "lab-internal" not in out:
+        raise PipelineExecutionError("OpenStack lab-internal network is missing.")
+    _store_run_extra(run_id, {"local_ai_capacity": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "Server1/OpenStack capacity, egress, Debian image, and lab-internal network are ready for local-AI preflight.")
+
+
+def _video_local_ai_vm(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_openstack_ai_vm")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    flavor = values.get("ai_flavor") if isinstance(values.get("ai_flavor"), dict) else {}
+    secgroup = values.get("ai_security_group") if isinstance(values.get("ai_security_group"), dict) else {}
+    server = values.get("ai_server") if isinstance(values.get("ai_server"), dict) else {}
+    flavor_name = str(flavor.get("name") or "bkc.ai.small")
+    image_name = str(values.get("ai_image") or "debian-13-genericcloud")
+    network_name = str(values.get("ai_network") or "lab-internal")
+    key_name = str(values.get("ai_keypair") or "bkc-demo-key")
+    server_name = str(server.get("name") or "bkc-local-ai-01")
+    admin_user = str(server.get("user") or "admin-deploy")
+    secgroup_name = str(secgroup.get("name") or "bkc-local-ai-allow")
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack cloud-init/keypair injection.")
+
+    secgroup_commands = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "10.20.0.0/24").strip()
+        if proto == "icmp":
+            secgroup_commands.append(f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+        elif proto == "tcp":
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(f"openstack security group rule create --proto tcp --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+
+    cloud_init = f"""#cloud-config
+users:
+  - name: {admin_user}
+    groups: sudo
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {public_key}
+ssh_pwauth: false
+disable_root: true
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent || true
+  - mkdir -p /var/lib/bkc
+  - echo local-ai-firstboot > /var/lib/bkc/local-ai-firstboot.txt
+"""
+    encoded = b64encode(cloud_init.encode()).decode()
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack image show {shlex.quote(image_name)} >/dev/null
+openstack network show {shlex.quote(network_name)} >/dev/null
+openstack flavor show {shlex.quote(flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 8192)} --disk {int(flavor.get("disk_gb") or 40)} --vcpus {int(flavor.get("vcpus") or 4)} {shlex.quote(flavor_name)}
+key_tmp=$(mktemp)
+printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
+openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
+rm -f "$key_tmp"
+{chr(10).join(secgroup_commands)}
+user_data=$(mktemp)
+printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
+if ! openstack server show {shlex.quote(server_name)} >/dev/null 2>&1; then
+  openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(flavor_name)} --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" {shlex.quote(server_name)} >/dev/null
+fi
+rm -f "$user_data"
+deadline=$((SECONDS+900))
+status=""
+while [ "$SECONDS" -lt "$deadline" ]; do
+  status=$(openstack server show {shlex.quote(server_name)} -f value -c status 2>/dev/null || true)
+  [ "$status" = "ACTIVE" ] && break
+  sleep 10
+done
+[ "$status" = "ACTIVE" ]
+openstack server show {shlex.quote(server_name)} -f json
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1200)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    _store_run_extra(run_id, {"local_ai_vm": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenStack AI VM {server_name} is ACTIVE with flavor {flavor_name} on {network_name}.")
+
+
+def _video_local_ai_fragments(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    fragments = {
+        "ollama.native.ensure": {
+            "rating": "candidate",
+            "target": "server1 bare metal or bkc-local-ai-01 VM",
+            "guard": "requires explicit enable_baremetal_ollama or VM SSH validation",
+            "validation": "ollama --version; curl /api/tags; model digest recorded",
+        },
+        "openwebui.container.ensure": {
+            "rating": "candidate",
+            "image": (values.get("openwebui") or {}).get("image") if isinstance(values.get("openwebui"), dict) else "",
+            "guard": "container install disabled until Ollama health is proven",
+            "validation": "HTTP 200 on OpenWebUI and Ollama base URL configured",
+        },
+        "cytoscape.layout.request": {
+            "rating": "planned",
+            "guard": "model output is proposal-only; validator owns accepted graph positions",
+            "validation": "known IDs only, complete node coverage, finite bounded coordinates",
+        },
+    }
+    append_event(run_id, "info", stage_name, json.dumps(fragments, indent=2, sort_keys=True))
+    _store_run_extra(run_id, {"local_ai_fragments": fragments})
+    _set_stage(run_id, stage_name, "complete", "Local-AI and graph-layout candidate fragments recorded for 40 VIDEO promotion review.")
+
+
 def _video_seed_openstack(run_id: str, stage_name: str) -> None:
     _require_video_gates(run_id, "enable_openstack_seed", "enable_smoke_instance")
     _, values = _video_context("openstack-lab-seed-and-validate", run_id)
@@ -11673,6 +11838,9 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             "video-seed-openstack": _video_seed_openstack,
             "video-seed-proxmox": _video_seed_proxmox,
             "video-seed-validate": _video_seed_validate,
+            "video-local-ai-capacity": _video_local_ai_capacity,
+            "video-local-ai-vm": _video_local_ai_vm,
+            "video-local-ai-fragments": _video_local_ai_fragments,
         }
         if kind in video_runners:
             video_runners[kind](run_id, stage_name)

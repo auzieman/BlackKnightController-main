@@ -269,6 +269,12 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         return ["install-native-openstack", "validate-openstack-services"]
     if normalized == "lab-dual-platform-seed-validate":
         return ["seed-openstack-resources", "seed-proxmox-base-guests", "validate-both-platforms"]
+    if normalized == "openstack-local-ai-openwebui-preflight":
+        return [
+            "preflight-server1-ai-capacity",
+            "ensure-openstack-ai-vm",
+            "record-ollama-openwebui-fragments",
+        ]
     if normalized == "trixie-openstack-host-prepare":
         return [
             "load-openstack-host-intent",
