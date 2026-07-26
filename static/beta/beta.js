@@ -531,7 +531,7 @@ ${data.label || data.id || ""}`;
     let selectedNodeId = "";
     let showStale = false;
     const grafanaBaseUrl = "http://swarm1.lab.auzietek.com:8085";
-    const grafanaActivityDashboard = `${grafanaBaseUrl}/d/bfppoy5unfpxcf/blackknightcontroller-activity`;
+    const grafanaSystemDashboard = `${grafanaBaseUrl}/d/auzix-system-single/system-metrics-single-auzix-lab`;
 
     function renderSelection(node) {
         const data = node.data();
@@ -652,7 +652,7 @@ ${data.label || data.id || ""}`;
             "var-instance": identity.instance || "",
             "var-role": identity.role || "",
         });
-        return `${grafanaActivityDashboard}?${params.toString()}`;
+        return `${grafanaSystemDashboard}?${params.toString()}`;
     }
 
     function openMetricsForSelection() {
