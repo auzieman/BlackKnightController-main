@@ -4,9 +4,9 @@ services:
   nginx:
     image: nginx:1.27-alpine
     configs:
-      - source: lab_edge_nginx_v10
+      - source: lab_edge_nginx_v14
         target: /etc/nginx/nginx.conf
-      - source: lab_edge_index_v6
+      - source: lab_edge_index_v8
         target: /usr/share/nginx/html/index.html
       - source: lab_edge_proxmoxlib_v1
         target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
@@ -51,6 +51,14 @@ services:
         published: 8089
         protocol: tcp
         mode: ingress
+      - target: 8443
+        published: 8443
+        protocol: tcp
+        mode: ingress
+      - target: 19091
+        published: 19091
+        protocol: tcp
+        mode: ingress
     deploy:
       replicas: 1
       placement:
@@ -60,9 +68,9 @@ services:
         condition: on-failure
 
 configs:
-  lab_edge_nginx_v10:
+  lab_edge_nginx_v14:
     file: ./nginx.conf
-  lab_edge_index_v6:
+  lab_edge_index_v8:
     file: ./index.html
   lab_edge_proxmoxlib_v1:
     file: ./proxmoxlib.js
