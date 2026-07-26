@@ -91,6 +91,7 @@
             const details = document.createElement("details");
             details.className = "code-preview-panel";
             if (isJson) details.open = true;
+            if (isJsonName) textarea.classList.add("textarea-with-preview");
             const summary = document.createElement("summary");
             summary.textContent = isJson ? "Pretty JSON preview" : "Rendered text preview";
             const pre = document.createElement("pre");
@@ -112,15 +113,63 @@
         });
     }
 
+    function isLongStructuredValue(raw) {
+        const value = String(raw || "").trim();
+        if (value.length < 80) return false;
+        return looksJson(value) || value.includes("', '") || value.includes('", "') || /[{[]['"]?\w/.test(value);
+    }
+
+    function normalizePythonishValue(raw) {
+        return String(raw || "")
+            .trim()
+            .replace(/\bNone\b/g, "null")
+            .replace(/\bTrue\b/g, "true")
+            .replace(/\bFalse\b/g, "false")
+            .replace(/'/g, '"');
+    }
+
+    function renderStructuredValue(raw) {
+        const value = String(raw || "").trim();
+        if (looksJson(value)) {
+            try { return highlightJson(value); } catch (err) { /* fall through */ }
+        }
+        try { return highlightJson(normalizePythonishValue(value)); } catch (err) { /* fall through */ }
+        return highlightShell(value);
+    }
+
+    function polishInlineStructuredValues() {
+        const selector = ".fact-list dd, .ops-fact-list dd, td";
+        Array.from(document.querySelectorAll(selector)).slice(0, MAX_POLISH_BLOCKS * 3).forEach((node) => {
+            if (node.dataset.polished === "true") return;
+            if (node.querySelector("a, button, input, select, textarea, pre, code")) return;
+            const raw = node.textContent || "";
+            if (!isLongStructuredValue(raw)) return;
+            const details = document.createElement("details");
+            details.className = "inline-code-preview";
+            const summary = document.createElement("summary");
+            summary.textContent = "Structured value";
+            const pre = document.createElement("pre");
+            pre.className = "json-preview compact-code-preview";
+            pre.innerHTML = renderStructuredValue(raw);
+            pre.dataset.polished = "true";
+            details.append(summary, pre);
+            node.textContent = "";
+            node.appendChild(details);
+            node.dataset.polished = "true";
+        });
+    }
+
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => {
             polishJsonPreviews();
             polishTerminalLogs();
             polishTextareaPreviews();
+            polishInlineStructuredValues();
         });
     } else {
         polishJsonPreviews();
         polishTerminalLogs();
         polishTextareaPreviews();
+        polishInlineStructuredValues();
     }
 })();
