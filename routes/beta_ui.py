@@ -219,7 +219,115 @@ def _fabric_cards() -> list[dict]:
     ]
 
 
-def _beta_graph_elements(elements: dict, fabric_cards: list[dict]) -> dict:
+def _pipeline_story_elements(pipeline_cards: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Curated beta pipeline lane.
+
+    The full catalog is intentionally too much for the hero graph. This lane is
+    the "video story": destructive bare metal, OpenStack/Proxmox bring-up, seed
+    validation, and ESXi/OpenStack swarm follow-ons connected back to the
+    hardware/platform objects they affect.
+    """
+
+    selected_ids = [
+        "baremetal-lab-reset",
+        "baremetal-openstack-lab-prepare",
+        "native-openstack-all-in-one",
+        "baremetal-proxmox-trial-prepare",
+        "openstack-lab-seed-and-validate",
+        "openstack-docker-swarm-seed",
+        "baremetal-vmware-trial-prepare",
+        "esxi-docker-swarm-seed",
+    ]
+    target_map = {
+        "baremetal-lab-reset": ["host:server1", "host:server2", "control:ipmi", "core:ns1"],
+        "baremetal-openstack-lab-prepare": ["host:server1", "core:ns1", "control:ipmi"],
+        "native-openstack-all-in-one": ["host:server1", "platform:openstack"],
+        "baremetal-proxmox-trial-prepare": ["host:server2", "platform:hypervisors", "core:ns1"],
+        "openstack-lab-seed-and-validate": ["platform:openstack", "platform:hypervisors", "host:pve1"],
+        "openstack-docker-swarm-seed": ["host:server1", "platform:openstack", "vm:openstack-manager-01"],
+        "baremetal-vmware-trial-prepare": ["host:server2", "control:ipmi", "core:ns1"],
+        "esxi-docker-swarm-seed": ["host:server2", "vm:esxi-swarm-mgr-01", "vm:esxi-swarm-worker-03"],
+    }
+    cards_by_id = {str(card.get("id") or ""): card for card in pipeline_cards}
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    start_x = 118
+    start_y = 535
+    gap_x = 178
+    for index, pipeline_id in enumerate(selected_ids):
+        card = cards_by_id.get(pipeline_id)
+        if not card:
+            continue
+        node_id = f"pipeline:{pipeline_id}"
+        label = str(card.get("name") or pipeline_id).replace(" — ", "\n", 1)
+        nodes.append(
+            {
+                "data": {
+                    "id": node_id,
+                    "label": label,
+                    "type": "pipeline",
+                    "kind": "video-pipeline",
+                    "status": str(card.get("latest_run_status") or card.get("status") or "catalog"),
+                    "summary": card.get("summary") or "",
+                    "stage_count": card.get("stage_count"),
+                    "layoutRole": "pipeline_story",
+                },
+                "classes": "pipeline-story hidden-pipeline",
+                "position": {"x": start_x + index * gap_x, "y": start_y},
+            }
+        )
+        prior_id = node_id
+        for stage_index, stage in enumerate(list(card.get("stages") or [])[:4]):
+            stage_id = f"beta-stage:{pipeline_id}:{stage_index + 1:02d}"
+            stage_label = str(stage.get("id") or stage.get("action") or f"stage-{stage_index + 1}")
+            nodes.append(
+                {
+                    "data": {
+                        "id": stage_id,
+                        "label": stage_label,
+                        "type": "stage",
+                        "kind": "pipeline-step",
+                        "status": str(card.get("latest_run_status") or "defined"),
+                        "pipeline": pipeline_id,
+                        "action": stage.get("action") or "",
+                        "transport": stage.get("transport") or "",
+                        "risk": stage.get("risk") or "",
+                        "layoutRole": "pipeline_story_stage",
+                    },
+                    "classes": "pipeline-story hidden-pipeline",
+                    "position": {"x": start_x + index * gap_x, "y": start_y + 92 + stage_index * 58},
+                }
+            )
+            edges.append(
+                {
+                    "data": {
+                        "id": f"edge:{prior_id}:pipeline_flow:{stage_id}",
+                        "source": prior_id,
+                        "target": stage_id,
+                        "type": "pipeline_flow",
+                        "label": "then",
+                    },
+                    "classes": "pipeline-story hidden-pipeline",
+                }
+            )
+            prior_id = stage_id
+        for target_id in target_map.get(pipeline_id, []):
+            edges.append(
+                {
+                    "data": {
+                        "id": f"edge:{node_id}:affects:{target_id}",
+                        "source": node_id,
+                        "target": target_id,
+                        "type": "affects",
+                        "label": "affects",
+                    },
+                    "classes": "pipeline-story hidden-pipeline",
+                }
+            )
+    return nodes, edges
+
+
+def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_cards: list[dict]) -> dict:
     """Return a beta-friendly graph.
 
     The full resource graph is excellent as data, but too dense for the beta
@@ -275,6 +383,13 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict]) -> dict:
             node["locked"] = True
         nodes.append(node)
 
+    pipeline_nodes, pipeline_edges = _pipeline_story_elements(pipeline_cards)
+    for node in pipeline_nodes:
+        node_id = str((node.get("data") or {}).get("id") or "")
+        if node_id:
+            kept_ids.add(node_id)
+            nodes.append(node)
+
     edge_specs = [
         ("edge:spectrum", "edge:ipfire", "wan"),
         ("edge:ipfire", "core:ns1", "protects"),
@@ -290,6 +405,12 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict]) -> dict:
         for source, target, relation in edge_specs
         if source in kept_ids and target in kept_ids
     ]
+    edges.extend(
+        edge
+        for edge in pipeline_edges
+        if str((edge.get("data") or {}).get("source") or "") in kept_ids
+        and str((edge.get("data") or {}).get("target") or "") in kept_ids
+    )
 
     for edge in elements.get("edges", []):
         data = edge.get("data") if isinstance(edge, dict) else {}
@@ -307,8 +428,8 @@ def beta_home():
     graph = build_resource_graph()
     resources = list(graph.get("resources", []))
     fabric_cards = _fabric_cards()
-    elements = _beta_graph_elements(cytoscape_elements_from_resource_graph(graph), fabric_cards)
     pipeline_cards = _pipeline_cards()
+    elements = _beta_graph_elements(cytoscape_elements_from_resource_graph(graph), fabric_cards, pipeline_cards)
     return render_template(
         "beta/home.html.j2",
         graph=graph,

@@ -188,6 +188,10 @@
                 style: { display: "none" },
             },
             {
+                selector: ".hidden-pipeline",
+                style: { display: "none" },
+            },
+            {
                 selector: ".focus-neighbor",
                 style: {
                     opacity: 1,
@@ -286,6 +290,8 @@
             stack: "▥",
             evidence: "⌕",
             interface: "∿",
+            pipeline: "▶",
+            stage: "→",
         };
         (payload.nodes || []).forEach((node) => {
             const data = node.data || {};
@@ -976,6 +982,7 @@ ${data.label || data.id || ""}`;
         applyStaleVisibility();
 
         if (mode === "topology") {
+            cy.elements(".pipeline-story").addClass("hidden-pipeline");
             expandUsefulTopology();
             cy.elements().removeClass("search-hit search-path dimmed focus-root focus-neighbor");
             const roots = cy.nodes().filter((node) => {
@@ -992,6 +999,11 @@ ${data.label || data.id || ""}`;
         }
 
         if (mode === "pipelines") {
+            expandUsefulTopology();
+            ["host:server1", "host:server2", "host:pve1"].forEach((id) => {
+                if (cy.getElementById(id).length) expandGraphPack(id, { auto: true });
+            });
+            cy.elements(".pipeline-story").removeClass("hidden-pipeline");
             const firstPipeline = document.querySelector(".pipeline-row");
             firstPipeline?.scrollIntoView({ behavior: "smooth", block: "center" });
             if (firstPipeline && !firstPipeline.classList.contains("expanded")) {
@@ -999,17 +1011,23 @@ ${data.label || data.id || ""}`;
             }
             const pipelineNodes = cy.nodes().filter((node) => {
                 const text = graphText(node);
-                return text.includes("pipeline") || text.includes("stage") || text.includes("video") || text.includes("pxe") || text.includes("provision");
+                return node.hasClass("pipeline-story")
+                    || text.includes("pipeline")
+                    || text.includes("stage")
+                    || text.includes("video")
+                    || text.includes("pxe")
+                    || text.includes("provision");
             });
             const context = pipelineNodes.union(pipelineNodes.connectedEdges()).union(pipelineNodes.connectedEdges().connectedNodes());
-            focusCollection(context, { markNodes: true, padding: 96 });
+            focusCollection(context.not(".hidden-stale"), { rootId: "pipeline:baremetal-lab-reset", markNodes: true, padding: 72 });
             actionTitle.textContent = "Pipeline paths";
-            actionCopy.textContent = "Pipeline mode opens the pipeline workbench and highlights provisioning/stage/run relationships in the graph when present.";
-            actionPayload.innerHTML = `<code>${syntaxJson({ view: "pipelines", intent: "show runnable paths and stage fragments", next: "select a pipeline row to inspect/run/edit" })}</code>`;
+            actionCopy.textContent = "Pipeline mode reveals VIDEO pipelines as graph lanes: pipeline → stage bubbles → affected hosts, VMs, services, and evidence.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ view: "pipelines", story: "pipeline → stages → affected infrastructure", examples: ["10 VIDEO affects server1/OpenStack", "20 VIDEO affects server2/Proxmox", "50B affects ESXi swarm VMs"], next: "select a pipeline node or row to inspect/run/edit" })}</code>`;
             return;
         }
 
         if (mode === "edge") {
+            cy.elements(".pipeline-story").addClass("hidden-pipeline");
             ["edge:ipfire", "fabric:n2024", "core:ns1", "host:pve1", "vm:pve-ipfire", "evidence:pve1-mac-adjacency"].forEach((id) => {
                 if (cy.getElementById(id).length) expandGraphPack(id, { auto: true });
             });
@@ -1027,6 +1045,7 @@ ${data.label || data.id || ""}`;
         }
 
         if (mode === "failures") {
+            cy.elements(".pipeline-story").removeClass("hidden-pipeline");
             expandUsefulTopology();
             const failureNodes = cy.nodes().filter((node) => {
                 const data = node.data();
