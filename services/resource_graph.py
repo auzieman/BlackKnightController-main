@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
+from time import monotonic
 from urllib.parse import urlparse
 
 from services.action_catalog import actions_for_kind, list_actions
@@ -31,6 +32,8 @@ RESOURCE_KIND_META = {
     "action": {"label": "Actions", "short": "ACT", "order": 60},
     "credential": {"label": "Credentials", "short": "KEY", "order": 70},
 }
+
+_RESOURCE_GRAPH_CACHE: dict[str, tuple[float, dict]] = {}
 
 RELATIONSHIP_CONSTRAINTS = [
     {"source": "group", "type": "contains", "target": "host"},
@@ -728,6 +731,26 @@ def build_resource_graph() -> dict:
         graph["resources"],
         key=lambda item: (RESOURCE_KIND_META.get(item["kind"], {}).get("order", 999), *_resource_sort_key(item)),
     )
+    return graph
+
+
+def cached_resource_graph(ttl_seconds: float = 12.0) -> dict:
+    """Return a short-lived per-tenant resource graph snapshot for UI views.
+
+    The graph is assembled from rules, integration snapshots, runs, and pipeline
+    catalog metadata. That is perfect for correctness, but unnecessarily chatty
+    when a human is clicking around the UI. A small in-process TTL keeps views
+    responsive while preserving the "live enough" feel for lab operations.
+    """
+
+    tenant_slug = get_effective_tenant_slug()
+    now = monotonic()
+    cache_key = f"tenant:{tenant_slug}"
+    cached = _RESOURCE_GRAPH_CACHE.get(cache_key)
+    if cached and now - cached[0] <= ttl_seconds:
+        return deepcopy(cached[1])
+    graph = build_resource_graph()
+    _RESOURCE_GRAPH_CACHE[cache_key] = (now, deepcopy(graph))
     return graph
 
 

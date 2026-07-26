@@ -13,7 +13,7 @@ from services.pipeline_executor import workflow_is_supported, workflow_job_timeo
 from services.resource_graph import (
     RESOURCE_KIND_META,
     apply_cytoscape_positions,
-    build_resource_graph,
+    cached_resource_graph,
     cytoscape_elements_from_resource_graph,
     related_to,
 )
@@ -24,7 +24,7 @@ resource_graph_blueprint = Blueprint("resource_graph", __name__)
 
 @resource_graph_blueprint.route("/resources", methods=["GET"])
 def resource_graph():
-    graph = build_resource_graph()
+    graph = cached_resource_graph(ttl_seconds=8)
     tenant_id = get_current_tenant_id()
     cytoscape_elements = cytoscape_elements_from_resource_graph(graph)
     if tenant_id is not None:
@@ -130,7 +130,7 @@ def ai_resource_graph_layout():
     if tenant_id is None:
         return jsonify({"error": "tenant_required"}), 403
     payload = request.get_json(silent=True) or {}
-    graph = build_resource_graph()
+    graph = cached_resource_graph(ttl_seconds=8)
     elements = cytoscape_elements_from_resource_graph(graph)
     try:
         proposal = propose_cytoscape_layout(
