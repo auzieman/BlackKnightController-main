@@ -12,7 +12,7 @@ from services.pipeline_executor import workflow_is_supported, workflow_job_timeo
 from services.resource_graph import (
     RESOURCE_KIND_META,
     apply_cytoscape_positions,
-    build_resource_graph,
+    cached_resource_graph,
     cytoscape_elements_from_resource_graph,
     related_to,
 )
@@ -23,7 +23,7 @@ resource_graph_blueprint = Blueprint("resource_graph", __name__)
 
 @resource_graph_blueprint.route("/resources", methods=["GET"])
 def resource_graph():
-    graph = build_resource_graph()
+    graph = cached_resource_graph(ttl_seconds=8)
     tenant_id = get_current_tenant_id()
     cytoscape_elements = cytoscape_elements_from_resource_graph(graph)
     if tenant_id is not None:
@@ -120,6 +120,8 @@ def save_resource_graph_positions():
         )
         return jsonify({"error": "position_save_failed"}), 500
     return jsonify({"status": "ok", "saved": saved, "tenant_slug": get_effective_tenant_slug()})
+
+
 
 
 def _pipeline_from_node_id(node_id: str):

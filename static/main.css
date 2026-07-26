@@ -2111,6 +2111,55 @@ th {
   color: #c4b5fd;
 }
 
+.shell-comment {
+  color: #8fb3a9;
+  font-style: italic;
+}
+
+.shell-prompt {
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.shell-command {
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+.shell-option {
+  color: #c4b5fd;
+}
+
+.shell-string {
+  color: #a7f3d0;
+}
+
+.code-preview-panel {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  border: 1px solid rgba(130, 156, 207, 0.16);
+  border-radius: 16px;
+  background: rgba(5, 10, 22, 0.42);
+  overflow: hidden;
+}
+
+.code-preview-panel summary {
+  padding: 10px 14px;
+  color: #dffdfa;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compact-code-preview {
+  margin: 0;
+  max-height: 260px;
+  border-radius: 0;
+  border-width: 1px 0 0;
+}
+
 code {
   padding: 0.12rem 0.36rem;
   border: 1px solid rgba(130, 156, 207, 0.18);

@@ -12,7 +12,7 @@ from services.integration_store import (
     load_proxmox_snapshot,
 )
 from services.pipeline_catalog import demo_pipelines
-from services.resource_graph import build_resource_graph, cytoscape_elements_from_resource_graph
+from services.resource_graph import cached_resource_graph, cytoscape_elements_from_resource_graph
 
 beta_ui_blueprint = Blueprint("beta_ui", __name__)
 
@@ -425,7 +425,7 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
 
 @beta_ui_blueprint.get("/beta")
 def beta_home():
-    graph = build_resource_graph()
+    graph = cached_resource_graph(ttl_seconds=10)
     resources = list(graph.get("resources", []))
     fabric_cards = _fabric_cards()
     pipeline_cards = _pipeline_cards()

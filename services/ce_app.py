@@ -174,9 +174,9 @@ def init_ce_app(app: Flask) -> None:
             if user_row and user_row.get("is_superuser"):
                 all_tenants = bkc_db.list_tenants()
             try:
-                from services.resource_graph import build_resource_graph
+                from services.resource_graph import cached_resource_graph
 
-                resource_nav_tree = build_resource_graph().get("tree", [])
+                resource_nav_tree = cached_resource_graph(ttl_seconds=15).get("tree", [])
             except Exception:
                 resource_nav_tree = []
         return {
