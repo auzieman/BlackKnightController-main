@@ -1,7 +1,7 @@
 import json
 from urllib.parse import quote
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from services import bkc_db
 from services.access_control import Perm, require_perm
@@ -22,6 +22,11 @@ resource_graph_blueprint = Blueprint("resource_graph", __name__)
 
 
 @resource_graph_blueprint.route("/resources", methods=["GET"])
+def resource_graph_workbench():
+    return redirect(url_for("beta_ui.beta_home", **request.args))
+
+
+@resource_graph_blueprint.route("/resources/legacy", methods=["GET"])
 def resource_graph():
     graph = cached_resource_graph(ttl_seconds=8)
     tenant_id = get_current_tenant_id()
