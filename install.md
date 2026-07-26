@@ -141,12 +141,18 @@ deployments an NFS-mounted runtime folder is easier to share with workers.
 
 ## Secrets
 
-At minimum, set:
+Start from the sample environment file:
 
 ```bash
-export BKC_BOOTSTRAP_ADMIN_USERNAME=admin
-export BKC_BOOTSTRAP_ADMIN_PASSWORD='replace-me'
-export BKC_SECRET_KEY="$(openssl rand -hex 32)"
+cp .env.sample .env
+```
+
+Then edit `.env` for the local host. At minimum, set realistic local values for:
+
+```dotenv
+BKC_BOOTSTRAP_ADMIN_USERNAME=admin
+BKC_BOOTSTRAP_ADMIN_PASSWORD=replace-me
+BKC_SECRET_KEY=replace-with-output-from-openssl-rand-hex-32
 ```
 
 Remove the bootstrap password from the environment after the first admin user
@@ -312,20 +318,14 @@ cd /srv/bkc/source
 git switch main
 ```
 
-Create `/srv/bkc/.env` on the target VM. This file is the pragmatic first
-secrets boundary for the lab. Keep it out of Git and treat it as local machine
-state:
+Create `/srv/bkc/.env` on the target VM from the repository sample. This file
+is the pragmatic first secrets boundary for the lab. Keep it out of Git and
+treat it as local machine state:
 
-```dotenv
-BKC_SECRET_KEY=replace-with-a-long-random-value
-BKC_BOOTSTRAP_ADMIN_USERNAME=admin
-BKC_BOOTSTRAP_ADMIN_PASSWORD=replace-me
-BKC_RATELIMIT_STORAGE_URI=redis://redis:6379/0
-BKC_JOB_QUEUE_URL=redis://redis:6379/2
-BKC_PIPELINE_FOLDERS_PATH=/app/runtime/pipelines
-BKC_PIPELINE_DEFINITIONS_PATH=/app/runtime/pipelines
-BKC_ACCESS_LOG_FORMAT=json
-BKC_BEHIND_PROXY=1
+```bash
+cp /srv/bkc/source/.env.sample /srv/bkc/.env
+chmod 0600 /srv/bkc/.env
+${EDITOR:-vi} /srv/bkc/.env
 ```
 
 Create `/srv/bkc/compose.yml`:
