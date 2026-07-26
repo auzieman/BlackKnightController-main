@@ -530,6 +530,8 @@ ${data.label || data.id || ""}`;
     let selectedContext = { type: "none", id: "", label: "", data: {} };
     let selectedNodeId = "";
     let showStale = false;
+    const grafanaBaseUrl = "http://swarm1.lab.auzietek.com:8085";
+    const grafanaActivityDashboard = `${grafanaBaseUrl}/d/bfppoy5unfpxcf/blackknightcontroller-activity`;
 
     function renderSelection(node) {
         const data = node.data();
@@ -599,6 +601,66 @@ ${data.label || data.id || ""}`;
         nodePopover.style.top = `${y}px`;
         nodePopover.querySelector(".node-popover-title").textContent = data.label || data.name || data.id || "Resource";
         nodePopover.querySelector(".node-popover-kind").textContent = [data.kind, data.status || data.state].filter(Boolean).join(" · ") || "resource";
+    }
+
+    function monitoringIdentity(data) {
+        const haystack = [
+            data.id,
+            data.label,
+            data.name,
+            data.kind,
+            data.ip,
+            data.platform,
+            data.role,
+            data.parent_host,
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (haystack.includes("pve1") || haystack.includes("192.168.1.9") || haystack.includes("proxmox .9")) {
+            return { host: "pve1", instance: "192.168.1.9", role: "proxmox" };
+        }
+        if (haystack.includes("server1") || haystack.includes("openstack") || haystack.includes("10.20.0.240")) {
+            return { host: "server1", instance: "10.20.0.240", role: "openstack" };
+        }
+        if (haystack.includes("server2") || haystack.includes("esxi") || haystack.includes("10.20.0.114")) {
+            return { host: "server2", instance: "10.20.0.114", role: "esxi" };
+        }
+        if (haystack.includes("swarm1") || haystack.includes("10.20.0.15")) {
+            return { host: "swarm1", instance: "10.20.0.15", role: "docker-swarm" };
+        }
+        if (haystack.includes("ns1") || haystack.includes("10.20.0.10")) {
+            return { host: "ns1", instance: "10.20.0.10", role: "dns-dhcp-nfs" };
+        }
+        if (haystack.includes("ipfire") || haystack.includes("10.20.0.254")) {
+            return { host: "ipfire", instance: "10.20.0.254", role: "firewall" };
+        }
+        return {
+            host: String(data.label || data.name || data.id || "resource").split(/\s|\n/)[0],
+            instance: String(data.ip || "").split(/[\s/]+/)[0],
+            role: String(data.kind || data.type || "resource"),
+        };
+    }
+
+    function grafanaUrlForNode(data) {
+        if (data.grafana_url || data.dashboard_url || data.metrics_url) {
+            return data.grafana_url || data.dashboard_url || data.metrics_url;
+        }
+        const identity = monitoringIdentity(data);
+        const params = new URLSearchParams({
+            orgId: "1",
+            refresh: "30s",
+            "var-host": identity.host || "",
+            "var-node": identity.host || "",
+            "var-instance": identity.instance || "",
+            "var-role": identity.role || "",
+        });
+        return `${grafanaActivityDashboard}?${params.toString()}`;
+    }
+
+    function openMetricsForSelection() {
+        const selected = selectedNodeId ? cy.getElementById(selectedNodeId) : cy.nodes(".focus-root").first();
+        const data = selected && !selected.empty() ? selected.data() : selectedContext.data || {};
+        const url = grafanaUrlForNode(data);
+        window.open(url, "_blank", "noopener,noreferrer");
+        renderActionDraft("metrics");
     }
 
     function renderRelationshipCard(node) {
@@ -717,6 +779,8 @@ ${data.label || data.id || ""}`;
                 renderActionDraft("inspect");
             } else if (action === "open") {
                 window.location.href = openCurrent.href || "/resources";
+            } else if (action === "metrics") {
+                openMetricsForSelection();
             } else {
                 renderActionDraft("evidence");
                 document.getElementById("beta-action-drawer")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1289,6 +1353,7 @@ ${data.label || data.id || ""}`;
     function actionCopyText(action, type) {
         const noun = type === "pipeline" ? "pipeline" : "resource";
         if (action === "edit") return `Open the focused ${noun} editor without losing graph context.`;
+        if (action === "metrics") return `Open Grafana in a new tab with this ${noun}'s host, instance, and role as dashboard variables.`;
         if (action === "validate") return `Run or prepare a validation view for this ${noun}, with evidence linked back here.`;
         if (action === "evidence") return `Show logs, traces, fragments, and receipts that support this ${noun}'s current state.`;
         if (action === "run") return "Draft a run request. Destructive or mutating actions still need explicit confirmation.";
