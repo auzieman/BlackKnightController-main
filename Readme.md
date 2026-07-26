@@ -303,6 +303,9 @@ they stabilize.
 
 ## Quick Start
 
+For full Docker Compose, NFS-backed runtime, and Kubernetes install notes, see
+[install.md](install.md).
+
 Install dependencies for local development:
 
 ```bash
