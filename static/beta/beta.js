@@ -379,6 +379,46 @@ ${data.label || data.id || ""}`;
             ],
             layout: { mode: "fan", direction: "right", arc: 150, distance: 300 },
         },
+        "fabric:n2024": {
+            summary: "Switch snapshot fans out observed MAC/IP adjacency. It is refreshed evidence, not a live click-time poll.",
+            nodes: [
+                { id: "host:pve1", label: "pve1\nProxmox .9", type: "host", kind: "hypervisor", status: "running", ip: "192.168.1.9 / 10.20.0.9", platform: "Proxmox VE", role: "edge / legacy workloads", breadcrumb: "Switch › pve1", last_seen: "reachable now on 8006" },
+                { id: "host:server1", label: "server1\nOpenStack", type: "host", kind: "hypervisor", status: "running", ip: "10.20.0.240", platform: "OpenStack lab", role: "future BKC home", breadcrumb: "Switch › server1", last_seen: "reachable now" },
+                { id: "host:server2", label: "server2\nESXi", type: "host", kind: "hypervisor", status: "running", ip: "10.20.0.114", platform: "VMware ESXi 8", role: "API / SSH lab", breadcrumb: "Switch › server2", last_seen: "reachable now" },
+                { id: "vm:ns1.lab.auzietek.com", label: "ns1\nDNS/NFS/PXE", type: "vm", kind: "core-vm", status: "running", ip: "10.20.0.10", platform: "Proxmox .9", role: "DHCP / DNS / NFS / PXE", parent_host: "pve1", breadcrumb: "Switch › pve1 › ns1", last_seen: "reachable now on 22" },
+                { id: "vm:swarm1.lab.auzietek.com", label: "swarm1\nBKC", type: "vm", kind: "swarm-manager", status: "running", ip: "10.20.0.15", platform: "Proxmox .9", role: "current Docker Swarm / BKC", parent_host: "pve1", breadcrumb: "Switch › pve1 › swarm1", last_seen: "docker stack ls responding" },
+                { id: "iface:pve1-vmbr0", label: "vmbr0\nLAN", type: "interface", kind: "linux-bridge", status: "running", mac: "fc:4d:d4:3d:fa:c9", ip: "192.168.1.9", seen_on: "pve1 enp8s0 / ns1 ens18", breadcrumb: "pve1 › vmbr0 › LAN side" },
+                { id: "iface:pve1-vmbr20", label: "vmbr20\n10.20", type: "interface", kind: "linux-bridge", status: "running", mac: "fc:4d:d4:3d:fa:c8", ip: "10.20.0.9", seen_on: "pve1 eno1 / ns1 ens19", breadcrumb: "pve1 › vmbr20 › management/private side" },
+                { id: "iface:ipfire-green", label: "IPFire\nGREEN", type: "interface", kind: "vm-nic", status: "running", mac: "66:f9:9b:76:d1:0c", vmid: "140", bridge: "vmbr20", ip: "10.20.0.254", seen_on: "ns1 ARP + pve1 qm config" },
+                { id: "switchport:n2024-p01", label: "port 1\npve1", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/1", mac: "fc:4d:d4:3d:fa:c8 / fc:4d:d4:3d:fa:c9", ip: "10.20.0.9 / 192.168.1.9", role: "pve1 uplink / bridge fabric", last_seen: "snapshot from ns1 neighbor table + pve1 MAC evidence" },
+                { id: "switchport:n2024-p02", label: "port 2\nserver1", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/2", mac: "80:18:44:de:fd:38", ip: "10.20.0.240", role: "OpenStack host uplink", last_seen: "snapshot from ns1 neighbor table" },
+                { id: "switchport:n2024-p03", label: "port 3\nserver2", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/3", mac: "20:04:0f:e9:70:40 / 20:04:0f:e9:70:41", ip: "10.20.0.114", role: "ESXi host uplink", last_seen: "snapshot from ns1 neighbor table" },
+                { id: "switchport:n2024-p04", label: "port 4\nIPFire", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/4", mac: "66:f9:9b:76:d1:0c", ip: "10.20.0.254", role: "firewall green/LAN side", last_seen: "snapshot from ns1 neighbor table" },
+                { id: "switchport:n2024-p05", label: "port 5\nns1", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/5", mac: "f2:fe:79:04:c4:6c / 0e:80:31:c3:a0:53", ip: "10.20.0.10", role: "DNS/DHCP/PXE/NFS path", last_seen: "snapshot from pve1 VM config + ns1 ARP" },
+                { id: "switchport:n2024-p06", label: "port 6\nswarm1", type: "interface", kind: "switch-port", status: "observed", port: "Gi1/0/6", mac: "8a:43:82:22:74:16", ip: "10.20.0.15 / 192.168.1.15", role: "BKC / lab-edge / monitoring", last_seen: "snapshot from ns1 neighbor table" },
+                { id: "evidence:n2024-mac-snapshot", label: "Switch MAC\nSnapshot", type: "evidence", kind: "switch-mac-table", status: "snapshot", source: "N2024 + ns1 neighbor + pve1 bridge facts", role: "periodic adjacency refresh", last_seen: "manual/lab refresh" },
+            ],
+            edges: [
+                ["fabric:n2024", "switchport:n2024-p01", "has_port"],
+                ["fabric:n2024", "switchport:n2024-p02", "has_port"],
+                ["fabric:n2024", "switchport:n2024-p03", "has_port"],
+                ["fabric:n2024", "switchport:n2024-p04", "has_port"],
+                ["fabric:n2024", "switchport:n2024-p05", "has_port"],
+                ["fabric:n2024", "switchport:n2024-p06", "has_port"],
+                ["evidence:n2024-mac-snapshot", "fabric:n2024", "describes"],
+                ["switchport:n2024-p01", "host:pve1", "observes_mac"],
+                ["switchport:n2024-p01", "iface:pve1-vmbr20", "observes_mac"],
+                ["switchport:n2024-p01", "iface:pve1-vmbr0", "observes_mac"],
+                ["switchport:n2024-p02", "host:server1", "observes_mac"],
+                ["switchport:n2024-p03", "host:server2", "observes_mac"],
+                ["switchport:n2024-p04", "edge:ipfire", "observes_mac"],
+                ["switchport:n2024-p04", "iface:ipfire-green", "observes_mac"],
+                ["switchport:n2024-p05", "core:ns1", "observes_mac"],
+                ["switchport:n2024-p05", "vm:ns1.lab.auzietek.com", "observes_mac"],
+                ["switchport:n2024-p06", "vm:swarm1.lab.auzietek.com", "observes_mac"],
+            ],
+            layout: { mode: "fan", direction: "right", arc: 150, distance: 330 },
+        },
         "host:server2": {
             summary: "ESXi expands into the staged Docker Swarm VM set.",
             nodes: [
@@ -861,6 +901,9 @@ ${data.label || data.id || ""}`;
             const actualTarget = target === packId ? rootId : target;
             const edgeId = `edge:${actualSource}:${relation}:${actualTarget}`;
             if (cy.getElementById(edgeId).length) return;
+            const sourceExists = actualSource === rootId || cy.getElementById(actualSource).length || newIds.includes(actualSource);
+            const targetExists = actualTarget === rootId || cy.getElementById(actualTarget).length || newIds.includes(actualTarget);
+            if (!sourceExists || !targetExists) return;
             addables.push({
                 group: "edges",
                 data: { id: edgeId, source: actualSource, target: actualTarget, type: relation, label: relation },
