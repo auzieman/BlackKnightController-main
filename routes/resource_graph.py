@@ -22,13 +22,14 @@ from services.tenant_context import get_current_tenant_id, get_effective_tenant_
 resource_graph_blueprint = Blueprint("resource_graph", __name__)
 
 
+@resource_graph_blueprint.route("/resource", methods=["GET"])
 @resource_graph_blueprint.route("/resources", methods=["GET"])
-def resource_graph_workbench():
+def resource_graph():
     return redirect(url_for("beta_ui.beta_home", **request.args))
 
 
 @resource_graph_blueprint.route("/resources/legacy", methods=["GET"])
-def resource_graph():
+def resource_graph_legacy():
     graph = cached_resource_graph(ttl_seconds=8)
     tenant_id = get_current_tenant_id()
     cytoscape_elements = cytoscape_elements_from_resource_graph(graph)

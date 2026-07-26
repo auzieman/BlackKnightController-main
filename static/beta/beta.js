@@ -615,25 +615,26 @@ ${data.label || data.id || ""}`;
             data.parent_host,
         ].filter(Boolean).join(" ").toLowerCase();
         if (haystack.includes("pve1") || haystack.includes("192.168.1.9") || haystack.includes("proxmox .9")) {
-            return { host: "pve1", instance: "192.168.1.9", role: "proxmox" };
+            return { host: "proxmox1.lab.auzietek.com", node: "pve1", instance: "192.168.1.9", role: "proxmox" };
         }
         if (haystack.includes("server1") || haystack.includes("openstack") || haystack.includes("10.20.0.240")) {
-            return { host: "server1", instance: "10.20.0.240", role: "openstack" };
+            return { host: "server1.lab.auzietek.com", node: "server1", instance: "10.20.0.240", role: "openstack" };
         }
         if (haystack.includes("server2") || haystack.includes("esxi") || haystack.includes("10.20.0.114")) {
-            return { host: "server2", instance: "10.20.0.114", role: "esxi" };
+            return { host: "server2.lab.auzietek.com", node: "server2", instance: "10.20.0.114", role: "esxi" };
         }
         if (haystack.includes("swarm1") || haystack.includes("10.20.0.15")) {
-            return { host: "swarm1", instance: "10.20.0.15", role: "docker-swarm" };
+            return { host: "swarm1.lab.auzietek.com", node: "swarm1", instance: "10.20.0.15", role: "docker-swarm" };
         }
         if (haystack.includes("ns1") || haystack.includes("10.20.0.10")) {
-            return { host: "ns1", instance: "10.20.0.10", role: "dns-dhcp-nfs" };
+            return { host: "ns1.lab.auzietek.com", node: "ns1", instance: "10.20.0.10", role: "dns-dhcp-nfs" };
         }
         if (haystack.includes("ipfire") || haystack.includes("10.20.0.254")) {
-            return { host: "ipfire", instance: "10.20.0.254", role: "firewall" };
+            return { host: "ipfire.lab.auzietek.com", node: "ipfire", instance: "10.20.0.254", role: "firewall" };
         }
         return {
             host: String(data.label || data.name || data.id || "resource").split(/\s|\n/)[0],
+            node: String(data.label || data.name || data.id || "resource").split(/\s|\n/)[0],
             instance: String(data.ip || "").split(/[\s/]+/)[0],
             role: String(data.kind || data.type || "resource"),
         };
@@ -648,9 +649,10 @@ ${data.label || data.id || ""}`;
             orgId: "1",
             refresh: "30s",
             "var-host": identity.host || "",
-            "var-node": identity.host || "",
+            "var-node": identity.node || identity.host || "",
             "var-instance": identity.instance || "",
             "var-role": identity.role || "",
+            "var-interface": "All",
         });
         return `${grafanaSystemDashboard}?${params.toString()}`;
     }
