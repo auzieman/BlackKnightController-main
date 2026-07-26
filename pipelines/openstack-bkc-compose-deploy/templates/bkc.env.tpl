@@ -1,0 +1,9 @@
+BKC_SECRET_KEY=${dictionary.bkc_secret_key}
+BKC_BOOTSTRAP_ADMIN_USERNAME=${dictionary.bootstrap_admin_username}
+BKC_BOOTSTRAP_ADMIN_PASSWORD=${dictionary.bootstrap_admin_password}
+BKC_RATELIMIT_STORAGE_URI=redis://redis:6379/0
+BKC_JOB_QUEUE_URL=redis://redis:6379/2
+BKC_PIPELINE_FOLDERS_PATH=/app/runtime/pipelines
+BKC_PIPELINE_DEFINITIONS_PATH=/app/runtime/pipelines
+BKC_ACCESS_LOG_FORMAT=json
+BKC_BEHIND_PROXY=1

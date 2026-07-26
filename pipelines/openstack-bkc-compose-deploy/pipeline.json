@@ -1,0 +1,50 @@
+{
+  "id": "openstack-bkc-compose-deploy",
+  "name": "60 DOGFOOD — Deploy BKC on OpenStack VM",
+  "repo": "BlackKnightController",
+  "workflow": "openstack-bkc-compose-deploy",
+  "resource_class": "standard",
+  "status": "candidate",
+  "tags": ["60-video", "dogfood", "openstack", "docker-compose", "nfs", "bkc-ssh", "edge"],
+  "summary": "Deploy BlackKnightController onto an OpenStack-side Debian VM like a regular user: mount ns1 runtime, render .env/compose, run Docker Compose, validate readiness, and publish the new edge pointer.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "openstack": "platform:openstack",
+    "runtime_nfs": "node:service:ns1-nfs",
+    "new_bkc": "node:vm:openstack-bkc"
+  },
+  "inputs": {
+    "target_host": {"required": true, "default": ""},
+    "target_user": {"required": false, "default": "root"},
+    "repo_branch": {"required": false, "default": "main"},
+    "bkc_secret_key": {"required": true, "default": ""},
+    "bootstrap_admin_password": {"required": true, "default": ""},
+    "enable_edge_pointer": {"required": false, "default": true}
+  },
+  "stages": [
+    {"id": "preflight-openstack-bkc-vm", "action": "openstack.bkc.preflight", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 180},
+    {"id": "stage-openstack-bkc-runtime", "action": "openstack.bkc.runtime.stage", "transport": "bkc-ssh+nfs", "risk": "medium", "timeout_seconds": 300},
+    {"id": "render-openstack-bkc-compose", "action": "openstack.bkc.compose.render", "transport": "bkc-ssh+template", "risk": "medium", "timeout_seconds": 180},
+    {"id": "deploy-openstack-bkc-compose", "action": "openstack.bkc.compose.up", "transport": "bkc-ssh+docker-compose", "risk": "medium", "timeout_seconds": 1800},
+    {"id": "validate-openstack-bkc", "action": "openstack.bkc.validate", "transport": "bkc-ssh+http", "risk": "low", "timeout_seconds": 300},
+    {"id": "publish-openstack-bkc-edge-pointer", "action": "openstack.bkc.edge.pointer", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "dashboards": [
+    {
+      "name": "Current BKC",
+      "summary": "Existing controller used to launch the dogfood deploy.",
+      "url": "http://swarm1.lab.auzietek.com:5000/"
+    },
+    {
+      "name": "BlackKnightController — OpenStack",
+      "summary": "Dedicated new edge slot for the OpenStack-side BKC after validation.",
+      "url": "http://swarm1.lab.auzietek.com:8090/"
+    },
+    {
+      "name": "OpenStack Horizon",
+      "summary": "Confirm the BKC VM and its network assignment.",
+      "url": "http://swarm1.lab.auzietek.com:8082/"
+    }
+  ],
+  "notes": "This pipeline intentionally uses Docker Compose first. It is the simplest dogfood migration lane: ns1 remains the shared runtime/NFS source, .env stays out of Git, and the pipeline performs the same steps a regular operator would run by hand. The edge pointer should use a new proxy/NAT port such as 8090 labeled BlackKnightController — OpenStack, not replace the current BKC route during validation."
+}

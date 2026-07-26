@@ -3471,6 +3471,17 @@ WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
         {"name": "record-openstack-swarm-fragments", "kind": "video-openstack-swarm-fragments", "active": "Recording known-good OpenStack swarm image, VM, SSH, and bootstrap fragments.", "timeout": 60},
     ], "complete_message": "OpenStack-hosted three-node Docker Swarm seed completed and validated.",
 }
+WORKFLOW_DEFINITIONS["openstack-bkc-compose-deploy"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, ns1 runtime export, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
+        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing /srv/bkc, mounting ns1 runtime, and ensuring mutable runtime subfolders exist.", "timeout": 300},
+        {"name": "render-openstack-bkc-compose", "kind": "openstack-bkc-compose-render", "active": "Rendering the target .env and Docker Compose file from known-good templates.", "timeout": 180},
+        {"name": "deploy-openstack-bkc-compose", "kind": "openstack-bkc-compose-up", "active": "Updating source and running docker compose up -d --build on the OpenStack BKC VM.", "timeout": 1800},
+        {"name": "validate-openstack-bkc", "kind": "openstack-bkc-compose-validate", "active": "Validating the new BKC /ready endpoint and container state.", "timeout": 300},
+        {"name": "publish-openstack-bkc-edge-pointer", "kind": "openstack-bkc-compose-edge-pointer", "active": "Publishing the intended edge pointer for the OpenStack-side BKC.", "timeout": 60},
+    ], "complete_message": "OpenStack-side BKC Docker Compose deployment completed and validated.",
+}
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
     "settings_optional": True,
@@ -8062,6 +8073,178 @@ def _run_ns1_lan_mac_render_fragment(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "LAN MAC-only PXE DHCP fragment rendered on ns1.")
 
 
+
+def _openstack_bkc_compose_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("openstack-bkc-compose-deploy", _run_request_inputs(run_id))
+
+
+def _openstack_bkc_target(values: dict) -> tuple[str, str, str]:
+    host = str(values.get("target_host") or "").strip()
+    user = str(values.get("target_user") or "root").strip() or "root"
+    password = str(values.get("target_password") or "")
+    if not host:
+        raise PipelineExecutionError("openstack-bkc-compose-deploy requires target_host.")
+    return host, user, password
+
+
+def _run_openstack_bkc_command(values: dict, command: str, *, timeout: int = 120) -> str:
+    host, user, password = _openstack_bkc_target(values)
+    return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+
+
+def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
+    keys = [
+        "target_root",
+        "runtime_mount",
+        "runtime_export",
+        "repo_url",
+        "repo_branch",
+        "compose_path",
+        "env_path",
+        "bkc_internal_url",
+    ]
+    return {key: shlex.quote(str(values.get(key) or "")) for key in keys}
+
+
+def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        "printf 'host='; hostname; "
+        "printf 'kernel='; uname -sr; "
+        "printf 'ip='; hostname -I || true; "
+        "command -v apt-get >/dev/null; "
+        "getent hosts ns1.example.local >/dev/null 2>&1 || true; "
+        f"showmount -e {shlex.quote(str(values.get('runtime_export') or '').split(':', 1)[0])} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; "
+        "printf '\n-- docker --\n'; docker --version 2>/dev/null || true; "
+        "printf '\n-- compose --\n'; docker compose version 2>/dev/null || true; "
+        "printf '\n-- nfs export --\n'; sed -n '1,80p' /tmp/bkc-nfs-showmount.txt || true; "
+        f"printf '\nplanned_runtime=%s\n' {q['runtime_mount']}; "
+        f"printf 'planned_repo=%s branch=%s\n' {q['repo_url']} {q['repo_branch']}"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=120)
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "openstack-bkc-preflight-ok")
+    _set_stage(run_id, stage_name, "complete", "OpenStack BKC VM responded over SSH and basic deploy prerequisites were inspected.")
+
+
+def _run_openstack_bkc_compose_runtime(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    runtime_mount = str(values.get("runtime_mount") or "/srv/bkc/runtime")
+    runtime_export = str(values.get("runtime_export") or "")
+    if not runtime_mount.startswith("/srv/bkc/"):
+        raise PipelineExecutionError(f"Refusing runtime mount outside /srv/bkc: {runtime_mount}")
+    if ":" not in runtime_export:
+        raise PipelineExecutionError("runtime_export must be an NFS server:path value.")
+    fstab_line = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0"
+    command = (
+        "set -e; "
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get update; "
+        "apt-get install -y --no-install-recommends git curl ca-certificates nfs-common docker.io docker-compose-plugin; "
+        "systemctl enable --now docker; "
+        f"mkdir -p {q['target_root']} {q['runtime_mount']}; "
+        f"grep -Fxq {shlex.quote(fstab_line)} /etc/fstab || printf '%s\n' {shlex.quote(fstab_line)} >> /etc/fstab; "
+        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
+        f"mkdir -p {q['runtime_mount']}/dictionaries {q['runtime_mount']}/file_templates {q['runtime_mount']}/keys {q['runtime_mount']}/pipelines {q['runtime_mount']}/redis; "
+        f"chmod 700 {q['runtime_mount']}/keys; "
+        f"if [ ! -d {q['target_root']}/source/.git ]; then git clone {q['repo_url']} {q['target_root']}/source; fi; "
+        f"cd {q['target_root']}/source; git fetch --all --prune; git switch {q['repo_branch']}; git pull --ff-only; "
+        f"test -d {q['runtime_mount']}/pipelines; mountpoint {q['runtime_mount']} || true; "
+        "docker --version; docker compose version"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=900)
+    append_event(run_id, "info", stage_name, output[-4000:] if output else "openstack-bkc-runtime-ready")
+    _set_stage(run_id, stage_name, "complete", "Target runtime, ns1 NFS mount, Docker, Compose plugin, and source checkout are ready.")
+
+
+def _run_openstack_bkc_compose_render(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _openstack_bkc_compose_context(run_id)
+    folder = _repo_pipeline_folder(pipeline)
+    compose_template = folder / "templates" / "bkc-compose.yml.tpl"
+    env_template = folder / "templates" / "bkc.env.tpl"
+    if not compose_template.exists() or not env_template.exists():
+        raise PipelineExecutionError("OpenStack BKC compose templates are missing.")
+
+    compose_path = str(values.get("compose_path") or "/srv/bkc/compose.yml")
+    env_path = str(values.get("env_path") or "/srv/bkc/.env")
+    for path in (compose_path, env_path):
+        if not path.startswith("/srv/bkc/"):
+            raise PipelineExecutionError(f"Refusing to write OpenStack BKC artifact outside /srv/bkc: {path}")
+
+    compose_content = _render_pipeline_template(compose_template.read_text(encoding="utf-8"), values).encode("utf-8")
+    env_content = _render_pipeline_template(env_template.read_text(encoding="utf-8"), values).encode("utf-8")
+    host, user, password = _openstack_bkc_target(values)
+    _run_openstack_bkc_command(values, "mkdir -p /srv/bkc", timeout=30)
+    upload_remote_bytes(host=host, user=user, password=password, remote_path=compose_path, content=compose_content, mode=0o644, timeout=60)
+    upload_remote_bytes(host=host, user=user, password=password, remote_path=env_path, content=env_content, mode=0o600, timeout=60)
+    output = _run_openstack_bkc_command(
+        values,
+        f"set -e; ls -l {shlex.quote(compose_path)} {shlex.quote(env_path)}; sed -n '1,160p' {shlex.quote(compose_path)}",
+        timeout=30,
+    )
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "compose-and-env-rendered")
+    _set_stage(run_id, stage_name, "complete", "Docker Compose file and target-local .env were rendered on the OpenStack BKC VM.")
+
+
+def _run_openstack_bkc_compose_up(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        f"cd {q['target_root']}/source; "
+        "git fetch --all --prune; "
+        f"git switch {q['repo_branch']}; "
+        "git pull --ff-only; "
+        f"cd {q['target_root']}; "
+        f"docker compose --env-file {q['env_path']} -f {q['compose_path']} up -d --build; "
+        f"docker compose -f {q['compose_path']} ps"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=1800)
+    append_event(run_id, "info", stage_name, output[-5000:] if output else "docker-compose-up-complete")
+    _set_stage(run_id, stage_name, "complete", "BKC web, worker, and Redis Compose services were deployed on the OpenStack VM.")
+
+
+def _run_openstack_bkc_compose_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        "for i in $(seq 1 30); do "
+        f"code=$(curl -fsS -o /tmp/bkc-ready.out -w '%{{http_code}}' {q['bkc_internal_url']}/ready 2>/tmp/bkc-ready.err || true); "
+        "[ \"$code\" = 200 ] && break; "
+        "sleep 5; "
+        "done; "
+        "cat /tmp/bkc-ready.out 2>/dev/null || true; "
+        "printf '\nhttp_code=%s\n' \"$code\"; "
+        "[ \"$code\" = 200 ]; "
+        f"cd {q['target_root']}; docker compose -f {q['compose_path']} ps"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=240)
+    _store_run_extra(run_id, {"openstack_bkc_backend": f"http://{values.get('target_host')}:{values.get('bkc_public_port', 5000)}"})
+    append_event(run_id, "info", stage_name, output[-5000:] if output else "new-bkc-ready")
+    _set_stage(run_id, stage_name, "complete", "The OpenStack-side BKC /ready endpoint returned HTTP 200.")
+
+
+def _run_openstack_bkc_edge_pointer(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    backend = f"http://{values.get('target_host')}:{values.get('bkc_public_port', 5000)}"
+    payload = {
+        "label": str(values.get("bkc_edge_label") or "BlackKnightController — OpenStack"),
+        "mode": str(values.get("edge_pointer_mode") or "record-only"),
+        "edge_mode": str(values.get("bkc_edge_mode") or "proxy-or-nat"),
+        "edge_public_port": values.get("bkc_edge_public_port"),
+        "enabled": _truthy(values.get("enable_edge_pointer")),
+        "edge_url": str(values.get("bkc_edge_url") or ""),
+        "backend": backend,
+        "notes": str(values.get("edge_notes") or ""),
+    }
+    _store_run_extra(run_id, {"openstack_bkc_edge_pointer": payload})
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", f"{payload['label']} edge pointer recorded: {payload['edge_url']} -> {backend}")
+
+
 def _run_ns1_lan_mac_render_defaults(run_id: str, stage_name: str) -> None:
     _run_ns1_lan_mac_upload_template(run_id, stage_name, "isc-dhcp-server-lan.defaults.tpl", "dhcp_defaults_path")
     _set_stage(run_id, stage_name, "complete", "DHCP interface defaults rendered on ns1.")
@@ -12406,6 +12589,30 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "openstack-base-boot-validate":
             _run_openstack_base_boot_validate(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-preflight":
+            _run_openstack_bkc_compose_preflight(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-runtime":
+            _run_openstack_bkc_compose_runtime(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-render":
+            _run_openstack_bkc_compose_render(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-up":
+            _run_openstack_bkc_compose_up(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-validate":
+            _run_openstack_bkc_compose_validate(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-edge-pointer":
+            _run_openstack_bkc_edge_pointer(run_id, stage_name)
             continue
 
         if kind == "baremetal-bmc-power-reset":
