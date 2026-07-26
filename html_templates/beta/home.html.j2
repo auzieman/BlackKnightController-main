@@ -3,25 +3,24 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BKC Beta Workbench</title>
+    <title>BKC Resource Workbench</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='beta/beta.css') }}">
     <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
 </head>
 <body>
 <div class="beta-shell">
     <aside class="beta-rail" aria-label="Beta navigation">
-        <a class="beta-mark" href="{{ url_for('index.index') }}" title="Current UI">BKC</a>
-        <a class="active" href="{{ url_for('beta_ui.beta_home') }}" title="Beta resource graph">RG</a>
-        <a href="{{ url_for('pipelines.pipelines') }}" title="Current pipelines">PL</a>
-        <a href="{{ url_for('integrations.integrations') }}" title="Current integrations">API</a>
-        <a href="{{ url_for('resource_graph.resource_graph') }}" title="Current graph">OLD</a>
+        <a class="beta-mark" href="{{ url_for('index.index') }}" title="BKC home">BKC</a>
+        <a class="active" href="{{ url_for('resource_graph.resource_graph') }}" title="Resource workbench">RG</a>
+        <a href="{{ url_for('pipelines.pipelines') }}" title="Pipelines">PL</a>
+        <a href="{{ url_for('integrations.integrations') }}" title="Integrations">API</a>
     </aside>
 
     <aside class="beta-side">
-        <p class="eyebrow">BLACKKNIGHT BETA</p>
+        <p class="eyebrow">BLACKKNIGHT RESOURCES</p>
         <h1>Company Mind</h1>
         <p class="side-copy">Intent, resources, evidence, and action paths in one living workbench.</p>
-        <div class="status-chip">preview beside production</div>
+        <div class="status-chip">primary resource view</div>
 
         <section class="side-section">
             <div class="section-title">Views</div>
@@ -47,7 +46,7 @@
             <div>
                 <p class="eyebrow">LIVE RESOURCE WORKBENCH</p>
                 <h2>Graph-linked operations</h2>
-                <p>Safe beta shell using existing BKC auth, graph, pipeline, and integration data.</p>
+                <p>Primary resource shell using existing BKC auth, graph, pipeline, and integration data.</p>
             </div>
             <div class="top-actions">
                 <span class="tenant-pill">{{ bkc_tenant_slug }}</span>
@@ -134,7 +133,7 @@
                     <button type="button" id="beta-action-evidence">Evidence</button>
                 </div>
                 <div id="beta-selected-facts" class="fact-list"></div>
-                <a id="beta-open-current" class="wide-action" href="{{ url_for('resource_graph.resource_graph') }}">Open in current UI</a>
+                <a id="beta-open-current" class="wide-action" href="{{ url_for('resource_graph.resource_graph') }}">Open resource context</a>
             </aside>
         </section>
 
