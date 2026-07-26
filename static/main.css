@@ -1365,6 +1365,12 @@ textarea {
   resize: vertical;
 }
 
+textarea.textarea-with-preview {
+  max-height: 170px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.82rem;
+}
+
 .meta-panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -2136,11 +2142,14 @@ th {
 
 .code-preview-panel {
   grid-column: 1 / -1;
-  margin-top: 10px;
+  margin-top: 12px;
   border: 1px solid rgba(130, 156, 207, 0.16);
   border-radius: 16px;
-  background: rgba(5, 10, 22, 0.42);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(79, 209, 197, 0.08), transparent 30%),
+    rgba(5, 10, 22, 0.56);
   overflow: hidden;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
 }
 
 .code-preview-panel summary {
@@ -2155,9 +2164,36 @@ th {
 
 .compact-code-preview {
   margin: 0;
-  max-height: 260px;
+  max-height: 360px;
   border-radius: 0;
   border-width: 1px 0 0;
+}
+
+.inline-code-preview {
+  width: 100%;
+  border: 1px solid rgba(130, 156, 207, 0.16);
+  border-radius: 14px;
+  background: rgba(5, 10, 22, 0.42);
+  overflow: hidden;
+}
+
+.inline-code-preview summary {
+  padding: 8px 11px;
+  color: #dffdfa;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inline-code-preview[open] summary {
+  border-bottom: 1px solid rgba(130, 156, 207, 0.14);
+}
+
+.inline-code-preview .compact-code-preview {
+  max-height: 280px;
+  font-size: 0.78rem;
 }
 
 code {
