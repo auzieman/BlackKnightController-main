@@ -7,6 +7,7 @@ from routes.add_nodes import add_nodes_blueprint
 from routes.admin import admin_blueprint
 from routes.api_v1 import api_blueprint
 from routes.auth import auth_blueprint
+from routes.beta_ui import beta_ui_blueprint
 from routes.builder import builder_blueprint
 from routes.deploy_host import deploy_host_blueprint
 from routes.group import groups
@@ -28,6 +29,7 @@ app.register_blueprint(health_public_blueprint)
 app.register_blueprint(jobs_blueprint)
 app.register_blueprint(auth_blueprint)
 app.register_blueprint(api_blueprint)
+app.register_blueprint(beta_ui_blueprint)
 app.register_blueprint(settings_blueprint)
 app.register_blueprint(index_blueprint)
 app.register_blueprint(inventory_console_blueprint)

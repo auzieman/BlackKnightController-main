@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BKC Beta Workbench</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='beta/beta.css') }}">
+    <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+</head>
+<body>
+<div class="beta-shell">
+    <aside class="beta-rail" aria-label="Beta navigation">
+        <a class="beta-mark" href="{{ url_for('index.index') }}" title="Current UI">BKC</a>
+        <a class="active" href="{{ url_for('beta_ui.beta_home') }}" title="Beta resource graph">RG</a>
+        <a href="{{ url_for('pipelines.pipelines') }}" title="Current pipelines">PL</a>
+        <a href="{{ url_for('integrations.integrations') }}" title="Current integrations">API</a>
+        <a href="{{ url_for('resource_graph.resource_graph') }}" title="Current graph">OLD</a>
+    </aside>
+
+    <aside class="beta-side">
+        <p class="eyebrow">BLACKKNIGHT BETA</p>
+        <h1>Company Mind</h1>
+        <p class="side-copy">Intent, resources, evidence, and action paths in one living workbench.</p>
+        <div class="status-chip">preview beside production</div>
+
+        <section class="side-section">
+            <div class="section-title">Views</div>
+            <button class="side-button active" data-view-mode="topology">Topology</button>
+            <button class="side-button" data-view-mode="pipelines">Pipeline paths</button>
+            <button class="side-button" data-view-mode="edge">Edge ownership</button>
+            <button class="side-button" data-view-mode="failures">Failures</button>
+        </section>
+
+        <section class="side-section">
+            <div class="section-title">Layers</div>
+            {% for layer in ["Physical", "Network", "Provisioning", "Platform", "Applications", "Evidence"] %}
+            <label class="layer-toggle">
+                <span>{{ layer }}</span>
+                <input type="checkbox" checked data-layer="{{ layer|lower }}">
+            </label>
+            {% endfor %}
+        </section>
+    </aside>
+
+    <main class="beta-main">
+        <header class="beta-top">
+            <div>
+                <p class="eyebrow">LIVE RESOURCE WORKBENCH</p>
+                <h2>Graph-linked operations</h2>
+                <p>Safe beta shell using existing BKC auth, graph, pipeline, and integration data.</p>
+            </div>
+            <div class="top-actions">
+                <span class="tenant-pill">{{ bkc_tenant_slug }}</span>
+                <button class="action-pill action-button" type="button" id="beta-command-button">Command</button>
+                <a class="action-pill" href="{{ url_for('pipelines.pipelines') }}">Open current pipelines</a>
+            </div>
+        </header>
+
+        <section class="metric-grid">
+            <article class="metric-card"><span>Resources</span><strong>{{ resource_count }}</strong></article>
+            <article class="metric-card"><span>Relationships</span><strong>{{ relationship_count }}</strong></article>
+            <article class="metric-card"><span>Pipelines</span><strong>{{ pipeline_count }}</strong></article>
+            <article class="metric-card"><span>Active runs</span><strong class="accent">{{ active_pipeline_count }}</strong></article>
+        </section>
+
+        <section class="fabric-ribbon">
+            <div class="fabric-ribbon-head">
+                <div>
+                    <p class="eyebrow">TOP RESOURCES</p>
+                    <span>Click a card to focus the graph.</span>
+                </div>
+                <label class="fabric-filter">
+                    <span>Filter</span>
+                    <input id="beta-fabric-filter" type="search" placeholder="hypervisor, pve, firewall…" autocomplete="off">
+                    <em id="beta-fabric-filter-count">{{ fabric_cards|length }}/{{ fabric_cards|length }}</em>
+                </label>
+            </div>
+            <div class="fabric-strip" data-fabric='{{ fabric_cards_json|e }}'>
+                {% for card in fabric_cards %}
+                <button class="fabric-card fabric-{{ card.accent }}" type="button" data-fabric-id="{{ card.id }}">
+                    <span class="fabric-orb"></span>
+                    <span class="fabric-body">
+                        <strong>{{ card.label }}</strong>
+                        <small>{{ card.primary }}</small>
+                        <em>{{ card.secondary }}</em>
+                    </span>
+                    <span class="fabric-state">{{ card.state }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="workspace-grid">
+            <article class="glass-panel graph-panel">
+                <div class="panel-head">
+                    <div>
+                        <p class="eyebrow">RESOURCE GRAPH</p>
+                        <h3>Current lab fabric</h3>
+                    </div>
+                    <div class="mode-pills">
+                        <button class="active">Fit</button>
+                        <button id="beta-hide-healthy">Hide healthy-ish</button>
+                        <button id="beta-toggle-stale">Show stale</button>
+                        <button id="beta-reset-view">Reset</button>
+                        <button id="beta-scope-one">Block</button>
+                        <button id="beta-scope-two">Street</button>
+                        <button id="beta-scope-all">City</button>
+                    </div>
+                </div>
+                <div class="cy-wrap">
+                    <div id="beta-cy" class="beta-cy" data-elements='{{ cytoscape_elements_json|e }}'></div>
+                    <div id="beta-node-popover" class="node-popover" hidden>
+                        <div class="node-popover-title">Resource</div>
+                        <div class="node-popover-kind">selected</div>
+                        <div class="node-popover-actions">
+                            <button type="button" data-popover-action="expand">Expand</button>
+                            <button type="button" data-popover-action="open">Open</button>
+                            <button type="button" data-popover-action="evidence">Evidence</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="ask-strip">Ask BKC target: “Show the path from edge/NAT ownership to OpenWebUI and the OpenStack APIs.”</div>
+            </article>
+
+            <aside class="glass-panel inspector">
+                <p class="eyebrow">INSPECTOR</p>
+                <h3 id="beta-selected-title">Select a resource</h3>
+                <p id="beta-selected-kind" class="muted">Click a graph node to inspect its live data.</p>
+                <div class="bubble-actions">
+                    <button type="button" id="beta-action-inspect">Inspect</button>
+                    <button type="button" id="beta-action-edit">Edit</button>
+                    <button type="button" id="beta-action-validate">Validate</button>
+                    <button type="button" id="beta-action-evidence">Evidence</button>
+                </div>
+                <div id="beta-selected-facts" class="fact-list"></div>
+                <a id="beta-open-current" class="wide-action" href="{{ url_for('resource_graph.resource_graph') }}">Open in current UI</a>
+            </aside>
+        </section>
+
+        <section class="detail-grid">
+            <article class="glass-panel diagram-card">
+                <div class="panel-head compact">
+                    <div>
+                        <p class="eyebrow">RELATIONSHIP CARD</p>
+                        <h3>Selected object expansion</h3>
+                    </div>
+                </div>
+                <div id="beta-relationship-card" class="relationship-card empty">
+                    <div class="orb">◇</div>
+                    <div>
+                        <strong>Nothing selected yet</strong>
+                        <span>Pick a graph node and this panel becomes a draggable-card style expansion target.</span>
+                    </div>
+                </div>
+                <div class="diagram-hint">Drag the card around this panel; later these become graph-linked, movable intent fragments.</div>
+            </article>
+
+            <article class="glass-panel code-card">
+                <div class="panel-head compact">
+                    <div>
+                        <p class="eyebrow">JSON / SCRIPT VIEW</p>
+                        <h3>Formatted working detail</h3>
+                    </div>
+                    <div class="mode-pills">
+                        <button type="button" class="active" data-code-mode="json">JSON</button>
+                        <button type="button" data-code-mode="shell">Shell</button>
+                    </div>
+                </div>
+                <pre id="beta-code-view" class="code-view"><code>{{ sample_contract_json }}</code></pre>
+            </article>
+        </section>
+
+        <section class="glass-panel action-drawer" id="beta-action-drawer" aria-live="polite">
+            <div>
+                <p class="eyebrow">ACTION DRAFT</p>
+                <h3 id="beta-action-title">No action selected</h3>
+                <p id="beta-action-copy">Select a resource or pipeline, then choose Inspect, Edit, Validate, Evidence, Open, or Run.</p>
+            </div>
+            <pre id="beta-action-payload" class="mini-code"><code>{
+  "mode": "read-only",
+  "status": "waiting-for-selection"
+}</code></pre>
+        </section>
+
+        <section class="lower-grid" data-pipelines='{{ pipeline_cards_json|e }}'>
+            <article class="glass-panel">
+                <div class="panel-head compact">
+                    <div>
+                        <p class="eyebrow">PIPELINE WORKBENCH</p>
+                        <h3>Fragment-ready lanes</h3>
+                    </div>
+                </div>
+                <div class="pipeline-list">
+                    {% for pipeline in pipeline_cards %}
+                    <article class="pipeline-row" data-pipeline-id="{{ pipeline.id }}">
+                        <button type="button" class="pipeline-row-main">
+                            <span>
+                                <strong>{{ pipeline.name }}</strong>
+                                <small>{{ pipeline.summary }}</small>
+                            </span>
+                            <em>{{ pipeline.latest_run_status }}</em>
+                        </button>
+                        <div class="pipeline-expanded">
+                            <div class="pipeline-actions">
+                                <a href="{{ url_for('pipelines.pipelines', pipeline_id=pipeline.id) }}">Open</a>
+                                <a href="{{ url_for('pipelines.pipelines', pipeline_id=pipeline.id) }}">Edit</a>
+                                <a href="{{ url_for('pipelines.pipelines', pipeline_id=pipeline.id) }}">Run</a>
+                            </div>
+                            <div class="pipeline-diagram">
+                                {% for stage in pipeline.stages %}
+                                <div class="stage-bubble">
+                                    <span>{{ loop.index }}</span>
+                                    <strong>{{ stage.id }}</strong>
+                                    <small>{{ stage.action }}</small>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </article>
+
+            <article class="glass-panel">
+                <div class="panel-head compact">
+                    <div>
+                        <p class="eyebrow">INTEGRATIONS</p>
+                        <h3>Provider cards</h3>
+                    </div>
+                </div>
+                <div class="integration-grid">
+                    {% for integration in integration_cards %}
+                    <div class="integration-card">
+                        <strong>{{ integration.name }}</strong>
+                        <span>{{ integration.state }} · {{ integration.health }}</span>
+                        <small>{{ integration.detail }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+            </article>
+        </section>
+    </main>
+</div>
+<script src="{{ url_for('static', filename='beta/beta.js') }}"></script>
+</body>
+</html>

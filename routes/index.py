@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from flask import Blueprint, render_template
 from services.automation_runs import load_runs
 from services.pipeline_catalog import demo_pipelines
@@ -20,6 +22,19 @@ def _stage_summary(run: dict) -> dict:
         else:
             summary["other"] += 1
     return summary
+
+
+def _run_timestamp(run: dict) -> datetime:
+    value = str(run.get("updated_at") or run.get("created_at") or "").strip()
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 @index_blueprint.route("/", methods=["GET"])
@@ -66,7 +81,7 @@ def index():
     latest_runs_by_workflow: dict[str, dict] = {}
     active_runs = 0
     failed_runs = 0
-    for run in load_runs():
+    for run in sorted(load_runs(), key=_run_timestamp, reverse=True):
         if run.get("tenant_slug") != tenant_slug:
             continue
         enriched = dict(run)
