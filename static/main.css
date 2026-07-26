@@ -7,8 +7,16 @@
   --muted: #98a8c4;
   --accent: #f39b51;
   --accent-dark: #ca6c28;
+  --accent-soft: rgba(243, 155, 81, 0.18);
+  --teal: #4fd1c5;
+  --teal-soft: rgba(79, 209, 197, 0.14);
+  --violet: #9f7aea;
+  --glass: rgba(8, 14, 28, 0.78);
+  --glass-strong: rgba(12, 20, 38, 0.92);
+  --glass-line: rgba(148, 183, 255, 0.2);
   --border: rgba(130, 156, 207, 0.18);
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  --shadow-glow: 0 22px 70px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(79, 209, 197, 0.04);
 }
 
 * {
@@ -356,10 +364,34 @@ a {
 .card,
 .flash,
 .hero-panel {
-  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--glass-line);
   border-radius: 22px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(79, 209, 197, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(18, 29, 52, 0.88), rgba(7, 12, 25, 0.86));
+  box-shadow: var(--shadow-glow);
+  backdrop-filter: blur(14px);
+}
+
+.hero::before,
+.form-shell::before,
+.meta-panel::before,
+.table-card::before,
+.group-card::before,
+.card::before,
+.hero-panel::before,
+.pipeline-card::before,
+.pipeline-run-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), transparent 26%),
+    linear-gradient(180deg, rgba(79, 209, 197, 0.035), transparent 52%);
 }
 
 .hero {
@@ -375,6 +407,8 @@ a {
 .form-shell h2,
 .form-shell h3 {
   margin: 0;
+  letter-spacing: -0.03em;
+  color: #f7fbff;
 }
 
 .hero-copy {
@@ -534,6 +568,12 @@ a {
   gap: 16px;
 }
 
+.group-card-header,
+.section-header {
+  border-bottom: 1px solid rgba(130, 156, 207, 0.14);
+  padding-bottom: 12px;
+}
+
 .pipeline-grid,
 .pipeline-run-list {
   display: grid;
@@ -551,11 +591,15 @@ a {
 
 .pipeline-card,
 .pipeline-run-card {
+  position: relative;
+  overflow: hidden;
   padding: 22px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--glass-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(159, 122, 234, 0.09), transparent 30%),
+    linear-gradient(180deg, rgba(17, 27, 50, 0.9), rgba(7, 12, 25, 0.88));
+  box-shadow: var(--shadow-glow);
 }
 
 .pipeline-console-filter {
@@ -1161,19 +1205,25 @@ input[type="submit"] {
   justify-content: center;
   gap: 8px;
   padding: 10px 16px;
-  border: 1px solid var(--accent);
+  border: 1px solid rgba(255, 188, 127, 0.75);
   border-radius: 999px;
-  background: var(--accent);
+  background: linear-gradient(180deg, #ffac63, var(--accent-dark));
   color: #fff9f2;
   text-decoration: none;
   cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: 0 10px 24px rgba(202, 108, 40, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
 .button:hover,
 button:hover,
 input[type="submit"]:hover {
-  background: var(--accent-dark);
-  border-color: var(--accent-dark);
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #ffc184, #d8732c);
+  border-color: rgba(255, 209, 162, 0.92);
+  box-shadow: 0 14px 30px rgba(202, 108, 40, 0.25), 0 0 0 3px rgba(243, 155, 81, 0.1);
 }
 
 .button[disabled],
@@ -1187,8 +1237,10 @@ input[type="submit"][disabled] {
 }
 
 .button.secondary {
-  background: transparent;
-  color: #ffd4b0;
+  border-color: rgba(79, 209, 197, 0.38);
+  background: rgba(79, 209, 197, 0.07);
+  color: #dffdfa;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .inline-form {
@@ -1229,6 +1281,9 @@ label {
   display: grid;
   gap: 8px;
   font-weight: 700;
+  color: #cbd9ef;
+  font-size: 0.88rem;
+  letter-spacing: 0.01em;
 }
 
 .checkbox-row {
@@ -1246,11 +1301,29 @@ select,
 textarea {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(130, 156, 207, 0.22);
   border-radius: 14px;
-  background: rgba(7, 12, 26, 0.86);
+  background:
+    linear-gradient(180deg, rgba(5, 10, 22, 0.94), rgba(10, 17, 32, 0.9));
   color: var(--text);
   font: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(79, 209, 197, 0.72);
+  background:
+    linear-gradient(180deg, rgba(6, 13, 27, 0.98), rgba(11, 21, 39, 0.96));
+  box-shadow: 0 0 0 3px rgba(79, 209, 197, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(152, 168, 196, 0.62);
 }
 
 textarea {
@@ -1273,6 +1346,14 @@ td {
   padding: 14px 12px;
   border-bottom: 1px solid rgba(130, 156, 207, 0.12);
   text-align: left;
+}
+
+tbody tr {
+  transition: background 0.16s ease;
+}
+
+tbody tr:hover {
+  background: rgba(79, 209, 197, 0.055);
 }
 
 th {
@@ -1994,6 +2075,7 @@ th {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--muted);
+  box-shadow: none;
 }
 
 .input-compact {

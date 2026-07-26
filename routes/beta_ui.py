@@ -1,0 +1,336 @@
+from __future__ import annotations
+
+import json
+
+from flask import Blueprint, render_template
+from services.automation_runs import load_runs
+from services.integration_store import (
+    load_ansible_snapshot,
+    load_docker_snapshot,
+    load_integrations,
+    load_kubernetes_snapshot,
+    load_proxmox_snapshot,
+)
+from services.pipeline_catalog import demo_pipelines
+from services.resource_graph import build_resource_graph, cytoscape_elements_from_resource_graph
+
+beta_ui_blueprint = Blueprint("beta_ui", __name__)
+
+
+def _status_counts(resources: list[dict]) -> dict[str, int]:
+    counts = {"running": 0, "success": 0, "warning": 0, "failed": 0, "unknown": 0}
+    for resource in resources:
+        state = str(resource.get("state") or resource.get("status") or "unknown").strip().lower()
+        if state in counts:
+            counts[state] += 1
+        elif state in {"active", "ok", "healthy", "up"}:
+            counts["running"] += 1
+        elif state in {"error", "down", "unreachable", "offline"}:
+            counts["failed"] += 1
+        elif state in {"stale", "last-known", "degraded"}:
+            counts["warning"] += 1
+        else:
+            counts["unknown"] += 1
+    return counts
+
+
+def _pipeline_cards() -> list[dict]:
+    runs = load_runs()
+    latest_by_pipeline: dict[str, dict] = {}
+    for run in runs:
+        pipeline_id = str((run.get("extra") or {}).get("pipeline_id") or run.get("workflow") or "").strip()
+        if pipeline_id and pipeline_id not in latest_by_pipeline:
+            latest_by_pipeline[pipeline_id] = run
+
+    cards = []
+    for pipeline in demo_pipelines():
+        latest = latest_by_pipeline.get(str(pipeline.get("id") or ""))
+        stages = list(pipeline.get("stages") or [])
+        if not stages:
+            stages = [{"id": name, "action": name} for name in list(pipeline.get("actions") or [])]
+        cards.append(
+            {
+                "id": pipeline.get("id"),
+                "name": pipeline.get("name") or pipeline.get("id"),
+                "summary": pipeline.get("summary") or pipeline.get("description") or "",
+                "status": pipeline.get("status") or "catalog",
+                "tags": list(pipeline.get("tags") or [])[:6],
+                "stage_count": len(stages),
+                "stages": [
+                    {
+                        "id": stage.get("id") or stage.get("name") or f"stage-{index + 1}",
+                        "action": stage.get("action") or stage.get("kind") or stage.get("name") or "",
+                        "transport": stage.get("transport") or "",
+                        "risk": stage.get("risk") or "",
+                    }
+                    for index, stage in enumerate(stages[:8])
+                    if isinstance(stage, dict)
+                ],
+                "latest_run_status": latest.get("status") if latest else "not-run",
+            }
+        )
+    return cards
+
+
+def _integration_cards() -> list[dict]:
+    integrations = load_integrations()
+    snapshots = {
+        "Proxmox": load_proxmox_snapshot(),
+        "Docker Swarm": load_docker_snapshot(),
+        "Kubernetes": load_kubernetes_snapshot(),
+        "Ansible": load_ansible_snapshot(),
+    }
+    configured = {
+        "Proxmox": bool((integrations.get("proxmox") or {}).get("api_url")),
+        "Docker Swarm": bool((integrations.get("docker") or {}).get("manager_host")),
+        "Kubernetes": bool((integrations.get("kubernetes") or {}).get("api_url") or (integrations.get("kubernetes") or {}).get("kubeconfig_path")),
+        "Ansible": bool((integrations.get("ansible") or {}).get("controller_host")),
+        "OpenStack": True,
+        "IPMI / Redfish": True,
+        "N2024 Switch": True,
+        "IPFire Candidate": False,
+    }
+    cards = []
+    for name, is_configured in configured.items():
+        snapshot = snapshots.get(name) or {}
+        refresh_status = str(snapshot.get("refresh_status") or "").strip().lower() if isinstance(snapshot, dict) else ""
+        health = "snapshot" if snapshot else ("ready" if is_configured else "planned")
+        detail = "Last inventory snapshot available." if snapshot else "Uses existing BKC pipeline/SSH contracts."
+        if refresh_status == "unreachable":
+            health = "stale"
+            detail = f"Snapshot preserved; latest refresh could not reach {snapshot.get('configured_endpoint') or 'configured endpoint'}."
+        elif refresh_status == "ok":
+            detail = f"Inventory refreshed at {snapshot.get('last_refreshed_at') or 'latest run'}."
+        cards.append(
+            {
+                "name": name,
+                "state": "configured" if is_configured else "candidate",
+                "health": health,
+                "detail": detail,
+            }
+        )
+    return cards
+
+
+def _fabric_cards() -> list[dict]:
+    return [
+        {
+            "id": "edge:spectrum",
+            "label": "Spectrum Router",
+            "kind": "unmanaged-wan",
+            "state": "unmanaged",
+            "primary": "192.168.1.1-ish",
+            "secondary": "consumer router / upstream DHCP",
+            "accent": "slate",
+            "actions": ["observe", "avoid dhcp conflict"],
+            "facts": {
+                "ownership": "uncontrolled upstream",
+                "role": "outside network gravity / internet edge",
+            },
+        },
+        {
+            "id": "edge:ipfire",
+            "label": "IPFire Edge",
+            "kind": "firewall",
+            "state": "candidate",
+            "primary": "GREEN 10.20.0.254",
+            "secondary": "RED 192.168.1.82",
+            "accent": "red",
+            "actions": ["ssh", "web", "nat draft"],
+            "facts": {
+                "fqdn": "ipfire.lab.auzietek.com",
+                "green": "10.20.0.254/24",
+                "red": "192.168.1.82/24",
+                "note": "Temporary RED admin allow for filming from 192.168.1.90",
+            },
+        },
+        {
+            "id": "fabric:n2024",
+            "label": "N2024 Switch",
+            "kind": "switch",
+            "state": "managed",
+            "primary": "10.20.0.100",
+            "secondary": "serial via Server1",
+            "accent": "teal",
+            "actions": ["ports", "mac table", "vlans"],
+            "facts": {
+                "hostname": "n2024-lab",
+                "management_ip": "10.20.0.100",
+                "role": "lab fabric evidence source",
+            },
+        },
+        {
+            "id": "control:ipmi",
+            "label": "IPMI / iDRAC",
+            "kind": "bmc",
+            "state": "ready",
+            "primary": "Server1 + Server2",
+            "secondary": "power / boot / firmware",
+            "accent": "violet",
+            "actions": ["power", "boot order", "bios notes"],
+            "facts": {
+                "server1_bmc": "10.20.0.119",
+                "server2_bmc": "10.20.0.102",
+                "route": "BKC -> ns1 -> Redfish",
+            },
+        },
+        {
+            "id": "core:ns1",
+            "label": "ns1 Core",
+            "kind": "dns-dhcp-nfs",
+            "state": "owner",
+            "primary": "10.20.0.10",
+            "secondary": "DHCP / DNS / PXE / NFS / NAT",
+            "accent": "green",
+            "actions": ["leases", "nfs", "pxe"],
+            "facts": {
+                "domain": "lab.auzietek.com",
+                "ownership": "active DHCP/DNS/PXE/NAT until IPFire cutover",
+            },
+        },
+        {
+            "id": "platform:openstack",
+            "label": "OpenStack",
+            "kind": "cloud",
+            "state": "running",
+            "primary": "Server1",
+            "secondary": "Horizon + API + local AI",
+            "accent": "orange",
+            "actions": ["horizon", "instances", "api"],
+            "facts": {
+                "host": "10.20.0.240",
+                "role": "future BKC home / local AI lane",
+            },
+        },
+        {
+            "id": "platform:hypervisors",
+            "label": "Hypervisors",
+            "kind": "platform",
+            "state": "mixed",
+            "primary": "Proxmox + ESXi",
+            "secondary": ".9 edge + Server2 lab",
+            "accent": "blue",
+            "actions": ["inventory", "vm list", "edge urls"],
+            "facts": {
+                "proxmox": "192.168.1.9",
+                "esxi": "10.20.0.114",
+            },
+        },
+    ]
+
+
+def _beta_graph_elements(elements: dict, fabric_cards: list[dict]) -> dict:
+    """Return a beta-friendly graph.
+
+    The full resource graph is excellent as data, but too dense for the beta
+    hero canvas because pipeline stages alone can add hundreds of compound
+    nodes. Keep the canvas focused on infrastructure and put pipelines in the
+    workbench below.
+    """
+
+    allowed_types = {"host", "vm", "container", "cluster"}
+    nodes = []
+    kept_ids: set[str] = set()
+    for node in elements.get("nodes", []):
+        data = node.get("data") if isinstance(node, dict) else {}
+        node_type = str(data.get("type") or "").strip().lower()
+        node_id = str(data.get("id") or "").strip()
+        label = str(data.get("label") or "")
+        if not node_id:
+            continue
+        if node_type not in allowed_types:
+            continue
+        if label.endswith(":") and node_id.startswith("host:"):
+            continue
+        kept_ids.add(node_id)
+        nodes.append({"data": {k: v for k, v in data.items() if k != "parent"}})
+
+    fabric_node_map = {
+        "edge:spectrum": {"label": "Spectrum", "type": "isp", "status": "unmanaged"},
+        "edge:ipfire": {"label": "IPFire", "type": "firewall", "status": "candidate"},
+        "fabric:n2024": {"label": "N2024", "type": "switch", "status": "running"},
+        "control:ipmi": {"label": "iDRAC", "type": "bmc", "status": "running"},
+        "core:ns1": {"label": "ns1", "type": "host", "status": "running"},
+        "platform:openstack": {"label": "OpenStack", "type": "cluster", "status": "running"},
+        "platform:hypervisors": {"label": "Hypervisors", "type": "cluster", "status": "running"},
+    }
+    for card in fabric_cards:
+        node_id = str(card.get("id") or "")
+        data = fabric_node_map.get(node_id)
+        if not data:
+            continue
+        kept_ids.add(node_id)
+        positions = {
+            "edge:spectrum": {"x": 80, "y": 220},
+            "edge:ipfire": {"x": 230, "y": 220},
+            "fabric:n2024": {"x": 400, "y": 220},
+            "control:ipmi": {"x": 590, "y": 120},
+            "core:ns1": {"x": 590, "y": 320},
+            "platform:openstack": {"x": 820, "y": 120},
+            "platform:hypervisors": {"x": 820, "y": 320},
+        }
+        node = {"data": {"id": node_id, **data}}
+        if node_id in positions:
+            node["position"] = positions[node_id]
+            node["locked"] = True
+        nodes.append(node)
+
+    edge_specs = [
+        ("edge:spectrum", "edge:ipfire", "wan"),
+        ("edge:ipfire", "core:ns1", "protects"),
+        ("edge:ipfire", "fabric:n2024", "connected_to"),
+        ("fabric:n2024", "control:ipmi", "observes"),
+        ("fabric:n2024", "platform:openstack", "connects"),
+        ("fabric:n2024", "platform:hypervisors", "connects"),
+        ("core:ns1", "platform:openstack", "provides_services"),
+        ("core:ns1", "platform:hypervisors", "provides_services"),
+    ]
+    edges = [
+        {"data": {"id": f"edge:{source}:{relation}:{target}", "source": source, "target": target, "type": relation}}
+        for source, target, relation in edge_specs
+        if source in kept_ids and target in kept_ids
+    ]
+
+    for edge in elements.get("edges", []):
+        data = edge.get("data") if isinstance(edge, dict) else {}
+        source = str(data.get("source") or "")
+        target = str(data.get("target") or "")
+        edge_type = str(data.get("type") or "")
+        if source in kept_ids and target in kept_ids and edge_type != "pipeline_flow":
+            edges.append({"data": data})
+
+    return {"nodes": nodes[:140], "edges": edges[:220]}
+
+
+@beta_ui_blueprint.get("/beta")
+def beta_home():
+    graph = build_resource_graph()
+    resources = list(graph.get("resources", []))
+    fabric_cards = _fabric_cards()
+    elements = _beta_graph_elements(cytoscape_elements_from_resource_graph(graph), fabric_cards)
+    pipeline_cards = _pipeline_cards()
+    return render_template(
+        "beta/home.html.j2",
+        graph=graph,
+        cytoscape_elements_json=json.dumps(elements, sort_keys=True),
+        pipeline_cards_json=json.dumps(pipeline_cards[:18], sort_keys=True),
+        sample_contract_json=json.dumps(
+            {
+                "view": "beta-workbench",
+                "intent": "graph-linked operations",
+                "actions": ["inspect", "edit", "run", "validate", "open evidence"],
+                "guardrail": "production UI remains unchanged",
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        status_counts=_status_counts(resources),
+        resource_count=len(resources),
+        relationship_count=len(graph.get("relationships", [])),
+        pipeline_count=len(pipeline_cards),
+        active_pipeline_count=sum(1 for card in pipeline_cards if str(card.get("latest_run_status")).lower() in {"active", "running", "queued"}),
+        pipeline_cards=pipeline_cards[:18],
+        integration_cards=_integration_cards(),
+        fabric_cards=fabric_cards,
+        fabric_cards_json=json.dumps(fabric_cards, sort_keys=True),
+    )

@@ -209,6 +209,23 @@ def _pipeline_target_resource(target: str) -> dict | None:
             "facts": {"target": value, "provider": "service"},
             "actions": _resource_action_links("container"),
         }
+    if value.startswith("node:"):
+        parts = value.split(":", 2)
+        if len(parts) != 3:
+            return None
+        _, resource_kind, resource_name = [part.strip() for part in parts]
+        if resource_kind not in RESOURCE_KIND_META or not resource_name:
+            return None
+        return {
+            "id": f"{resource_kind}:{resource_name}",
+            "kind": resource_kind,
+            "name": resource_name,
+            "state": "referenced",
+            "summary": "Resource referenced by a pipeline target.",
+            "sources": ["pipeline target"],
+            "facts": {"target": value, "provider": "pipeline"},
+            "actions": _resource_action_links(resource_kind),
+        }
     return None
 
 
@@ -346,13 +363,28 @@ def _operational_sections(kind: str, host_name: str, node_data: dict, resolved: 
         proxmox_item = indexes["proxmox_by_name"].get(host_name.lower())
 
     if proxmox_item:
+        proxmox_snapshot = indexes.get("proxmox") if isinstance(indexes.get("proxmox"), dict) else {}
+        refresh_status = str(proxmox_snapshot.get("refresh_status") or "").strip()
+        last_seen = (
+            proxmox_snapshot.get("last_refreshed_at")
+            or proxmox_snapshot.get("last_refresh_attempt_at")
+            or proxmox_snapshot.get("captured_at")
+            or proxmox_snapshot.get("generated_at")
+            or "snapshot"
+        )
         facts.update(
             {
                 "vmid": proxmox_item.get("vmid", vmid),
                 "proxmox node": proxmox_item.get("node", "unset"),
                 "status": proxmox_item.get("status", "unset"),
+                "inventory source": "proxmox snapshot",
+                "last seen": last_seen,
             }
         )
+        if refresh_status:
+            facts["snapshot refresh"] = refresh_status
+        if refresh_status == "unreachable":
+            facts["refresh error"] = proxmox_snapshot.get("refresh_error", "unreachable")
         sections["compute"] = _kv(
             cpus=proxmox_item.get("cpus"),
             memory=f"{_fmt_bytes(proxmox_item.get('mem'))} / {_fmt_bytes(proxmox_item.get('maxmem'))}",
@@ -375,6 +407,7 @@ def _operational_sections(kind: str, host_name: str, node_data: dict, resolved: 
             resource_type=proxmox_item.get("type"),
             user=resolved.get("user") or node_data.get("user"),
             provisioner=resolved.get("provisioner") or node_data.get("provisioner"),
+            endpoint=proxmox_snapshot.get("configured_endpoint"),
         )
 
     docker_node = indexes["docker_nodes"].get(host_name.lower())
@@ -711,7 +744,22 @@ CYTOSCAPE_NODE_TYPES = {"cluster", "host", "vm", "container", "pipeline"}
 
 def _cytoscape_status(state: str) -> str:
     normalized = str(state or "").strip().lower()
-    if normalized in {"stopped", "inactive", "legacy", "template", "retired"}:
+    if normalized in {
+        "",
+        "unknown",
+        "known",
+        "defined",
+        "referenced",
+        "stopped",
+        "inactive",
+        "off",
+        "powered_off",
+        "legacy",
+        "template",
+        "retired",
+        "offline",
+        "stale",
+    }:
         return "inactive"
     if normalized in {"failed", "failure", "error", "blocked", "needs setup", "unreachable"}:
         return "failed"
