@@ -22,6 +22,7 @@ services:
       - ${dictionary.runtime_mount}/file_templates:/app/file_templates
       - ${dictionary.runtime_mount}/keys:/app/keys
       - ${dictionary.runtime_mount}/pipelines:/app/runtime/pipelines
+      - ${dictionary.pipeline_import_mount}:/app/imports/pipelines:ro
 
   bkc-worker:
     build:
@@ -39,3 +40,4 @@ services:
       - ${dictionary.runtime_mount}/file_templates:/app/file_templates
       - ${dictionary.runtime_mount}/keys:/app/keys
       - ${dictionary.runtime_mount}/pipelines:/app/runtime/pipelines
+      - ${dictionary.pipeline_import_mount}:/app/imports/pipelines:ro

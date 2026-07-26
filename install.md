@@ -279,33 +279,35 @@ dependencies, or executor behavior.
 
 This is the path to use when BKC starts managing its own move into the lab
 cloud. The first hop should stay intentionally simple: provision an OpenStack
-VM, mount the shared runtime from ns1, copy a `.env` file, and let a BKC
-pipeline run `docker compose up`.
+VM, create a new target-local runtime, optionally mount ns1 pipeline imports,
+copy a `.env` file, and let a BKC pipeline run `docker compose up`.
 
 This assumes:
 
 - the OpenStack-side BKC VM can reach ns1 over the lab network;
-- ns1 exports the shared BKC runtime path;
+- ns1 exports the shared BKC pipeline library or import source;
 - secrets are supplied through a local `.env` file on the target VM;
 - pipeline folders are mounted and refreshed separately from the image.
 
-On ns1, keep the shared runtime path in one predictable place:
+On ns1, keep the shared import library in one predictable place:
 
 ```bash
-sudo mkdir -p /srv/nfs/bkc/runtime/{dictionaries,file_templates,keys,pipelines,redis}
+sudo mkdir -p /srv/nfs/bkc/runtime/pipelines
 ```
 
-On the OpenStack-side BKC VM, mount that shared runtime path:
+On the OpenStack-side BKC VM, create a native runtime and mount the import
+library as a second read-only folder:
 
 ```bash
-sudo mkdir -p /srv/bkc/runtime
-sudo mount -t nfs ns1.example.local:/srv/nfs/bkc/runtime /srv/bkc/runtime
+sudo mkdir -p /srv/bkc/runtime/{dictionaries,file_templates,keys,pipelines,redis}
+sudo mkdir -p /srv/bkc/imports/pipelines
+sudo mount -t nfs -o ro ns1.example.local:/srv/nfs/bkc/runtime/pipelines /srv/bkc/imports/pipelines
 ```
 
 Example `/etc/fstab` entry on the OpenStack VM:
 
 ```fstab
-ns1.example.local:/srv/nfs/bkc/runtime /srv/bkc/runtime nfs defaults,_netdev,nofail 0 0
+ns1.example.local:/srv/nfs/bkc/runtime/pipelines /srv/bkc/imports/pipelines nfs defaults,_netdev,nofail,ro 0 0
 ```
 
 Clone or update the source checkout on the OpenStack VM:
@@ -355,6 +357,7 @@ services:
       - /srv/bkc/runtime/file_templates:/app/file_templates
       - /srv/bkc/runtime/keys:/app/keys
       - /srv/bkc/runtime/pipelines:/app/runtime/pipelines
+      - /srv/bkc/imports/pipelines:/app/imports/pipelines:ro
 
   bkc-worker:
     build:
@@ -372,13 +375,15 @@ services:
       - /srv/bkc/runtime/file_templates:/app/file_templates
       - /srv/bkc/runtime/keys:/app/keys
       - /srv/bkc/runtime/pipelines:/app/runtime/pipelines
+      - /srv/bkc/imports/pipelines:/app/imports/pipelines:ro
 ```
 
 The dogfood pipeline should perform these steps over SSH on the target VM:
 
 ```bash
-sudo mkdir -p /srv/bkc/runtime
-sudo mountpoint -q /srv/bkc/runtime || sudo mount /srv/bkc/runtime
+sudo mkdir -p /srv/bkc/runtime/{dictionaries,file_templates,keys,pipelines,redis}
+sudo mkdir -p /srv/bkc/imports/pipelines
+sudo mountpoint -q /srv/bkc/imports/pipelines || sudo mount /srv/bkc/imports/pipelines
 cd /srv/bkc/source
 git fetch --all --prune
 git switch main
@@ -393,20 +398,32 @@ from `/srv/bkc/.env` and redeploy.
 
 This is also the path to automate with BKC itself: render `.env` from a secret
 fragment, render `compose.yml` from a known-good template, ship both to the
-OpenStack VM, mount ns1, run Compose, then validate `/ready` and the edge route.
+OpenStack VM, scan import sources, mount ns1 imports, run Compose, then
+validate `/ready` and the edge route.
 
 ### Later: Swarm expansion
 
 Once the OpenStack-side single-VM deployment is solid, the same runtime layout
-can graduate to a Docker Swarm. At that point, all swarm nodes should mount the
-same ns1 runtime path, and the BKC image should come from a registry instead of
-being built locally on each node.
+can graduate to a Docker Swarm. At that point, worker nodes should mount the
+same BKC native runtime/import paths, and the BKC image should come from a
+registry instead of being built locally on each node.
 
 The Swarm version should keep the same separation:
 
 - image: application code;
-- ns1 runtime mount: dictionaries, templates, keys, pipelines, Redis data;
+- native runtime mount: dictionaries, templates, keys, pipelines, Redis data;
+- import mount: shared pipeline/source library, usually read-only;
 - `.env` or future Docker secrets: deployment-specific secrets.
+
+For Swarm, place the BKC web and worker services on worker nodes unless you
+explicitly want the control-plane managers to run application containers:
+
+```yaml
+deploy:
+  placement:
+    constraints:
+      - node.role == worker
+```
 
 Docker secrets are the better long-term shape, but the current app expects
 direct environment variables. If you want to use Docker secrets before native

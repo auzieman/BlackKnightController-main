@@ -3474,8 +3474,9 @@ WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
 WORKFLOW_DEFINITIONS["openstack-bkc-compose-deploy"] = {
     "supports_undeploy": False, "settings_optional": True,
     "stage_plan": [
-        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, ns1 runtime export, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
-        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing /srv/bkc, mounting ns1 runtime, and ensuring mutable runtime subfolders exist.", "timeout": 300},
+        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, import source visibility, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
+        {"name": "scan-openstack-bkc-import-sources", "kind": "openstack-bkc-compose-source-scan", "active": "Scanning import/source folders so inherited pipelines and stale source state are visible before deploy.", "timeout": 120},
+        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing a target-local /srv/bkc runtime and optional read-only ns1 pipeline import mount.", "timeout": 300},
         {"name": "render-openstack-bkc-compose", "kind": "openstack-bkc-compose-render", "active": "Rendering the target .env and Docker Compose file from known-good templates.", "timeout": 180},
         {"name": "deploy-openstack-bkc-compose", "kind": "openstack-bkc-compose-up", "active": "Updating source and running docker compose up -d --build on the OpenStack BKC VM.", "timeout": 1800},
         {"name": "validate-openstack-bkc", "kind": "openstack-bkc-compose-validate", "active": "Validating the new BKC /ready endpoint and container state.", "timeout": 300},
@@ -8097,6 +8098,8 @@ def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
         "target_root",
         "runtime_mount",
         "runtime_export",
+        "pipeline_import_mount",
+        "pipeline_import_export",
         "repo_url",
         "repo_branch",
         "compose_path",
@@ -8106,9 +8109,19 @@ def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
     return {key: shlex.quote(str(values.get(key) or "")) for key in keys}
 
 
+def _openstack_bkc_nfs_probe_host(values: dict) -> str:
+    for key in ("pipeline_import_export", "runtime_export"):
+        value = str(values.get(key) or "")
+        if ":" in value:
+            return value.split(":", 1)[0]
+    return ""
+
+
 def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
     _, _, values = _openstack_bkc_compose_context(run_id)
     q = _openstack_bkc_quote_values(values)
+    nfs_probe_host = _openstack_bkc_nfs_probe_host(values)
+    nfs_probe = f"showmount -e {shlex.quote(nfs_probe_host)} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; " if nfs_probe_host else "true >/tmp/bkc-nfs-showmount.txt; "
     command = (
         "set -e; "
         "printf 'host='; hostname; "
@@ -8116,11 +8129,12 @@ def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
         "printf 'ip='; hostname -I || true; "
         "command -v apt-get >/dev/null; "
         "getent hosts ns1.example.local >/dev/null 2>&1 || true; "
-        f"showmount -e {shlex.quote(str(values.get('runtime_export') or '').split(':', 1)[0])} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; "
+        f"{nfs_probe}"
         "printf '\n-- docker --\n'; docker --version 2>/dev/null || true; "
         "printf '\n-- compose --\n'; docker compose version 2>/dev/null || true; "
         "printf '\n-- nfs export --\n'; sed -n '1,80p' /tmp/bkc-nfs-showmount.txt || true; "
-        f"printf '\nplanned_runtime=%s\n' {q['runtime_mount']}; "
+        f"printf '\nplanned_native_runtime=%s\n' {q['runtime_mount']}; "
+        f"printf 'planned_pipeline_import=%s -> %s\n' {q['pipeline_import_export']} {q['pipeline_import_mount']}; "
         f"printf 'planned_repo=%s branch=%s\n' {q['repo_url']} {q['repo_branch']}"
     )
     output = _run_openstack_bkc_command(values, command, timeout=120)
@@ -8128,35 +8142,84 @@ def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "OpenStack BKC VM responded over SSH and basic deploy prerequisites were inspected.")
 
 
+def _run_openstack_bkc_source_scan(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    pipeline_import_export = str(values.get("pipeline_import_export") or "")
+    enable_pipeline_import = _truthy(values.get("enable_pipeline_import_mount"))
+    if enable_pipeline_import and ":" not in pipeline_import_export:
+        raise PipelineExecutionError("pipeline_import_export must be an NFS server:path value when pipeline import is enabled.")
+    mount_cmd = (
+        f"mkdir -p {q['pipeline_import_mount']}; "
+        f"mountpoint -q {q['pipeline_import_mount']} || mount -t nfs -o ro {q['pipeline_import_export']} {q['pipeline_import_mount']}; "
+        if enable_pipeline_import else f"mkdir -p {q['pipeline_import_mount']}; "
+    )
+    command = (
+        "set -e; "
+        f"{mount_cmd}"
+        f"printf 'import_mount=%s\n' {q['pipeline_import_mount']}; "
+        f"mountpoint {q['pipeline_import_mount']} || true; "
+        f"printf '\n-- import top level --\n'; find {q['pipeline_import_mount']} -maxdepth 2 -mindepth 1 -type d | sort | sed -n '1,120p'; "
+        f"printf '\n-- pipeline definitions --\n'; find {q['pipeline_import_mount']} -maxdepth 3 -type f | grep -E '/(pipeline|dictionary|defaults)[.]json$' | sort | sed -n '1,160p'; "
+        f"printf '\ncounts pipelines='; find {q['pipeline_import_mount']} -maxdepth 3 -type f -name pipeline.json | wc -l; "
+        f"printf ' dictionaries='; find {q['pipeline_import_mount']} -maxdepth 3 -type f -name dictionary.json | wc -l"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=120)
+    _store_run_extra(run_id, {"openstack_bkc_import_source_scan": output[-6000:]})
+    append_event(run_id, "info", stage_name, output[-6000:] if output else "openstack-bkc-import-source-empty")
+    _set_stage(run_id, stage_name, "complete", "OpenStack BKC import/source folders were scanned and recorded before deployment.")
+
+
 def _run_openstack_bkc_compose_runtime(run_id: str, stage_name: str) -> None:
     _, _, values = _openstack_bkc_compose_context(run_id)
     q = _openstack_bkc_quote_values(values)
     runtime_mount = str(values.get("runtime_mount") or "/srv/bkc/runtime")
     runtime_export = str(values.get("runtime_export") or "")
+    pipeline_import_mount = str(values.get("pipeline_import_mount") or "/srv/bkc/imports/pipelines")
+    pipeline_import_export = str(values.get("pipeline_import_export") or "")
+    enable_pipeline_import = _truthy(values.get("enable_pipeline_import_mount"))
     if not runtime_mount.startswith("/srv/bkc/"):
         raise PipelineExecutionError(f"Refusing runtime mount outside /srv/bkc: {runtime_mount}")
-    if ":" not in runtime_export:
-        raise PipelineExecutionError("runtime_export must be an NFS server:path value.")
-    fstab_line = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0"
+    if not pipeline_import_mount.startswith("/srv/bkc/"):
+        raise PipelineExecutionError(f"Refusing pipeline import mount outside /srv/bkc: {pipeline_import_mount}")
+    if runtime_export and ":" not in runtime_export:
+        raise PipelineExecutionError("runtime_export must be empty or an NFS server:path value.")
+    if enable_pipeline_import and ":" not in pipeline_import_export:
+        raise PipelineExecutionError("pipeline_import_export must be an NFS server:path value when pipeline import is enabled.")
+    runtime_fstab = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0" if runtime_export else ""
+    import_fstab = f"{pipeline_import_export} {pipeline_import_mount} nfs defaults,_netdev,nofail,ro 0 0" if enable_pipeline_import else ""
+    runtime_mount_command = (
+        f"grep -Fxq {shlex.quote(runtime_fstab)} /etc/fstab || printf '%s\n' {shlex.quote(runtime_fstab)} >> /etc/fstab; "
+        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
+        if runtime_fstab
+        else ""
+    )
+    import_mount_command = (
+        f"grep -Fxq {shlex.quote(import_fstab)} /etc/fstab || printf '%s\n' {shlex.quote(import_fstab)} >> /etc/fstab; "
+        f"mountpoint -q {q['pipeline_import_mount']} || mount {q['pipeline_import_mount']}; "
+        if import_fstab
+        else ""
+    )
     command = (
         "set -e; "
         "export DEBIAN_FRONTEND=noninteractive; "
         "apt-get update; "
         "apt-get install -y --no-install-recommends git curl ca-certificates nfs-common docker.io docker-compose-plugin; "
         "systemctl enable --now docker; "
-        f"mkdir -p {q['target_root']} {q['runtime_mount']}; "
-        f"grep -Fxq {shlex.quote(fstab_line)} /etc/fstab || printf '%s\n' {shlex.quote(fstab_line)} >> /etc/fstab; "
-        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
+        f"mkdir -p {q['target_root']} {q['runtime_mount']} {q['pipeline_import_mount']}; "
+        f"{runtime_mount_command}"
+        f"{import_mount_command}"
         f"mkdir -p {q['runtime_mount']}/dictionaries {q['runtime_mount']}/file_templates {q['runtime_mount']}/keys {q['runtime_mount']}/pipelines {q['runtime_mount']}/redis; "
         f"chmod 700 {q['runtime_mount']}/keys; "
         f"if [ ! -d {q['target_root']}/source/.git ]; then git clone {q['repo_url']} {q['target_root']}/source; fi; "
         f"cd {q['target_root']}/source; git fetch --all --prune; git switch {q['repo_branch']}; git pull --ff-only; "
         f"test -d {q['runtime_mount']}/pipelines; mountpoint {q['runtime_mount']} || true; "
+        f"test -d {q['pipeline_import_mount']} && find {q['pipeline_import_mount']} -maxdepth 1 -type d | sed -n '1,20p' || true; "
         "docker --version; docker compose version"
     )
     output = _run_openstack_bkc_command(values, command, timeout=900)
     append_event(run_id, "info", stage_name, output[-4000:] if output else "openstack-bkc-runtime-ready")
-    _set_stage(run_id, stage_name, "complete", "Target runtime, ns1 NFS mount, Docker, Compose plugin, and source checkout are ready.")
+    _set_stage(run_id, stage_name, "complete", "Target-local runtime, optional ns1 pipeline import, Docker, Compose plugin, and source checkout are ready.")
 
 
 def _run_openstack_bkc_compose_render(run_id: str, stage_name: str) -> None:
@@ -8243,6 +8306,7 @@ def _run_openstack_bkc_edge_pointer(run_id: str, stage_name: str) -> None:
     _store_run_extra(run_id, {"openstack_bkc_edge_pointer": payload})
     append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
     _set_stage(run_id, stage_name, "complete", f"{payload['label']} edge pointer recorded: {payload['edge_url']} -> {backend}")
+
 
 
 def _run_ns1_lan_mac_render_defaults(run_id: str, stage_name: str) -> None:
@@ -12593,6 +12657,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "openstack-bkc-compose-preflight":
             _run_openstack_bkc_compose_preflight(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-source-scan":
+            _run_openstack_bkc_source_scan(run_id, stage_name)
             continue
 
         if kind == "openstack-bkc-compose-runtime":

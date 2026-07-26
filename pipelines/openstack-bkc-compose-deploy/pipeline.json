@@ -23,6 +23,7 @@
   },
   "stages": [
     {"id": "preflight-openstack-bkc-vm", "action": "openstack.bkc.preflight", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 180},
+    {"id": "scan-openstack-bkc-import-sources", "action": "openstack.bkc.import.scan", "transport": "bkc-ssh+nfs", "risk": "low", "timeout_seconds": 120},
     {"id": "stage-openstack-bkc-runtime", "action": "openstack.bkc.runtime.stage", "transport": "bkc-ssh+nfs", "risk": "medium", "timeout_seconds": 300},
     {"id": "render-openstack-bkc-compose", "action": "openstack.bkc.compose.render", "transport": "bkc-ssh+template", "risk": "medium", "timeout_seconds": 180},
     {"id": "deploy-openstack-bkc-compose", "action": "openstack.bkc.compose.up", "transport": "bkc-ssh+docker-compose", "risk": "medium", "timeout_seconds": 1800},
