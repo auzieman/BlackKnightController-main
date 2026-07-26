@@ -159,17 +159,50 @@
         });
     }
 
+    function codeBlockLabel(pre) {
+        if (pre.classList.contains("json-preview")) return "View formatted JSON";
+        if (pre.classList.contains("terminal-log")) return "View formatted command/log";
+        return "View formatted text";
+    }
+
+    function shouldCollapseCodeBlock(pre) {
+        if (pre.closest("details")) return false;
+        if (pre.closest(".beta-cy, .node-popover")) return false;
+        const raw = pre.textContent || "";
+        if (raw.trim().length < 260) return false;
+        if (pre.closest("td, dd, .detail-grid, .inspector, .run-stage-card, .pipeline-stage-card")) return true;
+        return pre.classList.contains("compact-terminal") || pre.classList.contains("compact-code-preview");
+    }
+
+    function collapseCrowdedCodeBlocks() {
+        const selector = "pre.json-preview, pre.terminal-log";
+        Array.from(document.querySelectorAll(selector)).slice(0, MAX_POLISH_BLOCKS).forEach((pre) => {
+            if (pre.dataset.collapsible === "true") return;
+            if (!shouldCollapseCodeBlock(pre)) return;
+            const details = document.createElement("details");
+            details.className = "code-preview-panel collapsed-code-panel";
+            const summary = document.createElement("summary");
+            summary.textContent = codeBlockLabel(pre);
+            pre.classList.add("compact-code-preview");
+            pre.parentNode.insertBefore(details, pre);
+            details.append(summary, pre);
+            pre.dataset.collapsible = "true";
+        });
+    }
+
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => {
             polishJsonPreviews();
             polishTerminalLogs();
             polishTextareaPreviews();
             polishInlineStructuredValues();
+            collapseCrowdedCodeBlocks();
         });
     } else {
         polishJsonPreviews();
         polishTerminalLogs();
         polishTextareaPreviews();
         polishInlineStructuredValues();
+        collapseCrowdedCodeBlocks();
     }
 })();
