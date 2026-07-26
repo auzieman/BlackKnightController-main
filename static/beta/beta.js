@@ -929,11 +929,126 @@ ${data.label || data.id || ""}`;
         }
     });
 
-    document.querySelectorAll("[data-view-mode]").forEach((button) => {
-        button.addEventListener("click", () => {
-            document.querySelectorAll("[data-view-mode]").forEach((item) => item.classList.remove("active"));
-            button.classList.add("active");
+    function setActiveViewButton(mode) {
+        document.querySelectorAll("[data-view-mode]").forEach((item) => {
+            item.classList.toggle("active", item.dataset.viewMode === mode);
         });
+    }
+
+    function graphText(node) {
+        const data = node.data();
+        return Object.entries(data)
+            .filter(([key, value]) => key !== "iconLabel" && value !== null && value !== undefined)
+            .flatMap(([key, value]) => [key, String(value)])
+            .join(" ")
+            .toLowerCase();
+    }
+
+    function focusCollection(collection, options = {}) {
+        if (!collection || collection.empty()) return false;
+        cy.elements().removeClass("search-hit search-path dimmed focus-root focus-neighbor");
+        cy.elements().addClass("dimmed");
+        collection.removeClass("dimmed").addClass("focus-neighbor");
+        collection.edges().addClass("search-path");
+        if (options.markNodes) collection.nodes().addClass("search-hit");
+        const root = options.rootId ? cy.getElementById(options.rootId) : collection.nodes().first();
+        if (root && !root.empty()) {
+            root.removeClass("focus-neighbor").addClass("focus-root search-hit");
+            selectedNodeId = root.id();
+            renderRelationshipCard(root);
+            renderCode(root.data());
+            title.textContent = root.data("label") || root.data("name") || root.id();
+            kind.textContent = [root.data("kind"), root.data("status") || root.data("state")].filter(Boolean).join(" · ") || "resource";
+        }
+        cy.animate({ fit: { eles: collection, padding: options.padding || 88 } }, { duration: 280 });
+        return true;
+    }
+
+    function expandUsefulTopology() {
+        ["platform:hypervisors", "host:pve1", "host:server1", "host:server2", "edge:ipfire", "fabric:n2024"].forEach((id) => {
+            if (cy.getElementById(id).length) expandGraphPack(id, { auto: true });
+        });
+    }
+
+    function focusViewMode(mode) {
+        setActiveViewButton(mode);
+        if (nodePopover) nodePopover.hidden = true;
+        applyStaleVisibility();
+
+        if (mode === "topology") {
+            expandUsefulTopology();
+            cy.elements().removeClass("search-hit search-path dimmed focus-root focus-neighbor");
+            const roots = cy.nodes().filter((node) => {
+                const text = graphText(node);
+                return ["spectrum", "ipfire", "n2024", "ipmi", "ns1", "openstack", "hypervisors", "pve1", "server1", "server2"]
+                    .some((needle) => text.includes(needle));
+            });
+            roots.addClass("search-hit");
+            cy.animate({ fit: { eles: cy.elements().not(".hidden-stale"), padding: 54 } }, { duration: 280 });
+            actionTitle.textContent = "Topology";
+            actionCopy.textContent = "Topology mode shows the living lab fabric: edge, switch, IPMI, core services, and hypervisors.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ view: "topology", mode: "city", focus: "living lab fabric" })}</code>`;
+            return;
+        }
+
+        if (mode === "pipelines") {
+            const firstPipeline = document.querySelector(".pipeline-row");
+            firstPipeline?.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (firstPipeline && !firstPipeline.classList.contains("expanded")) {
+                firstPipeline.querySelector(".pipeline-row-main")?.click();
+            }
+            const pipelineNodes = cy.nodes().filter((node) => {
+                const text = graphText(node);
+                return text.includes("pipeline") || text.includes("stage") || text.includes("video") || text.includes("pxe") || text.includes("provision");
+            });
+            const context = pipelineNodes.union(pipelineNodes.connectedEdges()).union(pipelineNodes.connectedEdges().connectedNodes());
+            focusCollection(context, { markNodes: true, padding: 96 });
+            actionTitle.textContent = "Pipeline paths";
+            actionCopy.textContent = "Pipeline mode opens the pipeline workbench and highlights provisioning/stage/run relationships in the graph when present.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ view: "pipelines", intent: "show runnable paths and stage fragments", next: "select a pipeline row to inspect/run/edit" })}</code>`;
+            return;
+        }
+
+        if (mode === "edge") {
+            ["edge:ipfire", "fabric:n2024", "core:ns1", "host:pve1", "vm:pve-ipfire", "evidence:pve1-mac-adjacency"].forEach((id) => {
+                if (cy.getElementById(id).length) expandGraphPack(id, { auto: true });
+            });
+            const edgeNodes = cy.nodes().filter((node) => {
+                const text = graphText(node);
+                return ["edge", "firewall", "ipfire", "nat", "switch", "n2024", "dhcp", "dns", "pxe", "gateway", "spectrum", "vmbr", "mac"]
+                    .some((needle) => text.includes(needle));
+            });
+            const context = edgeNodes.union(edgeNodes.connectedEdges()).union(edgeNodes.connectedEdges().connectedNodes());
+            focusCollection(context, { rootId: cy.getElementById("edge:ipfire").length ? "edge:ipfire" : "fabric:n2024", markNodes: true, padding: 92 });
+            actionTitle.textContent = "Edge ownership";
+            actionCopy.textContent = "Edge mode follows WAN, firewall, switch, DHCP/DNS/PXE, MAC evidence, and pve1 bridge relationships.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ view: "edge", focus: ["Spectrum", "IPFire", "N2024", "ns1", "pve1 bridges"], mode: "evidence-first" })}</code>`;
+            return;
+        }
+
+        if (mode === "failures") {
+            expandUsefulTopology();
+            const failureNodes = cy.nodes().filter((node) => {
+                const data = node.data();
+                const state = String(data.state || data.status || "").toLowerCase();
+                const text = graphText(node);
+                return ["failed", "failure", "error", "blocked", "unreachable", "offline", "stale", "warning"].includes(state)
+                    || text.includes("stale")
+                    || text.includes("unreachable")
+                    || text.includes("failed")
+                    || text.includes("offline")
+                    || text.includes("refresh error");
+            });
+            const context = failureNodes.union(failureNodes.connectedEdges()).union(failureNodes.connectedEdges().connectedNodes());
+            focusCollection(context, { markNodes: true, padding: 102 });
+            actionTitle.textContent = "Failures / stale evidence";
+            actionCopy.textContent = "Failure mode dims healthy fabric and keeps stale, offline, unreachable, or warning evidence visible for triage.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ view: "failures", includes: ["failed", "offline", "stale", "unreachable", "warning"], purpose: "triage without hiding evidence" })}</code>`;
+        }
+    }
+
+    document.querySelectorAll("[data-view-mode]").forEach((button) => {
+        button.addEventListener("click", () => focusViewMode(button.dataset.viewMode || "topology"));
     });
 
     document.querySelectorAll(".pipeline-row-main").forEach((button) => {
