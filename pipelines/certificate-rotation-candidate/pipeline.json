@@ -1,0 +1,33 @@
+{
+  "id": "certificate-rotation-candidate",
+  "name": "CERT CANDIDATE — TLS Certificate Rotation",
+  "repo": "BlackKnightController",
+  "workflow": "certificate-rotation-candidate",
+  "resource_class": "small",
+  "status": "candidate",
+  "tags": ["certificates", "tls", "letsencrypt", "ionos", "dns-01", "rotation", "rollback", "candidate"],
+  "summary": "Discover, issue, stage, swap, validate, and rollback certificates with lab.auzietek.com as the first safe proving ground.",
+  "targets": {
+    "dns_provider": "provider:ionos",
+    "first_scope": "zone-scope:lab.auzietek.com",
+    "cert_workhorse": "node:host:ns1"
+  },
+  "inputs": {
+    "scope": {"required": false, "default": "lab"},
+    "enable_issue": {"required": false, "default": false},
+    "enable_swap": {"required": false, "default": false},
+    "kanboard_card_ref": {"required": false, "default": ""}
+  },
+  "stages": [
+    {"id": "discover-certificate-bindings", "action": "certificates.bindings.discover", "transport": "bkc-ssh+https-api", "risk": "low", "timeout_seconds": 180},
+    {"id": "inventory-current-certificates", "action": "certificates.inventory", "transport": "bkc-ssh+openssl", "risk": "low", "timeout_seconds": 180},
+    {"id": "plan-certificate-rotation", "action": "certificates.rotation.plan", "transport": "internal", "risk": "low", "timeout_seconds": 120},
+    {"id": "issue-certificate-gated", "action": "certificates.letsencrypt_dns01.issue", "transport": "bkc-ssh+ionos-api", "risk": "medium", "timeout_seconds": 900, "enabled_by": "enable_issue"},
+    {"id": "stage-certificate-material", "action": "certificates.stage", "transport": "bkc-ssh+filesystem", "risk": "medium", "timeout_seconds": 300},
+    {"id": "validate-staged-certificate", "action": "certificates.validate_staged", "transport": "bkc-ssh+openssl", "risk": "low", "timeout_seconds": 180},
+    {"id": "swap-and-reload-gated", "action": "certificates.swap_reload", "transport": "bkc-ssh+service", "risk": "medium", "timeout_seconds": 300, "enabled_by": "enable_swap"},
+    {"id": "verify-live-certificate", "action": "certificates.verify_live", "transport": "https+openssl", "risk": "low", "timeout_seconds": 300},
+    {"id": "record-certificate-rotation-evidence", "action": "fragments.certificates.record", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "notes": "Lab scope can move quickly. Beta and production scopes require Kanboard accepted cards with explicit scope and rollback evidence."
+}

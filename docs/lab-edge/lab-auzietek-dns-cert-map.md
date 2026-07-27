@@ -61,6 +61,18 @@ Keep this bounded. `lab.auzietek.com` is safe, but it should not become a
 graveyard of every temporary VM. Add names when they improve operator clarity,
 pipeline evidence, or certificate/service routing.
 
+Host naming rule:
+
+```text
+when BKC names a stable lab host
+  -> publish host.lab.auzietek.com
+  -> backfill missing DNS records before depending on the name
+  -> record the DNS relationship in the resource graph
+```
+
+The backfill stage should compare inventory hostnames to DNS before creating
+records. Temporary throwaway instances do not automatically receive public DNS.
+
 Important names:
 
 ```text
@@ -180,3 +192,37 @@ Portainer/other edge services where useful
 Do not over-distribute private keys. Prefer one HTTPS reverse proxy where it is
 practical, and only copy certs to individual services that truly need native
 TLS.
+
+## Rotation posture
+
+Certificate lifetimes and CA rules are tightening across the industry. Treat
+certificates as rotating operational inventory, not one-time setup.
+
+The lab should prove:
+
+```text
+discover certs
+  -> inventory subject/SAN/issuer/not-after/current target
+
+renew or reissue
+  -> use DNS-01 or provider SSL API
+
+stage
+  -> place new cert/key beside the old material
+
+validate
+  -> nginx/service config test, local openssl check
+
+swap
+  -> reload service
+
+verify
+  -> public TLS check and graph evidence
+
+rollback
+  -> restore previous cert/key if validation fails
+```
+
+This pattern should later apply to `beta.auzietek.com`, then production
+`auzietek.com`, and eventually lab appliances such as Proxmox, Portainer,
+IPFire, and the managed switch where native TLS is useful.

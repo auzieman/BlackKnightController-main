@@ -1,0 +1,22 @@
+{
+  "pipeline_id": "certificate-rotation-candidate",
+  "scope": "lab",
+  "dns_api_secret_ref": "secret:ionos/dns/api",
+  "preferred_issuer": "letsencrypt-dns01",
+  "enable_issue": false,
+  "enable_swap": false,
+  "enable_rollback": true,
+  "targets": [
+    {
+      "name": "lab.auzietek.com",
+      "sans": [
+        "lab.auzietek.com",
+        "*.lab.auzietek.com"
+      ],
+      "cert_source": "/etc/letsencrypt/live/lab.auzietek.com/fullchain.pem",
+      "key_source": "/etc/letsencrypt/live/lab.auzietek.com/privkey.pem",
+      "owner": "ns1"
+    }
+  ],
+  "rotation_threshold_days": 21
+}

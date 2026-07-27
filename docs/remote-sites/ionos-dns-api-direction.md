@@ -117,6 +117,23 @@ DNS zones endpoint:    https://api.hosting.ionos.com/dns/v1/zones
 The IONOS help docs also describe Dynamic DNS keys as a public prefix plus
 private key separated by a dot.
 
+IONOS provides Swagger/OpenAPI-style API documentation for the DNS and SSL
+surfaces. BKC should treat the provider docs/schema as the API contract and keep
+our helper thin:
+
+```text
+OpenAPI/Swagger docs
+  -> generate or validate client behavior
+
+BKC helper
+  -> secret handling, desired-state diff, apply/rollback, evidence
+
+pipeline
+  -> gated inventory/apply/validate stages
+```
+
+Avoid burying provider semantics in one-off shell fragments.
+
 ## First safe BKC behavior
 
 Start read-only:
@@ -215,10 +232,11 @@ Stages:
 3. snapshot `lab.auzietek.com` records
 4. compare current records to desired lab edge map
 5. produce proposed changeset
-6. require explicit approval for writes
-7. apply selected records
-8. validate public DNS resolution
-9. record graph fragments
+6. backfill missing stable `host.lab.auzietek.com` records
+7. require explicit approval for writes
+8. apply selected records
+9. validate public DNS resolution
+10. record graph fragments
 
 Follow-up production pipeline:
 

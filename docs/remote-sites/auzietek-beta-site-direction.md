@@ -19,6 +19,21 @@ replaces the scattered legacy `*.auzietek.com` surfaces where appropriate.
 Kanboard remains a private/semi-private operations and planning surface rather
 than a public content engine.
 
+Beta consolidation starts from a captured copy of Auzietek's current public
+site state:
+
+```text
+Drupal SQL dump
+Drupal files/assets
+nginx/vhost evidence
+legacy URL inventory
+screenshots or public crawl evidence
+```
+
+Raw SQL and file captures stay outside Git. BKC/micro-blog should commit only
+sanitized manifests, import tooling, classification notes, and promoted content
+that has been reviewed.
+
 ## Operating ownership
 
 Near-term BKC/Codex-owned surfaces:
