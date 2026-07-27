@@ -54,6 +54,7 @@ human service entry points
   -> grafana.lab.auzietek.com
   -> bkc.lab.auzietek.com
   -> portainer.lab.auzietek.com
+  -> microblog.lab.auzietek.com
 ```
 
 Keep this bounded. `lab.auzietek.com` is safe, but it should not become a
@@ -87,6 +88,10 @@ ipfire.lab.auzietek.com   A      192.168.1.82
 swarm1-esx.lab.auzietek.com A     10.20.0.121
 swarm1-os.lab.auzietek.com  A     10.20.0.230
 ```
+
+`microblog.lab.auzietek.com` is the alpha instance. It is allowed to be rough
+and rebuildable. `beta.auzietek.com` is the public proving ground, and
+`auzietek.com` is the later production cutover.
 
 The private RFC1918 answers are intentional for this lab. They are useful when
 the operator workstation is on the home/lab side or connected through the

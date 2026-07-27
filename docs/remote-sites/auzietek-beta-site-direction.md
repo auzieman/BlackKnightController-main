@@ -47,6 +47,53 @@ auzietek.com
   -> promote deliberately from known-good beta state
 ```
 
+## Promotion model
+
+Micro-blog has three named environments:
+
+```text
+alpha
+  -> lab.auzietek.com
+  -> experimental, dogfood, rebuildable, allowed to be rough
+
+beta
+  -> beta.auzietek.com
+  -> public proving ground, curated but still ahead of production
+
+production
+  -> auzietek.com / www.auzietek.com
+  -> final public cutover after proof, redirects, SSL, backups, and rollback
+```
+
+Promotion path:
+
+```text
+micro-blog alpha in lab
+  -> accepted in Kanboard for beta
+  -> beta.auzietek.com
+  -> accepted/released for production
+  -> auzietek.com
+```
+
+Kanboard is the human intent gate. Moving a card to `accepted` means BKC may
+consider the related promotion lane eligible.
+
+Scope still matters:
+
+```text
+accepted for lab
+  -> may change lab DNS, lab certs, alpha content, lab services
+
+accepted for beta
+  -> may publish to beta.auzietek.com or update public preview content
+
+accepted for production
+  -> may touch auzietek.com only when the card explicitly says production
+```
+
+No card status should silently broaden scope from lab to beta or from beta to
+production.
+
 ## Audience
 
 Primary audiences:
@@ -177,6 +224,9 @@ Public URL consolidation direction:
 ```text
 beta.auzietek.com
   -> proving ground / future public site
+
+microblog.lab.auzietek.com
+  -> alpha lab instance / infrastructure proof / dogfood
 
 auzietek.com / www.auzietek.com
   -> eventual production cutover target once beta is reviewed
