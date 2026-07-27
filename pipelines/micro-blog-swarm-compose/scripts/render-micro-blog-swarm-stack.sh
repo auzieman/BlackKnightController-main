@@ -135,6 +135,10 @@ services:
       CONTENT_IMPORT_ROOT: "/content"
       CONTENT_PUBLIC_BASE: "/content-files"
       AUTO_IMPORT_FILESYSTEM_ON_BOOT: "\${AUTO_IMPORT_FILESYSTEM_ON_BOOT:-false}"
+      SITE_URL: "\${SITE_URL:-https://beta.auzietek.com}"
+      SITE_NAME: "\${SITE_NAME:-Auzietek}"
+      SITE_DESCRIPTION: "\${SITE_DESCRIPTION:-Auzietek helps small teams turn real systems work into repeatable infrastructure, supportable operations, and practical automation.}"
+      DEFAULT_OG_IMAGE: "\${DEFAULT_OG_IMAGE:-}"
     volumes:
       - /srv/micro-blog/content:/content
     ports:
@@ -195,8 +199,19 @@ services:
       FLASK_SECRET_KEY: "\${FLASK_SECRET_KEY:-change-me-before-deploy}"
       GOOGLE_CLIENT_ID: "\${GOOGLE_CLIENT_ID:-}"
       GOOGLE_CLIENT_SECRET: "\${GOOGLE_CLIENT_SECRET:-}"
-      DEFAULT_THEME_VARIANT: "\${DEFAULT_THEME_VARIANT:-midnight}"
+      GOOGLE_OAUTH_REDIRECT_URI: "\${GOOGLE_OAUTH_REDIRECT_URI:-}"
+      DEFAULT_THEME_VARIANT: "\${DEFAULT_THEME_VARIANT:-auzietek}"
       CONTENT_IMPORT_ROOT: "/content"
+      SITE_URL: "\${SITE_URL:-https://beta.auzietek.com}"
+      SITE_NAME: "\${SITE_NAME:-Auzietek}"
+      SITE_BRAND: "\${SITE_BRAND:-Auzietek}"
+      SITE_SECTION: "\${SITE_SECTION:-beta}"
+      SITE_HEADLINE: "\${SITE_HEADLINE:-Infrastructure automation with the lab evidence still attached.}"
+      SITE_DESCRIPTION: "\${SITE_DESCRIPTION:-Auzietek helps small teams turn real systems work into repeatable infrastructure, supportable operations, and practical automation.}"
+      SITE_POSITIONING: "\${SITE_POSITIONING:-Infrastructure automation, practical operations, and field-tested systems guidance.}"
+      SITE_AUDIENCE: "\${SITE_AUDIENCE:-engineering leaders, young engineers, and right-fit clients}"
+      SITE_NAV_LINKS_JSON: '\${SITE_NAV_LINKS_JSON:-[{"label":"Services","href":"/blog?tag=services"},{"label":"BlackKnight","href":"https://blackknight.auzietek.com"},{"label":"Linux Users","href":"https://linux-users.auzietek.com"},{"label":"Retro Users","href":"https://retro-users.auzietek.com"},{"label":"Labs","href":"/blog?tag=lab"}]}'
+      MICROSITES_JSON: '\${MICROSITES_JSON:-[{"name":"www.auzietek.com","label":"Auzietek","role":"Business front door","summary":"Services, product direction, client-fit proof, and polished public articles."},{"name":"blackknight.auzietek.com","label":"BlackKnight","role":"Product and platform journal","summary":"BKC demos, hardware automation, pipeline evidence, and operator-facing patterns."},{"name":"linux-users.auzietek.com","label":"Linux Users","role":"Teaching lane","summary":"Clear walkthroughs for newer engineers without losing the evidence trail."},{"name":"retro-users.auzietek.com","label":"Retro Users","role":"Retro computing lane","summary":"Amiga, classic systems, preservation notes, and modern tooling around old iron."}]}'
     volumes:
       - /srv/micro-blog/content:/content:ro
     ports:

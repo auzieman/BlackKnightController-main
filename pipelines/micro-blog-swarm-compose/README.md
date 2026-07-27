@@ -113,6 +113,20 @@ For hosts inside the isolated lab, use a registry name/IP that resolves from
 the target swarm nodes. If DNS is not available, override `registry_host` with
 the lab-reachable registry IP and port.
 
+Known 2026-07-27 lab nuance:
+
+- ESXi swarm nodes already trust `swarm1.lab.auzietek.com:5001` as an insecure
+  registry for pulls.
+- This workstation/main Docker context did not trust the same HTTP registry for
+  pushes, so `docker push swarm1.lab.auzietek.com:5001/...` tried HTTPS.
+- The fast proof fallback was to build the changed `blog-ui` image on the ESXi
+  app workers with a unique tag and deploy with `docker stack deploy
+  --resolve-image never`.
+
+That fallback is acceptable for a canary, but the cleaner pipeline state is to
+make the build/push daemon and target swarm agree on the same insecure registry
+contract before relying on shared image tags.
+
 ## SSH route note
 
 Preferred executor for this lane is the OpenStack-side BKC because it lives on
