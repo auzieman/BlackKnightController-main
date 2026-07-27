@@ -286,6 +286,31 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "validate-openstack-docker-swarm",
             "record-openstack-swarm-fragments",
         ]
+    if normalized == "esxi-docker-swarm-seed":
+        return [
+            "preflight-esxi-api",
+            "validate-known-good-base",
+            "clone-esxi-swarm-vms",
+            "pin-esxi-swarm-dhcp",
+            "configure-esxi-docker-swarm",
+            "validate-esxi-guest-inventory",
+            "record-esxi-swarm-fragments",
+        ]
+    if normalized == "micro-blog-swarm-compose":
+        return [
+            "preflight-micro-blog-source",
+            "preflight-lab-registry",
+            "preflight-target-swarm",
+            "build-and-push-micro-blog-images",
+            "render-micro-blog-swarm-stack",
+            "stage-micro-blog-stack-on-manager",
+            "deploy-micro-blog-stack",
+            "validate-micro-blog-rollout",
+            "optional-seed-micro-blog-lab-journal",
+            "optional-wire-micro-blog-telemetry",
+            "publish-micro-blog-edge-pointer",
+            "record-micro-blog-known-good-fragment",
+        ]
     if normalized == "trixie-openstack-host-prepare":
         return [
             "load-openstack-host-intent",

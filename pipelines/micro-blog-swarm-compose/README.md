@@ -113,6 +113,21 @@ For hosts inside the isolated lab, use a registry name/IP that resolves from
 the target swarm nodes. If DNS is not available, override `registry_host` with
 the lab-reachable registry IP and port.
 
+## SSH route note
+
+Preferred executor for this lane is the OpenStack-side BKC because it lives on
+the lab side of the network and can reach the ESXi swarm guests directly.
+
+If the main Swarm-side BKC drives the same lane, it may need the ns1 tunnel/jump
+pattern:
+
+```text
+main BKC -> ns1 / 192.168.1.10 -> 10.20.0.121
+```
+
+That should become a reusable BKC SSH transport feature instead of being hidden
+inside this app-specific pipeline.
+
 ## Secret note
 
 Do not put real OAuth/client secrets or production admin credentials into this

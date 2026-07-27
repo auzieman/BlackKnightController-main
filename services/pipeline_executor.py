@@ -10,6 +10,7 @@ import shlex
 import socket
 import secrets
 import ssl
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -3465,8 +3466,8 @@ WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
     "supports_undeploy": False, "settings_optional": True,
     "stage_plan": [
         {"name": "preflight-openstack-swarm-base", "kind": "video-openstack-swarm-preflight", "active": "Validating OpenStack API, Debian cloud image, lab network, keypair source, and optional Fedora metadata.", "timeout": 300},
-        {"name": "ensure-openstack-swarm-vms", "kind": "video-openstack-swarm-vms", "active": "Ensuring the three Debian OpenStack VMs for the cattle Docker Swarm exist and are ACTIVE.", "timeout": 1800},
-        {"name": "bootstrap-openstack-docker-swarm", "kind": "video-openstack-swarm-bootstrap", "active": "Installing Docker, initializing the manager, and joining the two worker VMs.", "timeout": 2400},
+        {"name": "ensure-openstack-swarm-vms", "kind": "video-openstack-swarm-vms", "active": "Ensuring the five Debian OpenStack VMs for the cattle Docker Swarm exist and are ACTIVE.", "timeout": 1800},
+        {"name": "bootstrap-openstack-docker-swarm", "kind": "video-openstack-swarm-bootstrap", "active": "Installing Docker, initializing manager 1, joining manager 2, and joining three workers.", "timeout": 2400},
         {"name": "validate-openstack-docker-swarm", "kind": "video-openstack-swarm-validate", "active": "Validating SSH, Docker, swarm membership, and OpenStack server state.", "timeout": 600},
         {"name": "record-openstack-swarm-fragments", "kind": "video-openstack-swarm-fragments", "active": "Recording known-good OpenStack swarm image, VM, SSH, and bootstrap fragments.", "timeout": 60},
     ], "complete_message": "OpenStack-hosted three-node Docker Swarm seed completed and validated.",
@@ -3474,14 +3475,42 @@ WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
 WORKFLOW_DEFINITIONS["openstack-bkc-compose-deploy"] = {
     "supports_undeploy": False, "settings_optional": True,
     "stage_plan": [
-        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, import source visibility, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
-        {"name": "scan-openstack-bkc-import-sources", "kind": "openstack-bkc-compose-source-scan", "active": "Scanning import/source folders so inherited pipelines and stale source state are visible before deploy.", "timeout": 120},
-        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing a target-local /srv/bkc runtime and optional read-only ns1 pipeline import mount.", "timeout": 300},
+        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, ns1 runtime export, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
+        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing /srv/bkc, mounting ns1 runtime, and ensuring mutable runtime subfolders exist.", "timeout": 300},
         {"name": "render-openstack-bkc-compose", "kind": "openstack-bkc-compose-render", "active": "Rendering the target .env and Docker Compose file from known-good templates.", "timeout": 180},
         {"name": "deploy-openstack-bkc-compose", "kind": "openstack-bkc-compose-up", "active": "Updating source and running docker compose up -d --build on the OpenStack BKC VM.", "timeout": 1800},
         {"name": "validate-openstack-bkc", "kind": "openstack-bkc-compose-validate", "active": "Validating the new BKC /ready endpoint and container state.", "timeout": 300},
         {"name": "publish-openstack-bkc-edge-pointer", "kind": "openstack-bkc-compose-edge-pointer", "active": "Publishing the intended edge pointer for the OpenStack-side BKC.", "timeout": 60},
     ], "complete_message": "OpenStack-side BKC Docker Compose deployment completed and validated.",
+}
+WORKFLOW_DEFINITIONS["esxi-docker-swarm-seed"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-esxi-api", "kind": "video-esxi-api-preflight", "active": "Validating ESXi API login, datastore visibility, network names, and current inventory.", "timeout": 120},
+        {"name": "validate-known-good-base", "kind": "video-esxi-swarm-inventory", "active": "Validating the known-good bkc-trixie-base and target guest inventory.", "timeout": 120},
+        {"name": "clone-esxi-swarm-vms", "kind": "video-esxi-swarm-shells", "active": "Ensuring ESXi Docker Swarm VM clones exist with the known-good VMX shape.", "timeout": 900},
+        {"name": "pin-esxi-swarm-dhcp", "kind": "video-esxi-swarm-dhcp", "active": "Discovering generated MACs and pinning ns1 DHCP reservations for 10.20.0.121-.125.", "timeout": 180},
+        {"name": "configure-esxi-docker-swarm", "kind": "video-esxi-swarm-bootstrap", "active": "Installing Docker and converging the two-manager/three-worker ESXi swarm.", "timeout": 2400},
+        {"name": "validate-esxi-guest-inventory", "kind": "video-esxi-swarm-inventory", "active": "Validating ESXi inventory for imported/created guest VMs.", "timeout": 120},
+        {"name": "record-esxi-swarm-fragments", "kind": "video-esxi-swarm-fragments", "active": "Recording ESXi clone/config/bootstrap known-good fragments.", "timeout": 60},
+    ], "complete_message": "ESXi Docker Swarm seed converged and validated.",
+}
+WORKFLOW_DEFINITIONS["micro-blog-swarm-compose"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-micro-blog-source", "kind": "micro-blog-source-preflight", "active": "Validating the NFS-staged micro-blog source bundle and required Dockerfiles.", "timeout": 120},
+        {"name": "preflight-lab-registry", "kind": "micro-blog-registry-preflight", "active": "Validating lab registry reachability from the target swarm manager.", "timeout": 120},
+        {"name": "preflight-target-swarm", "kind": "micro-blog-target-swarm-preflight", "active": "Validating ESXi Docker Swarm manager reachability, node shape, and worker labels.", "timeout": 180},
+        {"name": "build-and-push-micro-blog-images", "kind": "micro-blog-build-push", "active": "Building and pushing micro-blog app images from the NFS-staged source bundle.", "timeout": 1200},
+        {"name": "render-micro-blog-swarm-stack", "kind": "micro-blog-render-stack", "active": "Rendering the Swarm-safe micro-blog stack file on the target manager.", "timeout": 180},
+        {"name": "stage-micro-blog-stack-on-manager", "kind": "micro-blog-stage-stack", "active": "Staging .env, collector config, content path, and stack bundle on the target manager.", "timeout": 180},
+        {"name": "deploy-micro-blog-stack", "kind": "micro-blog-deploy-stack", "active": "Deploying the micro-blog stack through Docker Swarm.", "timeout": 900},
+        {"name": "validate-micro-blog-rollout", "kind": "micro-blog-validate-rollout", "active": "Validating micro-blog service replicas and HTTP health endpoints.", "timeout": 360},
+        {"name": "optional-seed-micro-blog-lab-journal", "kind": "micro-blog-lab-journal-note", "active": "Recording the optional markdown lab-journal seed path for follow-up.", "timeout": 60},
+        {"name": "optional-wire-micro-blog-telemetry", "kind": "micro-blog-telemetry-note", "active": "Recording the optional telemetry backhaul choice for follow-up.", "timeout": 60},
+        {"name": "publish-micro-blog-edge-pointer", "kind": "micro-blog-edge-note", "active": "Recording the intended edge pointer for the micro-blog deployment.", "timeout": 60},
+        {"name": "record-micro-blog-known-good-fragment", "kind": "micro-blog-fragment-note", "active": "Recording the known-good micro-blog canary fragment.", "timeout": 60},
+    ], "complete_message": "Micro-blog Docker Swarm canary completed and validated.",
 }
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
@@ -8074,7 +8103,6 @@ def _run_ns1_lan_mac_render_fragment(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "LAN MAC-only PXE DHCP fragment rendered on ns1.")
 
 
-
 def _openstack_bkc_compose_context(run_id: str) -> tuple[dict, dict, dict]:
     return _folder_pipeline_context("openstack-bkc-compose-deploy", _run_request_inputs(run_id))
 
@@ -8098,8 +8126,6 @@ def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
         "target_root",
         "runtime_mount",
         "runtime_export",
-        "pipeline_import_mount",
-        "pipeline_import_export",
         "repo_url",
         "repo_branch",
         "compose_path",
@@ -8109,19 +8135,9 @@ def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
     return {key: shlex.quote(str(values.get(key) or "")) for key in keys}
 
 
-def _openstack_bkc_nfs_probe_host(values: dict) -> str:
-    for key in ("pipeline_import_export", "runtime_export"):
-        value = str(values.get(key) or "")
-        if ":" in value:
-            return value.split(":", 1)[0]
-    return ""
-
-
 def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
     _, _, values = _openstack_bkc_compose_context(run_id)
     q = _openstack_bkc_quote_values(values)
-    nfs_probe_host = _openstack_bkc_nfs_probe_host(values)
-    nfs_probe = f"showmount -e {shlex.quote(nfs_probe_host)} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; " if nfs_probe_host else "true >/tmp/bkc-nfs-showmount.txt; "
     command = (
         "set -e; "
         "printf 'host='; hostname; "
@@ -8129,45 +8145,16 @@ def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
         "printf 'ip='; hostname -I || true; "
         "command -v apt-get >/dev/null; "
         "getent hosts ns1.example.local >/dev/null 2>&1 || true; "
-        f"{nfs_probe}"
-        "printf '\n-- docker --\n'; docker --version 2>/dev/null || true; "
-        "printf '\n-- compose --\n'; docker compose version 2>/dev/null || true; "
-        "printf '\n-- nfs export --\n'; sed -n '1,80p' /tmp/bkc-nfs-showmount.txt || true; "
-        f"printf '\nplanned_native_runtime=%s\n' {q['runtime_mount']}; "
-        f"printf 'planned_pipeline_import=%s -> %s\n' {q['pipeline_import_export']} {q['pipeline_import_mount']}; "
-        f"printf 'planned_repo=%s branch=%s\n' {q['repo_url']} {q['repo_branch']}"
+        f"showmount -e {shlex.quote(str(values.get('runtime_export') or '').split(':', 1)[0])} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; "
+        "printf '\\n-- docker --\\n'; docker --version 2>/dev/null || true; "
+        "printf '\\n-- compose --\\n'; docker compose version 2>/dev/null || true; "
+        "printf '\\n-- nfs export --\\n'; sed -n '1,80p' /tmp/bkc-nfs-showmount.txt || true; "
+        f"printf '\\nplanned_runtime=%s\\n' {q['runtime_mount']}; "
+        f"printf 'planned_repo=%s branch=%s\\n' {q['repo_url']} {q['repo_branch']}"
     )
     output = _run_openstack_bkc_command(values, command, timeout=120)
     append_event(run_id, "info", stage_name, output[-3000:] if output else "openstack-bkc-preflight-ok")
     _set_stage(run_id, stage_name, "complete", "OpenStack BKC VM responded over SSH and basic deploy prerequisites were inspected.")
-
-
-def _run_openstack_bkc_source_scan(run_id: str, stage_name: str) -> None:
-    _, _, values = _openstack_bkc_compose_context(run_id)
-    q = _openstack_bkc_quote_values(values)
-    pipeline_import_export = str(values.get("pipeline_import_export") or "")
-    enable_pipeline_import = _truthy(values.get("enable_pipeline_import_mount"))
-    if enable_pipeline_import and ":" not in pipeline_import_export:
-        raise PipelineExecutionError("pipeline_import_export must be an NFS server:path value when pipeline import is enabled.")
-    mount_cmd = (
-        f"mkdir -p {q['pipeline_import_mount']}; "
-        f"mountpoint -q {q['pipeline_import_mount']} || mount -t nfs -o ro {q['pipeline_import_export']} {q['pipeline_import_mount']}; "
-        if enable_pipeline_import else f"mkdir -p {q['pipeline_import_mount']}; "
-    )
-    command = (
-        "set -e; "
-        f"{mount_cmd}"
-        f"printf 'import_mount=%s\n' {q['pipeline_import_mount']}; "
-        f"mountpoint {q['pipeline_import_mount']} || true; "
-        f"printf '\n-- import top level --\n'; find {q['pipeline_import_mount']} -maxdepth 2 -mindepth 1 -type d | sort | sed -n '1,120p'; "
-        f"printf '\n-- pipeline definitions --\n'; find {q['pipeline_import_mount']} -maxdepth 3 -type f | grep -E '/(pipeline|dictionary|defaults)[.]json$' | sort | sed -n '1,160p'; "
-        f"printf '\ncounts pipelines='; find {q['pipeline_import_mount']} -maxdepth 3 -type f -name pipeline.json | wc -l; "
-        f"printf ' dictionaries='; find {q['pipeline_import_mount']} -maxdepth 3 -type f -name dictionary.json | wc -l"
-    )
-    output = _run_openstack_bkc_command(values, command, timeout=120)
-    _store_run_extra(run_id, {"openstack_bkc_import_source_scan": output[-6000:]})
-    append_event(run_id, "info", stage_name, output[-6000:] if output else "openstack-bkc-import-source-empty")
-    _set_stage(run_id, stage_name, "complete", "OpenStack BKC import/source folders were scanned and recorded before deployment.")
 
 
 def _run_openstack_bkc_compose_runtime(run_id: str, stage_name: str) -> None:
@@ -8175,51 +8162,30 @@ def _run_openstack_bkc_compose_runtime(run_id: str, stage_name: str) -> None:
     q = _openstack_bkc_quote_values(values)
     runtime_mount = str(values.get("runtime_mount") or "/srv/bkc/runtime")
     runtime_export = str(values.get("runtime_export") or "")
-    pipeline_import_mount = str(values.get("pipeline_import_mount") or "/srv/bkc/imports/pipelines")
-    pipeline_import_export = str(values.get("pipeline_import_export") or "")
-    enable_pipeline_import = _truthy(values.get("enable_pipeline_import_mount"))
     if not runtime_mount.startswith("/srv/bkc/"):
         raise PipelineExecutionError(f"Refusing runtime mount outside /srv/bkc: {runtime_mount}")
-    if not pipeline_import_mount.startswith("/srv/bkc/"):
-        raise PipelineExecutionError(f"Refusing pipeline import mount outside /srv/bkc: {pipeline_import_mount}")
-    if runtime_export and ":" not in runtime_export:
-        raise PipelineExecutionError("runtime_export must be empty or an NFS server:path value.")
-    if enable_pipeline_import and ":" not in pipeline_import_export:
-        raise PipelineExecutionError("pipeline_import_export must be an NFS server:path value when pipeline import is enabled.")
-    runtime_fstab = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0" if runtime_export else ""
-    import_fstab = f"{pipeline_import_export} {pipeline_import_mount} nfs defaults,_netdev,nofail,ro 0 0" if enable_pipeline_import else ""
-    runtime_mount_command = (
-        f"grep -Fxq {shlex.quote(runtime_fstab)} /etc/fstab || printf '%s\n' {shlex.quote(runtime_fstab)} >> /etc/fstab; "
-        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
-        if runtime_fstab
-        else ""
-    )
-    import_mount_command = (
-        f"grep -Fxq {shlex.quote(import_fstab)} /etc/fstab || printf '%s\n' {shlex.quote(import_fstab)} >> /etc/fstab; "
-        f"mountpoint -q {q['pipeline_import_mount']} || mount {q['pipeline_import_mount']}; "
-        if import_fstab
-        else ""
-    )
+    if ":" not in runtime_export:
+        raise PipelineExecutionError("runtime_export must be an NFS server:path value.")
+    fstab_line = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0"
     command = (
         "set -e; "
         "export DEBIAN_FRONTEND=noninteractive; "
         "apt-get update; "
         "apt-get install -y --no-install-recommends git curl ca-certificates nfs-common docker.io docker-compose-plugin; "
         "systemctl enable --now docker; "
-        f"mkdir -p {q['target_root']} {q['runtime_mount']} {q['pipeline_import_mount']}; "
-        f"{runtime_mount_command}"
-        f"{import_mount_command}"
+        f"mkdir -p {q['target_root']} {q['runtime_mount']}; "
+        f"grep -Fxq {shlex.quote(fstab_line)} /etc/fstab || printf '%s\\n' {shlex.quote(fstab_line)} >> /etc/fstab; "
+        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
         f"mkdir -p {q['runtime_mount']}/dictionaries {q['runtime_mount']}/file_templates {q['runtime_mount']}/keys {q['runtime_mount']}/pipelines {q['runtime_mount']}/redis; "
         f"chmod 700 {q['runtime_mount']}/keys; "
         f"if [ ! -d {q['target_root']}/source/.git ]; then git clone {q['repo_url']} {q['target_root']}/source; fi; "
         f"cd {q['target_root']}/source; git fetch --all --prune; git switch {q['repo_branch']}; git pull --ff-only; "
         f"test -d {q['runtime_mount']}/pipelines; mountpoint {q['runtime_mount']} || true; "
-        f"test -d {q['pipeline_import_mount']} && find {q['pipeline_import_mount']} -maxdepth 1 -type d | sed -n '1,20p' || true; "
         "docker --version; docker compose version"
     )
     output = _run_openstack_bkc_command(values, command, timeout=900)
     append_event(run_id, "info", stage_name, output[-4000:] if output else "openstack-bkc-runtime-ready")
-    _set_stage(run_id, stage_name, "complete", "Target-local runtime, optional ns1 pipeline import, Docker, Compose plugin, and source checkout are ready.")
+    _set_stage(run_id, stage_name, "complete", "Target runtime, ns1 NFS mount, Docker, Compose plugin, and source checkout are ready.")
 
 
 def _run_openstack_bkc_compose_render(run_id: str, stage_name: str) -> None:
@@ -8280,7 +8246,7 @@ def _run_openstack_bkc_compose_validate(run_id: str, stage_name: str) -> None:
         "sleep 5; "
         "done; "
         "cat /tmp/bkc-ready.out 2>/dev/null || true; "
-        "printf '\nhttp_code=%s\n' \"$code\"; "
+        "printf '\\nhttp_code=%s\\n' \"$code\"; "
         "[ \"$code\" = 200 ]; "
         f"cd {q['target_root']}; docker compose -f {q['compose_path']} ps"
     )
@@ -8306,7 +8272,6 @@ def _run_openstack_bkc_edge_pointer(run_id: str, stage_name: str) -> None:
     _store_run_extra(run_id, {"openstack_bkc_edge_pointer": payload})
     append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
     _set_stage(run_id, stage_name, "complete", f"{payload['label']} edge pointer recorded: {payload['edge_url']} -> {backend}")
-
 
 
 def _run_ns1_lan_mac_render_defaults(run_id: str, stage_name: str) -> None:
@@ -8874,6 +8839,709 @@ def _run_vmware_esxi_iso_handoff(run_id: str, stage_name: str) -> None:
     )
     append_event(run_id, "info", stage_name, evidence[-1200:] + "\n" + disarmed[-800:] + "\nserver2_next_boot=Hdd")
     _set_stage(run_id, stage_name, "complete", "Intact ESXi ISO boot observed; PXE disarmed and operator installer handoff ready.")
+
+
+def _esxi_seed_context(run_id: str) -> tuple[dict, dict]:
+    _, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    return get_run(run_id) or {}, values
+
+
+def _esxi_seed_password(values: dict) -> str:
+    return _secret_ref_literal(values.get("esxi_password_demo"), default="changeme123@44")
+
+
+def _esxi_seed_nodes(values: dict) -> list[dict]:
+    nodes = values.get("swarm_nodes")
+    if not isinstance(nodes, list) or not nodes:
+        raise PipelineExecutionError("ESXi swarm_nodes must define at least one VM.")
+    cleaned: list[dict] = []
+    for raw in nodes:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}", name):
+            raise PipelineExecutionError(f"Unsafe ESXi VM name: {name!r}")
+        cleaned.append(
+            {
+                "name": name,
+                "role": str(raw.get("role") or "worker").strip(),
+                "memory_mb": int(raw.get("memory_mb") or 2048),
+                "num_cpus": int(raw.get("num_cpus") or 2),
+                "disk_gb": int(raw.get("disk_gb") or 32),
+            }
+        )
+    if not cleaned:
+        raise PipelineExecutionError("ESXi swarm_nodes did not contain any valid VM records.")
+    return cleaned
+
+
+def _esxi_inventory(values: dict) -> dict:
+    from services import vsphere
+
+    return vsphere.inventory(
+        host=str(values.get("esxi_management_host") or "10.20.0.114"),
+        username=str(values.get("esxi_username") or "root"),
+        password=_esxi_seed_password(values),
+        verify_ssl=_truthy(values.get("esxi_validate_certs")),
+    )
+
+
+def _video_esxi_api_preflight(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    inventory = _esxi_inventory(values)
+    datastore = str(values.get("esxi_datastore") or "datastore1")
+    network = str(values.get("esxi_network") or "VM Network")
+    if not any(item.get("name") == datastore and item.get("accessible") for item in inventory.get("datastores", [])):
+        raise PipelineExecutionError(f"ESXi datastore is not accessible: {datastore}")
+    if not any(item.get("name") == network for item in inventory.get("networks", [])):
+        raise PipelineExecutionError(f"ESXi network is not present: {network}")
+    _store_run_extra(run_id, {"esxi_inventory_preflight": inventory})
+    append_event(run_id, "info", stage_name, json.dumps(inventory, indent=2, sort_keys=True)[-5000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi API login, datastore, network, and inventory validated.")
+
+
+def _video_esxi_enable_ssh(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    from services import vsphere
+
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    try:
+        result = vsphere.configure_service(
+            host=host,
+            username=user,
+            password=password,
+            service_key="TSM-SSH",
+            running=True,
+            policy="on",
+            verify_ssl=_truthy(values.get("esxi_validate_certs")),
+        )
+    except vsphere.VsphereRestrictedError as exc:
+        try:
+            probe = run_remote_command(host=host, user=user, password=password, command="vim-cmd hostsvc/hostsummary | head -20", timeout=15)
+        except Exception as ssh_exc:  # noqa: BLE001
+            raise PipelineExecutionError(
+                "ESXi API inventory works, but this ESXi license/version blocked enabling SSH over API. "
+                "Enable Host > Manage > Services > TSM-SSH from the ESXi Host Client, then rerun 50B. "
+                f"API detail: {exc}; SSH probe: {ssh_exc}"
+            ) from exc
+        result = {"key": "TSM-SSH", "running": True, "policy": "operator-enabled", "probe": probe[:500]}
+    append_event(run_id, "info", stage_name, json.dumps(result, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "ESXi SSH service is available for BKC population.")
+
+
+def _video_esxi_swarm_shells(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    script = (_repo_pipeline_folder(pipeline) / "scripts" / "create-esxi-swarm-vms.sh").read_text()
+    command = (
+        "set -e; "
+        "cat >/tmp/create-esxi-swarm-vms.sh <<'BKC_ESXI_CREATE'\n"
+        f"{script}\n"
+        "BKC_ESXI_CREATE\n"
+        "chmod +x /tmp/create-esxi-swarm-vms.sh; "
+        "/bin/sh /tmp/create-esxi-swarm-vms.sh"
+    )
+    out = run_remote_command(host=host, user=user, password=password, command=command, timeout=900)
+    _store_run_extra(run_id, {"esxi_swarm_clone": out[-6000:]})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi Docker Swarm VM clones exist with the known-good SATA/vmxnet3 shape.")
+
+
+def _video_esxi_swarm_dhcp(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    nodes = _esxi_seed_nodes(values)
+    macs: dict[str, str] = {}
+    for node in nodes:
+        name = node["name"]
+        command = f"grep '^ethernet0.generatedAddress' /vmfs/volumes/datastore1/{shlex.quote(name)}/{shlex.quote(name)}.vmx || true"
+        out = run_remote_command(host=host, user=user, password=password, command=command, timeout=30)
+        match = re.search(r'"(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"', out)
+        if not match:
+            raise PipelineExecutionError(f"Could not discover generated MAC for ESXi VM {name}.")
+        macs[name] = match.group(1).lower()
+    env_map = {
+        "esxi-swarm-mgr-01": "ESXI_SWARM_MGR_01_MAC",
+        "esxi-swarm-mgr-02": "ESXI_SWARM_MGR_02_MAC",
+        "esxi-swarm-worker-01": "ESXI_SWARM_WORKER_01_MAC",
+        "esxi-swarm-worker-02": "ESXI_SWARM_WORKER_02_MAC",
+        "esxi-swarm-worker-03": "ESXI_SWARM_WORKER_03_MAC",
+    }
+    script = (_repo_pipeline_folder(pipeline) / "scripts" / "render-esxi-swarm-dhcp-reservations.sh").read_text()
+    env = " ".join(f"{env_map[name]}={shlex.quote(mac)}" for name, mac in macs.items() if name in env_map)
+    ns1_command = (
+        "set -e; "
+        "cat >/tmp/render-esxi-swarm-dhcp-reservations.sh <<'BKC_ESXI_DHCP'\n"
+        f"{script}\n"
+        "BKC_ESXI_DHCP\n"
+        "chmod +x /tmp/render-esxi-swarm-dhcp-reservations.sh; "
+        f"{env} /tmp/render-esxi-swarm-dhcp-reservations.sh; "
+        "cat /etc/dhcp/dhcpd.d/bkc-esxi-swarm-guests.conf"
+    )
+    out = run_remote_command(host="10.20.0.10", user="root", command=ns1_command, timeout=180)
+    _store_run_extra(run_id, {"esxi_swarm_dhcp_macs": macs})
+    append_event(run_id, "info", stage_name, json.dumps(macs, indent=2, sort_keys=True) + "\n" + out[-3000:])
+    _set_stage(run_id, stage_name, "complete", "ns1 DHCP reservations pinned ESXi Swarm generated MACs to 10.20.0.121-.125.")
+
+
+def _video_esxi_swarm_bootstrap(run_id: str, stage_name: str) -> None:
+    pipeline, _, _ = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    script_path = _repo_pipeline_folder(pipeline) / "scripts" / "bootstrap-esxi-docker-swarm.py"
+    namespace = {"__name__": "__bkc_esxi_swarm_bootstrap__"}
+    import contextlib
+    import io
+
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        exec(compile(script_path.read_text(), str(script_path), "exec"), namespace)
+        namespace["main"]()
+    text = output.getvalue()
+    _store_run_extra(run_id, {"esxi_swarm_bootstrap": text[-6000:]})
+    append_event(run_id, "info", stage_name, text[-6000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi Docker Swarm converged with two managers and three workers.")
+
+
+def _video_esxi_swarm_inventory(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    inventory = _esxi_inventory(values)
+    template_name = str(values.get("esxi_template_name") or "bkc-trixie-base")
+    expected = {node["name"] for node in _esxi_seed_nodes(values)}
+    present = {str(vm.get("name")) for vm in inventory.get("vms", [])}
+    if template_name not in present:
+        raise PipelineExecutionError(f"ESXi inventory is missing imported base VM/template: {template_name}")
+    missing = sorted(expected - present)
+    if missing:
+        append_event(run_id, "warning", stage_name, "ESXi swarm guest clone stage is not complete yet; missing VM(s): " + ", ".join(missing))
+    _store_run_extra(run_id, {"esxi_inventory_after_population": inventory})
+    append_event(run_id, "info", stage_name, json.dumps(inventory.get("vms", []), indent=2, sort_keys=True))
+    detail = f"ESXi inventory contains imported base {template_name}."
+    if not missing:
+        detail += " All target swarm VMs are present."
+    else:
+        detail += f" Clone/bootstrap remains next; {len(missing)} target VM(s) are not present yet."
+    _set_stage(run_id, stage_name, "complete", detail)
+
+
+def _video_esxi_swarm_fragments(run_id: str, stage_name: str) -> None:
+    fragments = {
+        "esxi.edge.tls-passthrough": {
+            "rating": "known-good",
+            "contract": "Use https://swarm1.lab.auzietek.com:8443/ui/ for raw TLS passthrough to the ESXi Host Client; :8087 is only the HTTP reverse proxy path.",
+        },
+        "esxi.seed.first-population": {
+            "rating": "candidate-known-good",
+            "contract": "50B validates ESXi API access, enables TSM-SSH, and registers three named Debian VM shells with thin disks on datastore1.",
+        },
+        "esxi.seed.remaining-gap": {
+            "rating": "planned",
+            "contract": "Next iteration should import or install a real Debian Trixie base, then clone/customize guests and run the Docker Swarm bootstrap.",
+        },
+    }
+    _store_run_extra(run_id, {"esxi_swarm_fragments": fragments})
+
+
+def _micro_blog_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("micro-blog-swarm-compose", _run_request_inputs(run_id))
+
+
+def _micro_blog_remote(run_id: str, command: str, *, timeout: int = 300, host_override: str = "") -> str:
+    _, _, values = _micro_blog_context(run_id)
+    host = str(host_override or values.get("target_manager_host") or "10.20.0.121").strip()
+    user = str(values.get("target_user") or "admin-deploy").strip()
+    password = str(values.get("target_password") or "").strip()
+    if not host or not user:
+        raise PipelineExecutionError("micro-blog target_manager_host and target_user are required.")
+    route_mode = str(values.get("ssh_route_mode") or "auto").strip().lower()
+    if route_mode in {"lab-direct", "direct"}:
+        return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+    if route_mode == "auto":
+        try:
+            return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+        except Exception as direct_exc:  # noqa: BLE001
+            append_event(run_id, "warning", "micro-blog-ssh-route", f"Direct SSH failed; falling back to ns1 jump: {direct_exc}")
+    if route_mode in {"auto", "ns1-jump", "jump", "proxyjump"}:
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+        private_key = str(key_info["private_key_path"])
+        jump = str(values.get("ssh_jump_host") or "root@192.168.1.10").strip()
+        ssh_args = [
+            "ssh",
+            "-i",
+            private_key,
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/tmp/bkc_micro_blog_known_hosts",
+            "-o",
+            f"ProxyCommand=ssh -i {shlex.quote(private_key)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc_micro_blog_jump_known_hosts -W %h:%p {shlex.quote(jump)}",
+            f"{user}@{host}",
+            command,
+        ]
+        try:
+            completed = subprocess.run(
+                ssh_args,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise PipelineExecutionError(f"micro-blog SSH jump execution failed: {exc}") from exc
+        output = (completed.stdout or "").strip()
+        error = (completed.stderr or "").strip()
+        if completed.returncode != 0:
+            raise PipelineExecutionError(error or output or f"micro-blog SSH jump exited {completed.returncode}")
+        return output
+    raise PipelineExecutionError(f"Unsupported micro-blog ssh_route_mode: {route_mode}")
+
+
+def _micro_blog_paths(values: dict) -> dict[str, str]:
+    mountpoint = str(values.get("nfs_mountpoint") or "/mnt/swarm").rstrip("/")
+    source_path = str(values.get("source_path") or f"{mountpoint}/shared/micro-blog/src-candidate").rstrip("/")
+    stage_path = str(values.get("target_stage_path") or "/srv/micro-blog-stack").rstrip("/")
+    content_path = str(values.get("target_content_path") or "/srv/micro-blog/content").rstrip("/")
+    return {
+        "mountpoint": mountpoint,
+        "source_path": source_path,
+        "stage_path": stage_path,
+        "content_path": content_path,
+        "stack_file": f"{stage_path}/micro-blog.stack.yml",
+    }
+
+
+def _micro_blog_ensure_nfs_script(values: dict) -> str:
+    nfs_export = str(values.get("nfs_export") or "10.20.0.10:/srv/nfs/swarm")
+    paths = _micro_blog_paths(values)
+    return f"""
+set -euo pipefail
+if ! command -v mountpoint >/dev/null 2>&1; then
+  sudo apt-get update -y >/dev/null
+  sudo apt-get install -y util-linux >/dev/null
+fi
+if ! command -v mount.nfs >/dev/null 2>&1; then
+  sudo apt-get update -y >/dev/null
+  sudo apt-get install -y nfs-common >/dev/null
+fi
+sudo mkdir -p {shlex.quote(paths["mountpoint"])}
+if ! mountpoint -q {shlex.quote(paths["mountpoint"])}; then
+  sudo mount -t nfs {shlex.quote(nfs_export)} {shlex.quote(paths["mountpoint"])}
+fi
+test -d {shlex.quote(paths["source_path"])}
+test -f {shlex.quote(paths["source_path"] + "/docker-compose.yml")}
+test -f {shlex.quote(paths["source_path"] + "/src/api/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/worker/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/projection/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/ui/Dockerfile")}
+"""
+
+
+def _run_micro_blog_source_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    out = _micro_blog_remote(
+        run_id,
+        _micro_blog_ensure_nfs_script(values)
+        + f"\nfind {shlex.quote(_micro_blog_paths(values)['source_path'])} -maxdepth 2 -type f | sort | sed -n '1,80p'\n",
+        timeout=240,
+    )
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "NFS-staged micro-blog source bundle is visible from the target swarm manager.")
+
+
+def _run_micro_blog_registry_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    insecure_registries = values.get("insecure_registry_hosts")
+    if not isinstance(insecure_registries, list) or not insecure_registries:
+        insecure_registries = [registry]
+    target_hosts = values.get("target_node_hosts")
+    if not isinstance(target_hosts, list) or not target_hosts:
+        target_hosts = [str(values.get("target_manager_host") or "10.20.0.121")]
+    registry_json = json.dumps([str(item) for item in insecure_registries if str(item).strip()])
+    for target_host in [str(item).strip() for item in target_hosts if str(item).strip()]:
+        configure = f"""
+set -euo pipefail
+sudo mkdir -p /etc/docker
+if [ -f /etc/docker/daemon.json ] && [ ! -f /etc/docker/daemon.json.bkc-pre-micro-blog ]; then
+  sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.bkc-pre-micro-blog
+fi
+sudo python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path('/etc/docker/daemon.json')
+data = {{}}
+if p.exists() and p.read_text().strip():
+    data = json.loads(p.read_text())
+regs = data.setdefault('insecure-registries', [])
+for reg in {registry_json!r}:
+    if reg not in regs:
+        regs.append(reg)
+p.write_text(json.dumps(data, indent=2, sort_keys=True) + '\\n')
+PY
+sudo systemctl restart docker
+"""
+        _micro_blog_remote(run_id, configure, timeout=180, host_override=target_host)
+    command = f"""
+set -euo pipefail
+curl -fsS --max-time 8 http://{shlex.quote(registry)}/v2/ >/dev/null
+echo registry-ok {shlex.quote(registry)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=60)
+    append_event(run_id, "info", stage_name, out)
+    _set_stage(run_id, stage_name, "complete", f"Lab registry is reachable from target manager: {registry}.")
+
+
+def _run_micro_blog_target_swarm_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    expected_workers = int(values.get("expected_worker_count") or 3)
+    expected_managers = int(values.get("expected_manager_count") or 2)
+    label = str(values.get("placement_label") or "bkc.workload=app")
+    command = f"""
+set -euo pipefail
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+$docker_cmd info --format 'swarm={{{{.Swarm.LocalNodeState}}}} node={{{{.Swarm.NodeID}}}}'
+$docker_cmd node ls
+managers="$($docker_cmd node ls --filter role=manager --format '{{{{.Hostname}}}}' | wc -l)"
+workers="$($docker_cmd node ls --filter role=worker --format '{{{{.Hostname}}}}' | wc -l)"
+test "$managers" -ge {expected_managers}
+test "$workers" -ge {expected_workers}
+key={shlex.quote(label.split('=', 1)[0])}
+value={shlex.quote(label.split('=', 1)[1] if '=' in label else '')}
+if [ -n "$value" ]; then
+  for n in $($docker_cmd node ls --filter role=worker --format '{{{{.Hostname}}}}'); do
+    current="$($docker_cmd node inspect "$n" --format '{{{{ index .Spec.Labels "'$key'" }}}}' 2>/dev/null || true)"
+    if [ "$current" != "$value" ]; then
+      $docker_cmd node update --label-add "$key=$value" "$n" >/dev/null
+    fi
+  done
+  labeled="$($docker_cmd node ls --format '{{{{.Hostname}}}}' | while read -r n; do $docker_cmd node inspect "$n" --format '{{{{ index .Spec.Labels "'$key'" }}}}' 2>/dev/null; done | grep -Fx "$value" | wc -l)"
+  test "$labeled" -ge {expected_workers}
+  echo labeled-workers=$labeled
+fi
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Target Docker Swarm manager, node count, and placement labels validated.")
+
+
+def _run_micro_blog_build_push(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    tag = str(values.get("image_tag") or "candidate").strip()
+    command = _micro_blog_ensure_nfs_script(values) + f"""
+set -euo pipefail
+cd {shlex.quote(paths["source_path"])}
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+for item in \\
+  blog-api:src/api/Dockerfile \\
+  blog-worker:src/worker/Dockerfile \\
+  blog-projection:src/projection/Dockerfile \\
+  blog-ui:src/ui/Dockerfile
+do
+  svc="${{item%%:*}}"
+  dockerfile="${{item#*:}}"
+  image={shlex.quote(registry)}/micro-blog/${{svc}}:{shlex.quote(tag)}
+  echo "building $image"
+  $docker_cmd build -t "$image" -f "$dockerfile" .
+  echo "pushing $image"
+  $docker_cmd push "$image"
+done
+"""
+    out = _micro_blog_remote(run_id, command, timeout=1500)
+    append_event(run_id, "info", stage_name, out[-8000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog app images built and pushed to the lab registry.")
+
+
+def _micro_blog_stack_yaml(values: dict) -> str:
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    tag = str(values.get("image_tag") or "candidate").strip()
+    ui_port = int(values.get("publish_ui_port") or 18081)
+    api_port = int(values.get("publish_api_port") or 18080)
+    paths = _micro_blog_paths(values)
+    content_path = paths["content_path"]
+    return f"""networks:
+  app_net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  rabbitmq-data:
+  redis-data:
+  postgres-data:
+
+configs:
+  otel_collector_local:
+    file: ./collector/otel-collector-local.yaml
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      RABBITMQ_DEFAULT_USER: "${{RABBITMQ_DEFAULT_USER:-guest}}"
+      RABBITMQ_DEFAULT_PASS: "${{RABBITMQ_DEFAULT_PASS:-guest}}"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "microblog"
+      POSTGRES_USER: "blog"
+      POSTGRES_PASSWORD: "${{POSTGRES_PASSWORD:-Str0ngP@ssword!}}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    configs:
+      - source: otel_collector_local
+        target: /etc/otel-collector.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    networks:
+      app_net:
+        aliases: [otel-collector]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-api:
+    image: {registry}/micro-blog/blog-api:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      REDIS_URL: "redis://redis:6379/0"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+      ADMIN_EMAIL: "${{ADMIN_EMAIL:-admin@example.invalid}}"
+      CONTENT_IMPORT_ROOT: "/content"
+      CONTENT_PUBLIC_BASE: "/content-files"
+      AUTO_IMPORT_FILESYSTEM_ON_BOOT: "${{AUTO_IMPORT_FILESYSTEM_ON_BOOT:-false}}"
+    volumes:
+      - {content_path}:/content
+    ports:
+      - "{api_port}:8080"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-worker:
+    image: {registry}/micro-blog/blog-worker:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-projection:
+    image: {registry}/micro-blog/blog-projection:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      REDIS_URL: "redis://redis:6379/0"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-ui:
+    image: {registry}/micro-blog/blog-ui:{tag}
+    env_file: .env
+    environment:
+      BLOG_API_BASE_URL: "http://blog-api:8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+      ADMIN_EMAIL: "${{ADMIN_EMAIL:-admin@example.invalid}}"
+      ADMIN_ACCESS_CODE: "${{ADMIN_ACCESS_CODE:-local-admin}}"
+      FLASK_SECRET_KEY: "${{FLASK_SECRET_KEY:-change-me-before-deploy}}"
+      GOOGLE_CLIENT_ID: "${{GOOGLE_CLIENT_ID:-}}"
+      GOOGLE_CLIENT_SECRET: "${{GOOGLE_CLIENT_SECRET:-}}"
+      DEFAULT_THEME_VARIANT: "${{DEFAULT_THEME_VARIANT:-midnight}}"
+      CONTENT_IMPORT_ROOT: "/content"
+    volumes:
+      - {content_path}:/content:ro
+    ports:
+      - "{ui_port}:8080"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+"""
+
+
+def _run_micro_blog_render_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    stack_yaml = _micro_blog_stack_yaml(values)
+    command = f"""
+set -euo pipefail
+sudo mkdir -p {shlex.quote(paths["stage_path"] + "/collector")} {shlex.quote(paths["content_path"])}
+sudo tee {shlex.quote(paths["stack_file"])} >/dev/null <<'BKC_MICROBLOG_STACK'
+{stack_yaml}
+BKC_MICROBLOG_STACK
+sudo cp {shlex.quote(paths["source_path"] + "/collector/otel-collector-local.yaml")} {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sudo chmod 0644 {shlex.quote(paths["stack_file"])} {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sed -n '1,80p' {shlex.quote(paths["stack_file"])}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Swarm-safe micro-blog stack rendered on target manager.")
+
+
+def _run_micro_blog_stage_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    target_hosts = values.get("target_node_hosts")
+    if not isinstance(target_hosts, list) or not target_hosts:
+        target_hosts = [str(values.get("target_manager_host") or "10.20.0.121")]
+    for target_host in [str(item).strip() for item in target_hosts if str(item).strip()]:
+        _micro_blog_remote(
+            run_id,
+            f"set -euo pipefail; sudo mkdir -p {shlex.quote(paths['content_path'])}; sudo chmod 0755 /srv/micro-blog {shlex.quote(paths['content_path'])}",
+            timeout=60,
+            host_override=target_host,
+        )
+    command = f"""
+set -euo pipefail
+sudo mkdir -p {shlex.quote(paths["stage_path"])} {shlex.quote(paths["content_path"])}
+sudo chown {shlex.quote(str(values.get("target_user") or "admin-deploy"))}:{shlex.quote(str(values.get("target_user") or "admin-deploy"))} {shlex.quote(paths["stage_path"])}
+if [ ! -f {shlex.quote(paths["stage_path"] + "/.env")} ]; then
+  sudo cp {shlex.quote(paths["source_path"] + "/.env.sample")} {shlex.quote(paths["stage_path"] + "/.env")}
+  sudo sed -i 's/^SITE_URL=.*/SITE_URL=http:\\/\\/localhost:{int(values.get("publish_ui_port") or 18081)}/' {shlex.quote(paths["stage_path"] + "/.env")}
+  sudo sed -i 's/^OTEL_ENVIRONMENT=.*/OTEL_ENVIRONMENT=lab/' {shlex.quote(paths["stage_path"] + "/.env")}
+fi
+sudo chown {shlex.quote(str(values.get("target_user") or "admin-deploy"))}:{shlex.quote(str(values.get("target_user") or "admin-deploy"))} {shlex.quote(paths["stage_path"] + "/.env")}
+sudo chmod 0640 {shlex.quote(paths["stage_path"] + "/.env")}
+sudo test -f {shlex.quote(paths["stage_path"] + "/.env")}
+sudo test -f {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sudo test -f {shlex.quote(paths["stack_file"])}
+echo staged={shlex.quote(paths["stage_path"])}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out)
+    _set_stage(run_id, stage_name, "complete", "Micro-blog stack bundle, .env, collector config, and content path staged.")
+
+
+def _run_micro_blog_deploy_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    stack = str(values.get("stack_name") or "micro-blog")
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(paths["stage_path"])}
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+python3 - <<'PY'
+from pathlib import Path
+import shlex
+lines = []
+for raw in Path('.env').read_text().splitlines():
+    line = raw.strip()
+    if not line or line.startswith('#') or '=' not in line:
+        continue
+    key, value = line.split('=', 1)
+    key = key.strip()
+    if not key:
+        continue
+    lines.append(f"export {{key}}={{shlex.quote(value.strip())}}")
+Path('.env.export').write_text("\\n".join(lines) + "\\n")
+PY
+. ./.env.export
+$docker_cmd stack deploy -c {shlex.quote(paths["stack_file"])} {shlex.quote(stack)}
+$docker_cmd stack services {shlex.quote(stack)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=900)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog stack deploy requested through Docker Swarm.")
+
+
+def _run_micro_blog_validate_rollout(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    stack = str(values.get("stack_name") or "micro-blog")
+    ui_port = int(values.get("publish_ui_port") or 18081)
+    api_port = int(values.get("publish_api_port") or 18080)
+    command = f"""
+set -euo pipefail
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+deadline=$((SECONDS+300))
+while true; do
+  not_ready="$($docker_cmd stack services {shlex.quote(stack)} --format '{{{{.Name}}}} {{{{.Replicas}}}}' | awk -F'[ /]+' '$2 != $3 {{print}}' || true)"
+  if [ -z "$not_ready" ]; then break; fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    $docker_cmd stack services {shlex.quote(stack)}
+    $docker_cmd stack ps {shlex.quote(stack)} --no-trunc
+    echo "$not_ready"
+    exit 1
+  fi
+  sleep 5
+done
+curl -fsS http://127.0.0.1:{api_port}/healthz >/dev/null
+curl -fsS http://127.0.0.1:{api_port}/readyz >/dev/null
+curl -fsS http://127.0.0.1:{ui_port}/healthz >/dev/null
+curl -fsS http://127.0.0.1:{ui_port}/ >/dev/null
+$docker_cmd stack services {shlex.quote(stack)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=360)
+    _store_run_extra(run_id, {"micro_blog_validation": out[-6000:]})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog replicas and HTTP health endpoints validated.")
+
+
+def _run_micro_blog_note(run_id: str, stage_name: str, detail: str, payload: dict | None = None) -> None:
+    if payload:
+        append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", detail)
 
 
 def _run_trixie_template_upload(run_id: str, stage_name: str, template_name: str, target_key: str, mode: int = 0o644) -> None:
@@ -12088,11 +12756,14 @@ set -euo pipefail
 . {openrc}
 openstack token issue -f value -c id >/tmp/bkc-openstack-swarm-token
 printf 'token_bytes='; wc -c </tmp/bkc-openstack-swarm-token
-openstack image show {image_name} -f value -c status
-openstack network show {network_name} -f value -c name
-openstack hypervisor list -f value || true
-printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
-printf 'fedora_import=%s\\n' {shlex.quote(fedora_note)}
+    openstack image show {image_name} -f value -c status
+    openstack network show {network_name} -f value -c name
+    openstack hypervisor list -f value || true
+    printf 'swarm_target=%s managers / %s workers\\n' \
+      {sum(1 for node in (values.get("nodes") if isinstance(values.get("nodes"), list) else []) if isinstance(node, dict) and str(node.get("role") or "").strip().lower() == "manager")} \
+      {sum(1 for node in (values.get("nodes") if isinstance(values.get("nodes"), list) else []) if isinstance(node, dict) and str(node.get("role") or "").strip().lower() != "manager")}
+    printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
+    printf 'fedora_import=%s\\n' {shlex.quote(fedora_note)}
 '''
     out = run_remote_command(host=host, user="root", command=command, timeout=180)
     append_event(run_id, "info", stage_name, out[-4000:])
@@ -12108,11 +12779,15 @@ def _video_openstack_swarm_vms(run_id: str, stage_name: str) -> None:
     host = str(values.get("openstack_host") or "10.20.0.240")
     openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
     flavor = values.get("flavor") if isinstance(values.get("flavor"), dict) else {}
+    manager_flavor = values.get("manager_flavor") if isinstance(values.get("manager_flavor"), dict) else {}
     secgroup = values.get("security_group") if isinstance(values.get("security_group"), dict) else {}
     nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
-    if len(nodes) < 3:
-        raise PipelineExecutionError("OpenStack swarm seed requires at least three node definitions.")
+    manager_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() == "manager")
+    worker_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() != "manager")
+    if manager_count < 1 or worker_count < 1:
+        raise PipelineExecutionError("OpenStack swarm seed requires at least one manager and one worker definition.")
     flavor_name = str(flavor.get("name") or "bkc.swarm.small")
+    manager_flavor_name = str(manager_flavor.get("name") or flavor_name)
     image_name = str(values.get("base_image") or "debian-13-genericcloud")
     network_name = str(values.get("network") or "lab-internal")
     key_name = str(values.get("keypair") or "bkc-demo-key")
@@ -12170,6 +12845,7 @@ set -euo pipefail
 openstack image show {shlex.quote(image_name)} >/dev/null
 openstack network show {shlex.quote(network_name)} >/dev/null
 openstack flavor show {shlex.quote(flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 2048)} --disk {int(flavor.get("disk_gb") or 20)} --vcpus {int(flavor.get("vcpus") or 2)} {shlex.quote(flavor_name)}
+openstack flavor show {shlex.quote(manager_flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(manager_flavor.get("ram_mb") or flavor.get("ram_mb") or 4096)} --disk {int(manager_flavor.get("disk_gb") or flavor.get("disk_gb") or 30)} --vcpus {int(manager_flavor.get("vcpus") or flavor.get("vcpus") or 2)} {shlex.quote(manager_flavor_name)}
 key_tmp=$(mktemp)
 printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
 openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
@@ -12179,12 +12855,16 @@ user_data=$(mktemp)
 printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
 for name in {node_names}; do
   [ -n "$name" ] || continue
+  node_flavor={shlex.quote(flavor_name)}
+  case "$name" in
+    *mgr*|*manager*) node_flavor={shlex.quote(manager_flavor_name)} ;;
+  esac
   if [ {shlex.quote("1" if replace_vms else "0")} = "1" ] && openstack server show "$name" >/dev/null 2>&1; then
     openstack server delete "$name"
     deadline=$((SECONDS+300))
     while [ "$SECONDS" -lt "$deadline" ]; do openstack server show "$name" >/dev/null 2>&1 || break; sleep 5; done
   fi
-  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(flavor_name)} --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
+  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor "$node_flavor" --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
 done
 rm -f "$user_data"
 deadline=$((SECONDS+1200))
@@ -12202,7 +12882,7 @@ openstack server list --name '^bkc-swarm-' -f table
     out = run_remote_command(host=host, user="root", command=command, timeout=1500)
     append_event(run_id, "info", stage_name, out[-6000:])
     _store_run_extra(run_id, {"openstack_swarm_vms": out[-6000:]})
-    _set_stage(run_id, stage_name, "complete", f"OpenStack swarm VMs are ACTIVE on {network_name} with flavor {flavor_name}.")
+    _set_stage(run_id, stage_name, "complete", f"OpenStack swarm VMs are ACTIVE on {network_name}: {manager_count} manager(s), {worker_count} worker(s).")
 
 
 def _openstack_swarm_remote_script(values: dict, *, remote_key_path: str, validate_only: bool = False) -> str:
@@ -12659,10 +13339,6 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             _run_openstack_bkc_compose_preflight(run_id, stage_name)
             continue
 
-        if kind == "openstack-bkc-compose-source-scan":
-            _run_openstack_bkc_source_scan(run_id, stage_name)
-            continue
-
         if kind == "openstack-bkc-compose-runtime":
             _run_openstack_bkc_compose_runtime(run_id, stage_name)
             continue
@@ -12697,6 +13373,102 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "vmware-esxi-iso-handoff":
             _run_vmware_esxi_iso_handoff(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-api-preflight":
+            _video_esxi_api_preflight(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-enable-ssh":
+            _video_esxi_enable_ssh(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-shells":
+            _video_esxi_swarm_shells(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-dhcp":
+            _video_esxi_swarm_dhcp(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-bootstrap":
+            _video_esxi_swarm_bootstrap(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-inventory":
+            _video_esxi_swarm_inventory(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-fragments":
+            _video_esxi_swarm_fragments(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-source-preflight":
+            _run_micro_blog_source_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-registry-preflight":
+            _run_micro_blog_registry_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-target-swarm-preflight":
+            _run_micro_blog_target_swarm_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-build-push":
+            _run_micro_blog_build_push(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-render-stack":
+            _run_micro_blog_render_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-stage-stack":
+            _run_micro_blog_stage_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-deploy-stack":
+            _run_micro_blog_deploy_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-validate-rollout":
+            _run_micro_blog_validate_rollout(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-lab-journal-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Lab journal seeding is optional for this canary; markdown source is staged separately before import/bootstrap.",
+                {"optional": True, "content_path": "/srv/micro-blog/content", "import_mode": "filesystem-sync"},
+            )
+            continue
+
+        if kind == "micro-blog-telemetry-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Telemetry backhaul is optional for this canary; the deployed OTEL collector exposes :9464 metrics and accepts OTLP on :4317/:4318.",
+                {"optional": True, "preferred_mode": "main-lab-scrape-or-forward"},
+            )
+            continue
+
+        if kind == "micro-blog-edge-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Edge pointer recorded; add or update lab-edge once the internal health URL is validated.",
+                {"edge_port": 8091, "target_port": 18081, "label": "Micro Blog — ESXi Swarm"},
+            )
+            continue
+
+        if kind == "micro-blog-fragment-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Known-good fragment: micro-blog is the small Docker Swarm canary; rx-demo remains the heavier observability workload.",
+                {"rating": "candidate-known-good", "tool_choice": "hammer-before-wrench"},
+            )
             continue
 
         if kind == "trixie-pxe-prereqs":
