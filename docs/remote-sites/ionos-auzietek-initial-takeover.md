@@ -155,6 +155,60 @@ kb.auzietek.com       -> 74.208.45.165:8082  -> Kanboard
 prom1.auzietek.com    -> 74.208.45.165:9090  -> Prometheus
 ```
 
+## Drupal content migration notes
+
+Drupal is not just bot traffic or disposable legacy state. It currently carries
+the public Auzietek archive, including BlackKnightController articles, tutorials,
+think-tank posts, and semi-popular practical content.
+
+Read-only DB rummage found:
+
+```text
+published content nodes: 40
+  article:   8
+  blog_post: 27
+  page:      4
+  webform:   1
+
+taxonomy tags: 55
+managed files: 338 / ~8.4 MB
+path aliases: 120
+```
+
+Recent / important-looking content includes:
+
+```text
+Building an Observable Cloud-Native Application with RX-Demo Part 1
+Introducing BlackKnightController: The Next-Generation Automation Framework...
+Cowabunga Kubernetes: Riding the Wave with Drupal on k3s!
+Mastering the Waves: Advanced Monitoring for Your Kubernetes Journey
+Docker / Server Naming Patterns and Dynatrace Auto-Tagging, Surfer Style
+Leveraging meta and organizational information both for monitoring and Automation.
+```
+
+Some body fields are very large, likely from pasted/generated HTML or long-form
+transcripts. Migration should classify content rather than blindly rendering
+everything as-is:
+
+```text
+cornerstone   -> clean up, preserve, promote
+archive       -> import mostly as-is, keep URL/SEO value
+rewrite       -> use as source material for a more serious beta article
+redirect-only -> preserve path but do not promote in the new UI
+```
+
+The beta/micro-blog site should become the proving ground for the future
+Auzietek public front door. Drupal remains the live archive until:
+
+1. content export is reproducible
+2. article counts and media counts reconcile
+3. URL/alias map is generated
+4. redirects are planned
+5. beta pages are reviewed by a human
+6. backups are proven
+
+Do not perform cowboy Drupal module/theme surgery on the live site.
+
 ## Swarm notes
 
 The IONOS swarm currently has duplicate hostnames:
