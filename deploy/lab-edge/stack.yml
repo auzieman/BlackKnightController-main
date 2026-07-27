@@ -4,13 +4,17 @@ services:
   nginx:
     image: nginx:1.27-alpine
     configs:
-      - source: lab_edge_nginx_v17
+      - source: lab_edge_nginx_v18
         target: /etc/nginx/nginx.conf
       - source: lab_edge_index_v10
         target: /usr/share/nginx/html/index.html
       - source: lab_edge_proxmoxlib_v1
         target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
     ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
       - target: 8080
         published: 8080
         protocol: tcp
@@ -80,7 +84,7 @@ services:
         condition: on-failure
 
 configs:
-  lab_edge_nginx_v17:
+  lab_edge_nginx_v18:
     file: ./nginx.conf
   lab_edge_index_v10:
     file: ./index.html
