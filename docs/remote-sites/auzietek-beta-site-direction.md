@@ -19,6 +19,34 @@ replaces the scattered legacy `*.auzietek.com` surfaces where appropriate.
 Kanboard remains a private/semi-private operations and planning surface rather
 than a public content engine.
 
+## Operating ownership
+
+Near-term BKC/Codex-owned surfaces:
+
+```text
+beta.auzietek.com
+  -> proving-ground public site and micro-blog evolution
+
+lab.auzietek.com
+  -> safe DNS/API/certificate proving ground
+
+kb.auzietek.com / Kanboard
+  -> private and semi-public work tracker, issue staging, promotion checklist
+```
+
+Production `auzietek.com` becomes part of the same operating model only after
+beta content, DNS, SSL, redirects, backups, and rollback are proven.
+
+Rule of thumb:
+
+```text
+beta/lab/Kanboard
+  -> build, test, iterate
+
+auzietek.com
+  -> promote deliberately from known-good beta state
+```
+
 ## Audience
 
 Primary audiences:
@@ -81,14 +109,20 @@ What would we do differently next time?
 The site should feel professional, capable, and slightly futuristic without
 looking like a toy dashboard.
 
+Unlike BKC itself, `beta.auzietek.com` should lean lighter. BKC can keep the
+dark-glass operations cockpit because operators live in it. The public site
+should feel more open, readable, and editorial while still keeping an Auzietek
+edge.
+
 Desired feel:
 
 ```text
 serious technical consultancy
-operations command center
+lite mode with technical depth
+slightly edgy, not gloomy
 real lab evidence
 advanced but readable HTML/CSS
-dark glass / structured depth where appropriate
+structured depth where appropriate
 clear typography
 strong navigation
 ```
@@ -99,8 +133,28 @@ Avoid:
 generic blog theme
 random CMS clutter
 over-bright admin-dashboard styling
+full BKC command-center darkness on public articles
 AI hype without evidence
 burying tutorials under personality text
+```
+
+Visual direction:
+
+```text
+background
+  warm off-white / soft slate / subtle technical texture
+
+cards
+  glassy but readable, with rounded corners and restrained shadows
+
+accents
+  solarized-style blue, cyan, amber, and muted green
+
+code/evidence blocks
+  darker islands are fine, especially for commands, logs, and diagrams
+
+diagrams
+  can borrow BKC's graph language, but with more whitespace and simpler labels
 ```
 
 ## Navigation blueprint

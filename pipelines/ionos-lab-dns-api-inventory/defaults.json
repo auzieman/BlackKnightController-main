@@ -1,0 +1,76 @@
+{
+  "pipeline_id": "ionos-lab-dns-api-inventory",
+  "provider": "ionos",
+  "dns_api_secret_ref": "secret:ionos/dns/api",
+  "zone_scope": "lab.auzietek.com",
+  "parent_zone": "auzietek.com",
+  "enable_dns_writes": false,
+  "enable_ssl_steps": false,
+  "ttl_seconds": 300,
+  "lab_front_door": {
+    "name": "swarm1.lab.auzietek.com",
+    "ip": "192.168.1.15",
+    "role": "current lab edge / BKC / nginx"
+  },
+  "desired_records": [
+    {
+      "name": "bkc.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "BKC web UI"
+    },
+    {
+      "name": "edge.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "lab edge landing page"
+    },
+    {
+      "name": "grafana.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "Grafana edge"
+    },
+    {
+      "name": "portainer.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "Portainer edge"
+    },
+    {
+      "name": "openstack.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "Horizon edge"
+    },
+    {
+      "name": "proxmox.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "pve1 edge"
+    },
+    {
+      "name": "esxi.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "server2 ESXi edge"
+    },
+    {
+      "name": "ipfire.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "IPFire candidate edge"
+    },
+    {
+      "name": "switch.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "managed switch edge"
+    }
+  ],
+  "write_guard": {
+    "required_for_apply": true,
+    "approval_phrase": "apply lab.auzietek.com dns changes",
+    "rollback_required": true
+  }
+}
