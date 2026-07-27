@@ -253,6 +253,42 @@ def command_apply_map(client: IonosDns, args: argparse.Namespace) -> None:
     print(json.dumps(results, indent=2, sort_keys=True))
 
 
+def command_validate_map(client: IonosDns, args: argparse.Namespace) -> None:
+    results = []
+    ok = True
+    cache: dict[str, tuple[dict[str, Any], list[dict[str, Any]]]] = {}
+    for desired in load_desired_records(args.map_file):
+        name = str(desired["name"]).rstrip(".")
+        record_type = str(desired.get("type", "A")).upper()
+        content = str(desired["content"]).rstrip(".") if record_type == "CNAME" else str(desired["content"])
+        zone_name = name
+        if zone_name not in cache:
+            cache[zone_name] = client.records(zone_name)
+        _zone, records = cache[zone_name]
+        matches = find_matching_records(records, name, record_type)
+        exact = []
+        for record in matches:
+            found_content = str(record.get("content") or "")
+            if record_type == "CNAME":
+                found_content = found_content.rstrip(".")
+            if found_content == content and not bool(record.get("disabled")):
+                exact.append(record)
+        status = "ok" if exact else "missing_or_mismatch"
+        ok = ok and bool(exact)
+        results.append(
+            {
+                "name": name,
+                "type": record_type,
+                "expected": content,
+                "status": status,
+                "matched": len(exact),
+            }
+        )
+    print(json.dumps({"status": "ok" if ok else "failed", "records": results}, indent=2, sort_keys=True))
+    if not ok:
+        raise SystemExit(2)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-key-file", default="", help="Path containing the IONOS X-API-Key value.")
@@ -292,6 +328,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ttl", type=int, default=300)
     p.add_argument("--apply", action="store_true")
     p.set_defaults(func=command_apply_map)
+
+    p = sub.add_parser("validate-map")
+    p.add_argument("--map-file", required=True)
+    p.set_defaults(func=command_validate_map)
 
     return parser
 
