@@ -236,6 +236,12 @@ Related VPN direction:
 docs/remote-sites/lab-to-ionos-vpn-direction.md
 ```
 
+Related beta/public-site direction:
+
+```text
+docs/remote-sites/auzietek-beta-site-direction.md
+```
+
 Near-term:
 
 1. rotate old root passwords after BKC key access is proven
