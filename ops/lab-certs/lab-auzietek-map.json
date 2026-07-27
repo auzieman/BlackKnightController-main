@@ -1,0 +1,230 @@
+{
+  "zone_scope": "lab.auzietek.com",
+  "default_ttl": 300,
+  "desired_records": [
+    {
+      "name": "lab.auzietek.com",
+      "type": "A",
+      "content": "192.168.1.15",
+      "ttl": 300,
+      "purpose": "lab edge front door"
+    },
+    {
+      "name": "swarm1.lab.auzietek.com",
+      "type": "A",
+      "content": "192.168.1.15",
+      "ttl": 300,
+      "purpose": "current Docker Swarm manager and lab edge"
+    },
+    {
+      "name": "ns1.lab.auzietek.com",
+      "type": "A",
+      "content": "192.168.1.10",
+      "ttl": 300,
+      "purpose": "DNS/DHCP/NFS/PXE/certificate workhorse"
+    },
+    {
+      "name": "proxmox01.lab.auzietek.com",
+      "type": "A",
+      "content": "192.168.1.9",
+      "ttl": 300,
+      "purpose": "canonical Proxmox .9 / pve1 node"
+    },
+    {
+      "name": "bkc.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "BKC UI by name"
+    },
+    {
+      "name": "edge.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "lab edge landing page"
+    },
+    {
+      "name": "grafana.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Grafana edge"
+    },
+    {
+      "name": "portainer.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Portainer edge"
+    },
+    {
+      "name": "openstack.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Horizon edge"
+    },
+    {
+      "name": "proxmox.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Proxmox edge"
+    },
+    {
+      "name": "esxi.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi edge"
+    },
+    {
+      "name": "ipfire.lab.auzietek.com",
+      "type": "A",
+      "content": "192.168.1.82",
+      "ttl": 300,
+      "purpose": "IPFire RED/operator-side admin path"
+    },
+    {
+      "name": "switch.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "managed switch edge"
+    },
+    {
+      "name": "openwebui.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "OpenWebUI/Ollama edge"
+    },
+    {
+      "name": "microblog.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi swarm micro-blog proof"
+    },
+    {
+      "name": "pve.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "proxmox01.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "short Proxmox canonical alias"
+    },
+    {
+      "name": "pve1.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "proxmox01.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "legacy pve1 alias"
+    },
+    {
+      "name": "openstack01.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.240",
+      "ttl": 300,
+      "purpose": "server1 OpenStack management/service address"
+    },
+    {
+      "name": "server1.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "openstack01.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "physical server1 alias"
+    },
+    {
+      "name": "esx01.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.114",
+      "ttl": 300,
+      "purpose": "server2 ESXi management address"
+    },
+    {
+      "name": "esxi01.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "esx01.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi spelling alias"
+    },
+    {
+      "name": "server2.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "esx01.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "physical server2 alias"
+    },
+    {
+      "name": "swarm1-esx.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.121",
+      "ttl": 300,
+      "purpose": "ESXi-hosted Docker swarm manager 1"
+    },
+    {
+      "name": "swarm2-esx.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.122",
+      "ttl": 300,
+      "purpose": "ESXi-hosted Docker swarm manager/worker 2"
+    },
+    {
+      "name": "swarm3-esx.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.123",
+      "ttl": 300,
+      "purpose": "ESXi-hosted Docker swarm worker 3"
+    },
+    {
+      "name": "swarm4-esx.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.124",
+      "ttl": 300,
+      "purpose": "ESXi-hosted Docker swarm worker 4"
+    },
+    {
+      "name": "swarm5-esx.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.125",
+      "ttl": 300,
+      "purpose": "ESXi-hosted Docker swarm worker 5"
+    },
+    {
+      "name": "swarm1-os.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.230",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted Docker swarm manager 1"
+    },
+    {
+      "name": "swarm2-os.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.231",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted Docker swarm manager/worker 2"
+    },
+    {
+      "name": "swarm3-os.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.232",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted Docker swarm worker 3"
+    },
+    {
+      "name": "swarm4-os.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.233",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted Docker swarm worker 4"
+    },
+    {
+      "name": "swarm5-os.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.234",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted Docker swarm worker 5"
+    }
+  ]
+}

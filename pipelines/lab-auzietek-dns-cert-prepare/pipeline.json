@@ -1,0 +1,32 @@
+{
+  "id": "lab-auzietek-dns-cert-prepare",
+  "name": "LAB DNS CANDIDATE — lab.auzietek.com DNS + Let's Encrypt",
+  "repo": "BlackKnightController",
+  "workflow": "lab-auzietek-dns-cert-prepare",
+  "resource_class": "small",
+  "status": "candidate",
+  "tags": ["lab.auzietek.com", "dns", "ionos", "letsencrypt", "certbot", "ns1", "edge", "candidate"],
+  "summary": "Prepare lab.auzietek.com DNS records and DNS-01 certificate issuance from ns1 using the IONOS DNS API.",
+  "targets": {
+    "dns_provider": "provider:ionos",
+    "zone_scope": "zone-scope:lab.auzietek.com",
+    "cert_workhorse": "node:host:ns1",
+    "edge": "node:vm:swarm1"
+  },
+  "inputs": {
+    "dns_api_secret_ref": {"required": false, "default": "secret:ionos/dns/api"},
+    "enable_dns_apply": {"required": false, "default": false},
+    "enable_cert_request": {"required": false, "default": false},
+    "enable_cert_spool": {"required": false, "default": false}
+  },
+  "stages": [
+    {"id": "install-ns1-dns-cert-helpers", "action": "ns1.lab_certs.helpers.install", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 120},
+    {"id": "snapshot-lab-dns", "action": "ionos.dns.records.snapshot", "transport": "https-api", "risk": "low", "timeout_seconds": 180},
+    {"id": "apply-lab-dns-map-gated", "action": "ionos.dns.records.apply_map", "transport": "https-api", "risk": "medium", "timeout_seconds": 300, "enabled_by": "enable_dns_apply"},
+    {"id": "request-lab-wildcard-cert-gated", "action": "letsencrypt.dns01.request", "transport": "bkc-ssh+ionos-api", "risk": "medium", "timeout_seconds": 900, "enabled_by": "enable_cert_request"},
+    {"id": "spool-lab-cert-gated", "action": "lab.certificate.spool", "transport": "bkc-ssh+filesystem", "risk": "medium", "timeout_seconds": 300, "enabled_by": "enable_cert_spool"},
+    {"id": "validate-lab-names-and-cert", "action": "lab.dns_tls.validate", "transport": "dns+https", "risk": "low", "timeout_seconds": 300},
+    {"id": "record-lab-dns-cert-fragments", "action": "fragments.lab_dns_tls.record", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "notes": "Safe zone is lab.auzietek.com. Production auzietek.com DNS/SSL remains out of scope until the beta site promotion is explicitly approved."
+}
