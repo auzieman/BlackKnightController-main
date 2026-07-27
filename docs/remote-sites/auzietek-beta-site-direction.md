@@ -13,6 +13,12 @@ The goal is not to recreate Drupal. The goal is to preserve the useful spirit,
 content, and public credibility of the current site while moving toward a more
 professional, modern, tutorial-driven surface.
 
+Long-term, beta/micro-blog becomes the new Auzietek public space and gradually
+replaces the scattered legacy `*.auzietek.com` surfaces where appropriate.
+
+Kanboard remains a private/semi-private operations and planning surface rather
+than a public content engine.
+
 ## Audience
 
 Primary audiences:
@@ -110,6 +116,28 @@ BlackKnightController
 Labs
 About
 Contact
+```
+
+Public URL consolidation direction:
+
+```text
+beta.auzietek.com
+  -> proving ground / future public site
+
+auzietek.com / www.auzietek.com
+  -> eventual production cutover target once beta is reviewed
+
+mon.auzietek.com / prom1.auzietek.com
+  -> private or protected observability surfaces
+
+kb.auzietek.com
+  -> private Kanboard ops/work board
+
+dtlab.auzietek.com
+  -> deprecated Gogs/dtlabs; export/preserve then retire
+
+clu.auzietek.com / clu-api.auzietek.com
+  -> experimental AI endpoints; do not promote as primary public services
 ```
 
 Optional deeper structure:
@@ -237,6 +265,29 @@ article -> sanitized known-good fragment
 
 Private details stay in BKC/Kanboard. Public code/docs/issues go to GitHub.
 
+## Mail stance
+
+Avoid spending near-term energy on IONOS-hosted mail unless a hard requirement
+appears. Running mail well is a time sink and a deliverability trap.
+
+Preferred future direction:
+
+```text
+auzietek.com mail
+  -> Google Workspace / Gmail-style provider
+  -> DNS managed through IONOS API or future BKC DNS automation
+```
+
+BKC should track the required DNS records when that cutover happens:
+
+```text
+MX
+SPF
+DKIM
+DMARC
+verification TXT records
+```
+
 ## Success criteria
 
 The beta site is working when a new visitor can quickly understand:
@@ -248,4 +299,3 @@ The tutorials come from proven lab/client-style work.
 The author can guide engineers through messy systems clearly.
 There is a path from article -> demo -> code -> evidence.
 ```
-
