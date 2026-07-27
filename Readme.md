@@ -50,6 +50,18 @@ repeatable.
 
 ## Visual Tour
 
+![BKC Company Mind resource workbench](docs/images/generated/bkc-beta-resources.png)
+
+The Company Mind resource workbench joins inventory, relationships, pipeline
+context, and operator actions into one living view. This screenshot is generated
+from the fresh lab BKC instance so documentation can track real working state.
+
+![BKC edge ownership graph](docs/images/generated/bkc-beta-edge-graph.png)
+
+The graph can be captured in focused story modes such as topology, edge
+ownership, and pipeline paths. These generated artifacts are useful for README
+updates, site content, video decks, and run evidence.
+
 ![BKC overview page](docs/images/Overview-page.png)
 
 The overview page is the landing console: resource counts, inferred
@@ -389,6 +401,8 @@ uses Redis database `/0` for rate limits and `/2` for jobs.
   catalog structure.
 - [docs/ui-resource-graph.md](docs/ui-resource-graph.md) - resource graph
   information architecture.
+- [docs/bkc-view-capture.md](docs/bkc-view-capture.md) - regenerate UI view
+  screenshots for docs, site content, and run evidence.
 - [docs/docker-kubernetes-api-targets.md](docs/docker-kubernetes-api-targets.md)
   - Docker and Kubernetes API target notes.
 - [docs/k3s-deployment-linkage.md](docs/k3s-deployment-linkage.md) - k3s
