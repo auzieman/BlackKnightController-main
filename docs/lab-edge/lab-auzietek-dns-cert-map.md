@@ -73,6 +73,36 @@ when BKC names a stable lab host
 The backfill stage should compare inventory hostnames to DNS before creating
 records. Temporary throwaway instances do not automatically receive public DNS.
 
+Role naming rule:
+
+```text
+kube1.lab.auzietek.com
+  -> active k3s role holder
+
+kube1-esx.lab.auzietek.com
+  -> placement hint / evidence alias
+
+kube1-pve.lab.auzietek.com
+  -> old placement hint / migration evidence alias
+```
+
+When k3s moves from Proxmox to ESXi, the role names move with the active
+cluster. The graph records the old Proxmox VM as history/stale/retired rather
+than creating a new role identity.
+
+Near lab target:
+
+```text
+kube1.lab.auzietek.com
+kube2.lab.auzietek.com
+kube3.lab.auzietek.com
+kube4.lab.auzietek.com
+kube5.lab.auzietek.com
+```
+
+These names represent the current/near k3s pipeline target set. Confirm the
+actual IP/MAC/placement from inventory before applying public DNS.
+
 Important names:
 
 ```text
@@ -99,6 +129,11 @@ ipfire.lab.auzietek.com   A      192.168.1.82
 
 swarm1-esx.lab.auzietek.com A     10.20.0.121
 swarm1-os.lab.auzietek.com  A     10.20.0.230
+kube1.lab.auzietek.com      A      10.20.0.126
+kube2.lab.auzietek.com      A      10.20.0.127
+kube3.lab.auzietek.com      A      10.20.0.128
+kube4.lab.auzietek.com      A      10.20.0.129
+kube5.lab.auzietek.com      A      10.20.0.130
 ```
 
 `microblog.lab.auzietek.com` is the alpha instance. It is allowed to be rough

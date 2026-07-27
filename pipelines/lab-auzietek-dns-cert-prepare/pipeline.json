@@ -21,6 +21,8 @@
   },
   "stages": [
     {"id": "install-ns1-dns-cert-helpers", "action": "ns1.lab_certs.helpers.install", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 120},
+    {"id": "settle-lab-name-map", "action": "lab.dns.names.settle", "transport": "inventory+graph", "risk": "low", "timeout_seconds": 180},
+    {"id": "backfill-stable-host-records", "action": "lab.dns.host_records.backfill_plan", "transport": "inventory+ionos-api", "risk": "low", "timeout_seconds": 180},
     {"id": "snapshot-lab-dns", "action": "ionos.dns.records.snapshot", "transport": "https-api", "risk": "low", "timeout_seconds": 180},
     {"id": "apply-lab-dns-map-gated", "action": "ionos.dns.records.apply_map", "transport": "https-api", "risk": "medium", "timeout_seconds": 300, "enabled_by": "enable_dns_apply"},
     {"id": "request-lab-wildcard-cert-gated", "action": "letsencrypt.dns01.request", "transport": "bkc-ssh+ionos-api", "risk": "medium", "timeout_seconds": 900, "enabled_by": "enable_cert_request"},

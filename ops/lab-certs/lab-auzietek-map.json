@@ -225,6 +225,97 @@
       "content": "10.20.0.234",
       "ttl": 300,
       "purpose": "OpenStack-hosted Docker swarm worker 5"
+    },
+    {
+      "name": "kube1.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.126",
+      "ttl": 300,
+      "purpose": "active k3s role node 1; DNS follows role during pve -> esx migration"
+    },
+    {
+      "name": "kube2.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.127",
+      "ttl": 300,
+      "purpose": "active k3s role node 2; DNS follows role during pve -> esx migration"
+    },
+    {
+      "name": "kube3.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.128",
+      "ttl": 300,
+      "purpose": "active k3s role node 3; DNS follows role during pve -> esx migration"
+    },
+    {
+      "name": "kube4.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.129",
+      "ttl": 300,
+      "purpose": "active k3s role node 4; DNS follows role during pve -> esx migration"
+    },
+    {
+      "name": "kube5.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.130",
+      "ttl": 300,
+      "purpose": "active k3s role node 5; DNS follows role during pve -> esx migration"
+    },
+    {
+      "name": "kube1-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi placement alias for k3s node 1"
+    },
+    {
+      "name": "kube2-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube2.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi placement alias for k3s node 2"
+    },
+    {
+      "name": "kube3-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube3.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi placement alias for k3s node 3"
+    },
+    {
+      "name": "kube4-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube4.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi placement alias for k3s node 4"
+    },
+    {
+      "name": "kube5-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube5.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "ESXi placement alias for k3s node 5"
+    },
+    {
+      "name": "kube1-pve.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "legacy Proxmox placement alias for k3s node 1"
+    },
+    {
+      "name": "kube2-pve.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube2.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "legacy Proxmox placement alias for k3s node 2"
+    },
+    {
+      "name": "kube3-pve.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "kube3.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "legacy Proxmox placement alias for k3s node 3"
     }
   ]
 }
