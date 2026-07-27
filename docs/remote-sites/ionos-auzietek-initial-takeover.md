@@ -176,6 +176,12 @@ ionos-auzietek-03 -> unknown/down legacy node
 
 ## Direction
 
+Related VPN direction:
+
+```text
+docs/remote-sites/lab-to-ionos-vpn-direction.md
+```
+
 Near-term:
 
 1. rotate old root passwords after BKC key access is proven
