@@ -1,0 +1,19 @@
+{
+  "tenant_slug": "lab",
+  "rx_demo_source_path": "/mnt/swarm/shared/rx-demo",
+  "compose_file": "docker-compose.yml",
+  "stack_name": "rx-demo",
+  "target_manager_host": "10.20.0.121",
+  "target_user": "admin-deploy",
+  "placement_label": "bkc.workload=app",
+  "expected_worker_count": 3,
+  "expected_manager_count": 2,
+  "registry": "swarm1.lab.auzietek.com:5001/rx-demo",
+  "edge_label": "rx-demo on ESXi Swarm",
+  "edge_mode": "planned",
+  "performance_probe_paths": [
+    "/",
+    "/health",
+    "/api/health"
+  ]
+}

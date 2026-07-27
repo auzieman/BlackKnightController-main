@@ -1,0 +1,49 @@
+{
+  "tenant_slug": "lab",
+  "app_name": "micro-blog",
+  "source_path": "/home/auzieman/Projects/micro-blog",
+  "compose_file": "docker-compose.yml",
+  "stack_name": "micro-blog",
+  "target_manager_host": "10.20.0.121",
+  "target_user": "admin-deploy",
+  "target_stage_path": "/srv/micro-blog-stack",
+  "registry_host": "swarm1.lab.auzietek.com:5001",
+  "registry_namespace": "micro-blog",
+  "image_tag": "candidate",
+  "placement_label": "bkc.workload=app",
+  "expected_worker_count": 3,
+  "expected_manager_count": 2,
+  "publish_ui_port": 18081,
+  "publish_api_port": 18080,
+  "edge_label": "Micro Blog — ESXi Swarm",
+  "edge_public_port": 8091,
+  "edge_mode": "proxy-or-nat",
+  "telemetry_mode": "main-lab-or-local",
+  "main_lab_otlp_endpoint": "http://otel-collector.monitoring.local:4318",
+  "main_lab_loki_endpoint": "http://loki.monitoring.local:3100/loki/api/v1/push",
+  "main_lab_prometheus_scrape": "http://<target-manager>:9464/metrics",
+  "enable_local_observability": false,
+  "enable_lab_journal_seed": true,
+  "lab_journal_source_paths": [
+    "/home/auzieman/Projects/BlackKnightController/docs/video-wrap",
+    "/home/auzieman/Projects/BlackKnightController/pipelines"
+  ],
+  "env_source_mode": "secret-or-local-env",
+  "env_required_keys": [
+    "ADMIN_EMAIL",
+    "ADMIN_ACCESS_CODE",
+    "FLASK_SECRET_KEY",
+    "POSTGRES_PASSWORD",
+    "RABBITMQ_DEFAULT_USER",
+    "RABBITMQ_DEFAULT_PASS"
+  ],
+  "health_paths": [
+    "/healthz",
+    "/readyz"
+  ],
+  "public_smoke_paths": [
+    "/",
+    "/blog",
+    "/admin/login"
+  ]
+}
