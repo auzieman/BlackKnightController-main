@@ -6,6 +6,17 @@ The goal is not to rewrite rx-demo. The goal is to reuse its Docker Compose
 shape against the ESXi-backed Swarm and compare deployment/runtime behavior with
 the OpenStack-backed Swarm.
 
+## Tool choice guardrail
+
+Do not use RX as the first proof that a swarm substrate can run a Compose-shaped
+app. Use `micro-blog-swarm-compose` for that smaller canary.
+
+Use this RX lane after the basic build/push/render/deploy/edge path is already
+known good. RX brings the heavier observability sample: OpenTelemetry Collector,
+Prometheus, Loki, Tempo, Grafana dashboards, SQL Server, Redis, RabbitMQ, and
+load generation. That is the right tool when the target question is runtime
+behavior and monitoring depth, not merely “can this swarm deploy an app?”
+
 ## Intended flow
 
 1. Validate the ESXi swarm manager is reachable.
@@ -22,9 +33,9 @@ the OpenStack-backed Swarm.
 
 ## Current source boundary
 
-The local `/home/auzieman/Projects/rx-demo` checkout is currently empty on this
-laptop. Treat `rx_demo_source_path` as an explicit input supplied by Git, NFS, or
-a restored working copy.
+The local `/home/auzieman/Projects/rx-demo` checkout is expected to contain the
+real app source and `docker-compose.yml`. Treat `rx_demo_source_path` as an
+explicit input supplied by Git, NFS, or a restored working copy.
 
 Do not invent rx-demo services in this repository. This pipeline should consume
 the real rx-demo Compose file once the checkout is available.

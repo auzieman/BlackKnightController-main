@@ -5,6 +5,24 @@ This lane is the “small canary” before the heavier `rx-demo` workload.
 It proves the useful substrate path without making the first test carry SQL
 Server, Tempo, load profiles, and the full RX workflow.
 
+## Tool choice guardrail
+
+Use micro-blog when the question is:
+
+```text
+Can this Docker Swarm substrate build, pull, deploy, route, and serve a real app?
+```
+
+Use `rx-demo` when the question is:
+
+```text
+Can this substrate handle the richer observability and workload story?
+```
+
+In shop terms: micro-blog is the hammer for this nail. `rx-demo` is the fuller
+toolbox with the monitoring wrench set. Do not make the quick substrate canary
+carry the whole RX observability demo unless that is the thing being tested.
+
 ## Known-good intent
 
 Use the real checkout at:
