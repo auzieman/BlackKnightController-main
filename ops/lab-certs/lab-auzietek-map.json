@@ -108,6 +108,34 @@
       "purpose": "ESXi swarm micro-blog proof"
     },
     {
+      "name": "auzietek.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Auzietek lane lab hostname"
+    },
+    {
+      "name": "blackknight.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "BlackKnight lane lab hostname"
+    },
+    {
+      "name": "linux-users.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Linux Users lane lab hostname"
+    },
+    {
+      "name": "retro-users.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Retro Users lane lab hostname"
+    },
+    {
       "name": "pve.lab.auzietek.com",
       "type": "CNAME",
       "content": "proxmox01.lab.auzietek.com",
