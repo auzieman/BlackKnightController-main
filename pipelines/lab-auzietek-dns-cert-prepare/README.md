@@ -16,6 +16,9 @@ This is intentionally split into gated steps:
 The IONOS key is always a secret reference and must not be committed.
 
 Near-term “lab” means current stable roles plus near pipeline targets, not every
-temporary VM. Role names such as `kube1.lab.auzietek.com` follow the active k3s
-role holder as it moves from Proxmox to ESXi; placement aliases such as
-`kube1-esx.lab.auzietek.com` are evidence, not new role identities.
+temporary VM. New fleet nodes should use platform-qualified names such as
+`kube1-esx.lab.auzietek.com`, `swarm1-esx.lab.auzietek.com`, and
+`swarm1-os.lab.auzietek.com`. Friendly unqualified names such as
+`grafana.lab.auzietek.com` are service entry points, while platform-scoped
+service names such as `grafana-esx.lab.auzietek.com` can exist when both lanes
+need visible service edges.

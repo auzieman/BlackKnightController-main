@@ -50,10 +50,16 @@ platform swarm nodes
   -> swarm1-esx.lab.auzietek.com
   -> swarm1-os.lab.auzietek.com
 
+platform k3s nodes
+  -> kube1-esx.lab.auzietek.com
+  -> kube2-esx.lab.auzietek.com
+
 human service entry points
   -> grafana.lab.auzietek.com
+  -> grafana-esx.lab.auzietek.com
   -> bkc.lab.auzietek.com
   -> portainer.lab.auzietek.com
+  -> portainer-esx.lab.auzietek.com
   -> microblog.lab.auzietek.com
 ```
 
@@ -76,28 +82,37 @@ records. Temporary throwaway instances do not automatically receive public DNS.
 Role naming rule:
 
 ```text
-kube1.lab.auzietek.com
-  -> active k3s role holder
-
 kube1-esx.lab.auzietek.com
-  -> placement hint / evidence alias
+  -> concrete ESXi-hosted k3s node
 
-kube1-pve.lab.auzietek.com
-  -> old placement hint / migration evidence alias
+swarm1-os.lab.auzietek.com
+  -> concrete OpenStack-hosted Docker swarm node
+
+grafana.lab.auzietek.com
+  -> friendly/floating service entry point
+
+grafana-esx.lab.auzietek.com
+  -> platform-scoped service entry point
 ```
 
-When k3s moves from Proxmox to ESXi, the role names move with the active
-cluster. The graph records the old Proxmox VM as history/stale/retired rather
-than creating a new role identity.
+For new fleets, prefer platform-qualified hostnames for actual nodes. The
+unqualified names are reserved for service aliases or deliberate floating role
+aliases.
+
+When k3s moves from Proxmox to ESXi, the new concrete nodes should be
+`kube1-esx`, `kube2-esx`, and so on. The graph records the old Proxmox VMs as
+history/stale/retired rather than pretending they are the same physical or VM
+object.
 
 Near lab target:
 
 ```text
-kube1.lab.auzietek.com
-kube2.lab.auzietek.com
-kube3.lab.auzietek.com
-kube4.lab.auzietek.com
-kube5.lab.auzietek.com
+kube1-esx.lab.auzietek.com
+kube2-esx.lab.auzietek.com
+kube3-esx.lab.auzietek.com
+kube4-esx.lab.auzietek.com
+kube5-esx.lab.auzietek.com
+k3s-esx.lab.auzietek.com
 ```
 
 These names represent the current/near k3s pipeline target set. Confirm the
@@ -129,11 +144,12 @@ ipfire.lab.auzietek.com   A      192.168.1.82
 
 swarm1-esx.lab.auzietek.com A     10.20.0.121
 swarm1-os.lab.auzietek.com  A     10.20.0.230
-kube1.lab.auzietek.com      A      10.20.0.126
-kube2.lab.auzietek.com      A      10.20.0.127
-kube3.lab.auzietek.com      A      10.20.0.128
-kube4.lab.auzietek.com      A      10.20.0.129
-kube5.lab.auzietek.com      A      10.20.0.130
+kube1-esx.lab.auzietek.com A      10.20.0.126
+kube2-esx.lab.auzietek.com A      10.20.0.127
+kube3-esx.lab.auzietek.com A      10.20.0.128
+kube4-esx.lab.auzietek.com A      10.20.0.129
+kube5-esx.lab.auzietek.com A      10.20.0.130
+k3s-esx.lab.auzietek.com   CNAME  kube1-esx.lab.auzietek.com
 ```
 
 `microblog.lab.auzietek.com` is the alpha instance. It is allowed to be rough

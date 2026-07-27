@@ -227,95 +227,81 @@
       "purpose": "OpenStack-hosted Docker swarm worker 5"
     },
     {
-      "name": "kube1.lab.auzietek.com",
+      "name": "kube1-esx.lab.auzietek.com",
       "type": "A",
       "content": "10.20.0.126",
       "ttl": 300,
-      "purpose": "active k3s role node 1; DNS follows role during pve -> esx migration"
-    },
-    {
-      "name": "kube2.lab.auzietek.com",
-      "type": "A",
-      "content": "10.20.0.127",
-      "ttl": 300,
-      "purpose": "active k3s role node 2; DNS follows role during pve -> esx migration"
-    },
-    {
-      "name": "kube3.lab.auzietek.com",
-      "type": "A",
-      "content": "10.20.0.128",
-      "ttl": 300,
-      "purpose": "active k3s role node 3; DNS follows role during pve -> esx migration"
-    },
-    {
-      "name": "kube4.lab.auzietek.com",
-      "type": "A",
-      "content": "10.20.0.129",
-      "ttl": 300,
-      "purpose": "active k3s role node 4; DNS follows role during pve -> esx migration"
-    },
-    {
-      "name": "kube5.lab.auzietek.com",
-      "type": "A",
-      "content": "10.20.0.130",
-      "ttl": 300,
-      "purpose": "active k3s role node 5; DNS follows role during pve -> esx migration"
-    },
-    {
-      "name": "kube1-esx.lab.auzietek.com",
-      "type": "CNAME",
-      "content": "kube1.lab.auzietek.com",
-      "ttl": 300,
-      "purpose": "ESXi placement alias for k3s node 1"
+      "purpose": "ESXi-hosted k3s node 1"
     },
     {
       "name": "kube2-esx.lab.auzietek.com",
-      "type": "CNAME",
-      "content": "kube2.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.127",
       "ttl": 300,
-      "purpose": "ESXi placement alias for k3s node 2"
+      "purpose": "ESXi-hosted k3s node 2"
     },
     {
       "name": "kube3-esx.lab.auzietek.com",
-      "type": "CNAME",
-      "content": "kube3.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.128",
       "ttl": 300,
-      "purpose": "ESXi placement alias for k3s node 3"
+      "purpose": "ESXi-hosted k3s node 3"
     },
     {
       "name": "kube4-esx.lab.auzietek.com",
-      "type": "CNAME",
-      "content": "kube4.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.129",
       "ttl": 300,
-      "purpose": "ESXi placement alias for k3s node 4"
+      "purpose": "ESXi-hosted k3s node 4"
     },
     {
       "name": "kube5-esx.lab.auzietek.com",
-      "type": "CNAME",
-      "content": "kube5.lab.auzietek.com",
+      "type": "A",
+      "content": "10.20.0.130",
       "ttl": 300,
-      "purpose": "ESXi placement alias for k3s node 5"
+      "purpose": "ESXi-hosted k3s node 5"
     },
     {
-      "name": "kube1-pve.lab.auzietek.com",
+      "name": "k3s-esx.lab.auzietek.com",
       "type": "CNAME",
-      "content": "kube1.lab.auzietek.com",
+      "content": "kube1-esx.lab.auzietek.com",
       "ttl": 300,
-      "purpose": "legacy Proxmox placement alias for k3s node 1"
+      "purpose": "ESXi k3s API/lead edge alias"
     },
     {
-      "name": "kube2-pve.lab.auzietek.com",
+      "name": "kube-esx.lab.auzietek.com",
       "type": "CNAME",
-      "content": "kube2.lab.auzietek.com",
+      "content": "kube1-esx.lab.auzietek.com",
       "ttl": 300,
-      "purpose": "legacy Proxmox placement alias for k3s node 2"
+      "purpose": "short ESXi k3s lead edge alias"
     },
     {
-      "name": "kube3-pve.lab.auzietek.com",
+      "name": "grafana-esx.lab.auzietek.com",
       "type": "CNAME",
-      "content": "kube3.lab.auzietek.com",
+      "content": "swarm1-esx.lab.auzietek.com",
       "ttl": 300,
-      "purpose": "legacy Proxmox placement alias for k3s node 3"
+      "purpose": "Grafana/service edge for ESXi-backed lab lane when present"
+    },
+    {
+      "name": "grafana-os.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1-os.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Grafana/service edge for OpenStack-backed lab lane when present"
+    },
+    {
+      "name": "portainer-esx.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1-esx.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Portainer edge for ESXi Docker swarm"
+    },
+    {
+      "name": "portainer-os.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1-os.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "Portainer edge for OpenStack Docker swarm"
     }
   ]
 }
