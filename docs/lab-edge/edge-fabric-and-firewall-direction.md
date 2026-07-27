@@ -83,6 +83,49 @@ Lenovo/switch side, and later LDAP/OpenLDAP-style VIPs or sticky distribution.
 Keep nginx for HTTP-aware behavior, redirects, cookies, headers, and friendly
 operator URLs.
 
+## Known-good Telegraf edge scrape pattern
+
+Grafana stays on the edge while the big iron exports scrape targets.
+
+Current ESXi Docker Swarm host telemetry:
+
+```text
+Docker service: bkc-telemetry_host
+mode: global
+image: telegraf:1.31-alpine
+export: host-published :9273/metrics on each swarm VM
+Prometheus job: esxi-swarm-telegraf-hosts
+```
+
+Targets validated on 2026-07-26:
+
+```text
+10.20.0.121:9273 -> esxi-swarm-mgr-01 -> up
+10.20.0.122:9273 -> esxi-swarm-mgr-02 -> up
+10.20.0.123:9273 -> esxi-swarm-worker-01 -> up
+10.20.0.124:9273 -> esxi-swarm-worker-02 -> up
+10.20.0.125:9273 -> esxi-swarm-worker-03 -> up
+```
+
+Prometheus assigns friendly `host` labels in the scrape config. That keeps
+Grafana dashboards readable even if the Telegraf container reports its own
+container hostname internally.
+
+Dashboards that should now see the new hosts:
+
+```text
+system-metrics-single-auzix-lab
+container-overview-telegraf-auzix-lab
+```
+
+Next richer lane:
+
+- add cAdvisor/runtime scrape targets for the ESXi swarm containers
+- add provider-specific ESXi metrics from an observer VM/container that queries
+  the ESXi host/API
+- add OpenStack-specific inventory/metrics so BKC can link a metric back to
+  project, instance, flavor, tenant network, hypervisor, and service IP
+
 ## Managed switch role
 
 The Dell N2024 is now a first-class lab fabric node:
