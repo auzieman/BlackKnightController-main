@@ -55,6 +55,29 @@ lab-services         BKC, Grafana, registry/cache, Horizon, APIs
 lab-provider         OpenStack/VMware provider or tenant experiment traffic
 ```
 
+## Current Physical Port Convention
+
+As of the current lab wiring pass, all ports are still on the same switch VLAN.
+The useful convention is physical, not yet enforced by VLAN policy:
+
+```text
+Facing the switch:
+
+left side   service / uplink / operator-visible traffic
+right side  management / provisioning / BMC / LOM control traffic
+```
+
+This gives BKC and the operator a stable mental model before VLANs are carved:
+
+- right-side drops are for PXE, iDRAC/IPMI, LOM, and host-control paths;
+- left-side drops are for service/provider/uplink exposure;
+- OpenStack `br-ex` / provider-facing NICs should land on the left side;
+- management NICs and BMC/LOM ports should land on the right side.
+
+Do not infer VLAN isolation from this note. It is a cabling convention that
+should later become switch configuration once the switch provider pipeline can
+collect backups, verify out-of-band access, and mutate config safely.
+
 The switch discovery pipeline should validate the declared role and not require
 the first implementation to push switch configuration. Configuration mutation
 should be a separate gated stage once credentials, backups, and out-of-band
