@@ -78,22 +78,24 @@
             "textarea[name$='_json']",
             "textarea[name*='json']",
             "textarea[readonly]",
+            "textarea[data-code-preview]",
         ].join(",");
         Array.from(document.querySelectorAll(selector)).slice(0, MAX_POLISH_BLOCKS).forEach((textarea) => {
             if (textarea.dataset.previewed === "true") return;
             const raw = textarea.value || textarea.textContent || "";
             const isJsonName = /json/i.test(textarea.name || "");
+            const wantsCodePreview = textarea.hasAttribute("data-code-preview");
             const isReadonly = textarea.hasAttribute("readonly");
             const isJson = looksJson(raw);
-            if (!isJsonName && !isReadonly) return;
-            if (!isJson && !isReadonly) return;
+            if (!isJsonName && !isReadonly && !wantsCodePreview) return;
+            if (!isJson && !isReadonly && !wantsCodePreview) return;
 
             const details = document.createElement("details");
             details.className = "code-preview-panel";
             if (isJson) details.open = true;
-            if (isJsonName) textarea.classList.add("textarea-with-preview");
+            if (isJsonName || wantsCodePreview) textarea.classList.add("textarea-with-preview");
             const summary = document.createElement("summary");
-            summary.textContent = isJson ? "Pretty JSON preview" : "Rendered text preview";
+            summary.textContent = textarea.dataset.previewLabel || (isJson ? "Pretty JSON preview" : "Rendered command/text preview");
             const pre = document.createElement("pre");
             pre.className = isJson ? "json-preview compact-code-preview" : "terminal-log compact-terminal compact-code-preview";
             if (isJson) {

@@ -63,11 +63,11 @@
             </label>
             <label class="wide">
                 Operator Notes
-                <textarea name="operator_notes" rows="6" placeholder="Intent, caveats, inputs, expected outputs, rollback notes.">{{ saved.operator_notes or default_operator_notes }}</textarea>
+                <textarea name="operator_notes" rows="6" data-code-preview data-preview-label="Readable notes preview" placeholder="Intent, caveats, inputs, expected outputs, rollback notes.">{{ saved.operator_notes or default_operator_notes }}</textarea>
             </label>
             <label class="wide">
                 Draft Definition
-                <textarea name="draft_definition" rows="12" placeholder="Simple text block for a future UI-driven stage definition.">{{ saved.draft_definition or default_draft_definition }}</textarea>
+                <textarea name="draft_definition" rows="12" data-code-preview data-preview-label="Readable stage definition preview" placeholder="Simple text block for a future UI-driven stage definition.">{{ saved.draft_definition or default_draft_definition }}</textarea>
             </label>
             <div class="pipeline-card-actions">
                 <button class="button" type="submit">Save Stage Notes</button>
