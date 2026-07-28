@@ -90,6 +90,14 @@
       "height": 1200,
       "wait_for": "main, body",
       "description": "API and platform integration configuration view"
+    },
+    {
+      "name": "bkc-pipeline-detail-edit",
+      "path": "/pipelines/microblog-publish/edit",
+      "width": 1920,
+      "height": 1400,
+      "wait_for": "main, body",
+      "description": "Pipeline lane edit/detail page showing JSON and stage-definition readability polish"
     }
   ]
 }
