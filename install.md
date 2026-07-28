@@ -670,6 +670,51 @@ For route smoke testing after install or upgrade:
 ./tools/site_smoke.py --base-url http://localhost:5000 --max-pages 25
 ```
 
+## Visual validation
+
+After BKC is running, the first useful check is visual: can you see resources,
+pipelines, inventory, and integrations as connected operator surfaces?
+
+![BKC Company Mind resource workbench](docs/images/generated/bkc-beta-resources.png)
+
+The resource workbench should show live resource counts, relationship counts,
+pipeline counts, top resources, and the graph-linked workspace.
+
+![BKC pipeline workbench](docs/images/generated/bkc-pipelines.png)
+
+The pipeline workbench should show the catalog, selected pipeline metadata,
+latest run state, resolved dictionary values, stages, actions, and run history.
+
+![BKC inventory console](docs/images/generated/bkc-inventory.png)
+
+The inventory console should show discovered resources by kind, linked groups,
+facts, relationships, and launch paths.
+
+![BKC integrations screen](docs/images/generated/bkc-integrations.png)
+
+The integrations page should expose the configured API/SSH/controller paths that
+BKC can use to refresh inventory and run actions.
+
+When you want documentation images from a live BKC instance, use the capture
+tool. This keeps README images, video decks, and site proof aligned with a real
+running environment:
+
+```bash
+export BKC_CAPTURE_USERNAME=admin
+export BKC_CAPTURE_PASSWORD='<your-admin-password>'
+
+docker --context default run --rm \
+  --network host \
+  -v "$PWD:/work" \
+  -w /work \
+  mcr.microsoft.com/playwright/python:v1.45.0-jammy \
+  sh -lc 'python -m pip install -q playwright==1.45.0 && python tools/capture_bkc_views.py --base-url http://127.0.0.1:5000'
+```
+
+For a remote lab URL, replace `--base-url` with the reachable BKC address. The
+manifest lives in [docs/bkc-view-captures.json](docs/bkc-view-captures.json),
+and the generated PNGs land in `docs/images/generated/`.
+
 ## What requires a rebuild?
 
 Usually requires rebuild/redeploy:

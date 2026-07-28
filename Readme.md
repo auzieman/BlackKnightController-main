@@ -62,32 +62,34 @@ The graph can be captured in focused story modes such as topology, edge
 ownership, and pipeline paths. These generated artifacts are useful for README
 updates, site content, video decks, and run evidence.
 
-![BKC overview page](docs/images/Overview-page.png)
+![BKC pipeline workbench](docs/images/generated/bkc-pipelines.png)
 
-The overview page is the landing console: resource counts, inferred
-relationships, active and failed run summaries, and jump points into the graph,
-inventory, integrations, and pipelines.
+The pipeline workbench turns the catalog into an operator surface. Runs,
+resolved dictionaries, stages, actions, source layers, and latest state sit next
+to the pipeline list, so repeatable work stays reviewable.
 
-![BKC resource graph](docs/images/ResourceGraph.png)
-
-The resource graph shows APIs, clusters, groups, hosts, VMs, containers,
-repositories, pipelines, actions, and credentials as related resources.
-
-![BKC inventory console](docs/images/InventoryConsole.png)
+![BKC inventory console](docs/images/generated/bkc-inventory.png)
 
 The inventory console keeps resources first and launch paths underneath. Groups,
 host facts, relationships, status grids, and direct inspect/deploy actions come
 together here.
 
-![BKC integrations screen](docs/images/API-Integrations.png)
+![BKC integrations screen](docs/images/generated/bkc-integrations.png)
 
-The integrations screen is where operators store credentials, test endpoints,
-pull inventories, and sync discovered resources into BKC.
+The integrations screen is where operators connect Proxmox, Ansible, Docker,
+Kubernetes, SSH, and other sources so BKC can refresh inventory and execute the
+right action through the right path.
+
+![BKC overview page](docs/images/Overview-page.png)
+
+Older screenshots remain in the repository as historical UI references, but the
+generated captures above are the preferred documentation source when the lab is
+available.
 
 ![BKC pipelines screen](docs/images/PipeLines.png)
 
-The pipelines screen turns manual fixes into tracked runs. Operators can browse
-templates, inspect stages, queue work, and review recent run state.
+This older pipelines screenshot is kept as a historical reference for the first
+generation UI.
 
 ## Core Concepts
 

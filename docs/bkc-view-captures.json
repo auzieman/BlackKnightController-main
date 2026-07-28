@@ -76,12 +76,20 @@
       "description": "Pipeline catalog and run control view"
     },
     {
-      "name": "bkc-activity",
-      "path": "/activity",
+      "name": "bkc-inventory",
+      "path": "/inventory",
       "width": 1920,
       "height": 1200,
       "wait_for": "main, body",
-      "description": "Recent pipeline and system activity"
+      "description": "Inventory console and resource-linked host view"
+    },
+    {
+      "name": "bkc-integrations",
+      "path": "/integrations",
+      "width": 1920,
+      "height": 1200,
+      "wait_for": "main, body",
+      "description": "API and platform integration configuration view"
     }
   ]
 }
