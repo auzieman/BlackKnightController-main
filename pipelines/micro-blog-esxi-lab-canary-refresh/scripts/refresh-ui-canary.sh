@@ -102,7 +102,7 @@ ssh "${ns1_host}" \
   "sshpass -p '${target_password}' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc-esxi-swarm-known-hosts '${target_user}@${target_manager}' 'sudo docker service update --image ${pull_image} ${target_service}'"
 
 echo "+ validate core links"
-for path in / /articles /principles /aiops /business-case /friends; do
+for path in / /articles /principles /thinktank /aiops /business-case /friends; do
   curl -fsS "${edge_url}${path}" >/dev/null
 done
 
@@ -111,6 +111,7 @@ declare -A proof_strings=(
   [/]="What can Auzietek do for you"
   [/articles]="Field notes, walkthroughs, and proof-backed teaching material"
   [/principles]="Human intent remains authoritative"
+  [/thinktank]="ThinkTank: Ideas with a Path Toward Useful Systems"
   [/aiops]="AIOps That Can Show Its Work"
   [/business-case]="The Business Case for BlackKnightController"
   [/friends]="Good infrastructure work is stronger"
