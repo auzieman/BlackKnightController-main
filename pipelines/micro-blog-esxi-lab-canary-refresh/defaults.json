@@ -1,0 +1,75 @@
+{
+  "pipeline_id": "micro-blog-esxi-lab-canary-refresh",
+  "source_path": "/home/auzieman/Projects/micro-blog",
+  "source_branch": "review/astra-public-polish-20260731",
+  "source_commit": "c8bdb4b",
+  "image_service": "blog-ui",
+  "registry_host": "swarm1.lab.auzietek.com:5001",
+  "registry_push_host": "127.0.0.1:5001",
+  "registry_namespace": "micro-blog",
+  "image_tag_prefix": "astra-polish",
+  "target_stack": "micro-blog",
+  "target_service": "micro-blog_blog-ui",
+  "target_manager_host": "10.20.0.121",
+  "target_user": "admin-deploy",
+  "ssh_route_mode": "jump-via-ns1",
+  "ssh_jump_host": "root@192.168.1.10",
+  "registry_bridge_host": "root@192.168.1.15",
+  "ui_internal_url": "http://10.20.0.121:18081",
+  "api_internal_url": "http://10.20.0.121:18080",
+  "edge_url": "http://swarm1.lab.auzietek.com:8091",
+  "content_sync_mode": "node-local-fanout",
+  "target_content_path": "/srv/micro-blog/content",
+  "target_node_hosts": [
+    "10.20.0.121",
+    "10.20.0.122",
+    "10.20.0.123",
+    "10.20.0.124",
+    "10.20.0.125"
+  ],
+  "filesystem_sync_enabled": true,
+  "filesystem_sync_subdir": "posts/public-lanes",
+  "canonical_adoption_check_enabled": true,
+  "public_smoke_urls": [
+    "http://swarm1.lab.auzietek.com:8091/",
+    "http://swarm1.lab.auzietek.com:8091/articles",
+    "http://swarm1.lab.auzietek.com:8091/principles",
+    "http://swarm1.lab.auzietek.com:8091/aiops",
+    "http://swarm1.lab.auzietek.com:8091/business-case",
+    "http://swarm1.lab.auzietek.com:8091/friends",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=auzietek",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=blackknight",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=linux",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=retro"
+  ],
+  "proof_strings": [
+    {
+      "path": "/",
+      "contains": "What can Auzietek do for you"
+    },
+    {
+      "path": "/articles",
+      "contains": "Field notes, walkthroughs, and proof-backed teaching material"
+    },
+    {
+      "path": "/principles",
+      "contains": "Progressive trust and explicit boundaries"
+    },
+    {
+      "path": "/aiops",
+      "contains": "Bootstrap CLI versus controller"
+    },
+    {
+      "path": "/business-case",
+      "contains": "Public benchmarks, carefully used"
+    },
+    {
+      "path": "/friends",
+      "contains": "Good infrastructure work is stronger"
+    }
+  ],
+  "receipt_repo": "/home/auzieman/Projects/bkc-channel",
+  "receipt_path": "receipts",
+  "risk": "medium",
+  "approval_required": true
+}
