@@ -119,7 +119,8 @@ declare -A proof_strings=(
 
 for path in "${!proof_strings[@]}"; do
   needle="${proof_strings[$path]}"
-  if ! curl -fsS "${edge_url}${path}" | grep -q "${needle}"; then
+  page_body="$(curl -fsS "${edge_url}${path}")"
+  if [[ "${page_body}" != *"${needle}"* ]]; then
     echo "Missing proof string '${needle}' at ${edge_url}${path}" >&2
     exit 1
   fi
