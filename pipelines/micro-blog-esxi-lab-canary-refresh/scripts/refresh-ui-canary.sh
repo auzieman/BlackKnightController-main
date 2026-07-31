@@ -4,10 +4,11 @@ set -euo pipefail
 usage() {
   cat >&2 <<'USAGE'
 Usage:
-  refresh-ui-canary.sh SOURCE_DIR IMAGE_TAG
+  refresh-ui-canary.sh SOURCE_DIR IMAGE_TAG [CONTENT_OVERLAY_DIR]
 
 Example:
   refresh-ui-canary.sh /home/auzieman/Projects/micro-blog astra-polish-20260731-c8bdb4b
+  refresh-ui-canary.sh /home/auzieman/Projects/micro-blog astra-polish-20260731-c8bdb4b /home/auzieman/Projects/bkc-channel/payloads/packet/outputs/content
 
 Known-good lab assumptions:
   - target ESXi manager: 10.20.0.121
@@ -29,6 +30,7 @@ fi
 
 source_dir="$1"
 image_tag="$2"
+content_overlay_dir="${3:-}"
 
 registry_pull="swarm1.lab.auzietek.com:5001"
 registry_push="127.0.0.1:5001"
@@ -48,6 +50,10 @@ if [[ ! -d "${source_dir}" ]]; then
   echo "Source directory not found: ${source_dir}" >&2
   exit 1
 fi
+if [[ -n "${content_overlay_dir}" && ! -d "${content_overlay_dir}" ]]; then
+  echo "Content overlay directory not found: ${content_overlay_dir}" >&2
+  exit 1
+fi
 
 for required in "${source_dir}/src/ui/Dockerfile" "${source_dir}/src/ui/app.py" "${source_dir}/content"; do
   if [[ ! -e "${required}" ]]; then
@@ -57,7 +63,26 @@ for required in "${source_dir}/src/ui/Dockerfile" "${source_dir}/src/ui/app.py" 
 done
 
 echo "+ build ${pull_image}"
-docker build -t "${pull_image}" -f "${source_dir}/src/ui/Dockerfile" "${source_dir}"
+build_dir="${source_dir}"
+cleanup_build_dir=""
+if [[ -n "${content_overlay_dir}" ]]; then
+  cleanup_build_dir="$(mktemp -d /tmp/bkc-micro-blog-build.XXXXXX)"
+  build_dir="${cleanup_build_dir}/source"
+  mkdir -p "${build_dir}"
+  rsync -a --delete \
+    --exclude '.git' \
+    --exclude '.pytest_cache' \
+    --exclude 'docs/images/beta-review-20260728-bootstrap-parallax-final' \
+    --exclude 'docs/images/beta-review-20260728-bootstrap-parallax' \
+    --exclude 'docs/images/beta-review-20260728-live' \
+    --exclude 'docs/images/beta-review-20260728-local-layout' \
+    "${source_dir}/" "${build_dir}/"
+  rsync -a "${content_overlay_dir}/" "${build_dir}/content/"
+  trap 'rm -rf "${cleanup_build_dir}"' EXIT
+  echo "+ applied private content overlay ${content_overlay_dir}"
+fi
+
+docker build -t "${pull_image}" -f "${build_dir}/src/ui/Dockerfile" "${build_dir}"
 
 echo "+ transfer/push image through lab registry bridge"
 docker save "${pull_image}" |
@@ -67,7 +92,7 @@ docker save "${pull_image}" |
 echo "+ sync content to ESXi swarm nodes"
 for host in "${target_nodes[@]}"; do
   echo "  -> ${host}"
-  tar -C "${source_dir}" -cf - content |
+  tar -C "${build_dir}" -cf - content |
     ssh "${ns1_host}" \
       "sshpass -p '${target_password}' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc-esxi-swarm-known-hosts '${target_user}@${host}' 'sudo mkdir -p /srv/micro-blog && sudo tar -C /srv/micro-blog -xf - && sudo chown -R root:root /srv/micro-blog/content'"
 done
