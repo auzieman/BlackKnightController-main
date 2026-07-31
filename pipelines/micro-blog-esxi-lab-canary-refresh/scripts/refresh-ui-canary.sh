@@ -110,9 +110,9 @@ echo "+ validate proof strings"
 declare -A proof_strings=(
   [/]=\"What can Auzietek do for you\"
   [/articles]=\"Field notes, walkthroughs, and proof-backed teaching material\"
-  [/principles]=\"Progressive trust and explicit boundaries\"
-  [/aiops]=\"Bootstrap CLI versus controller\"
-  [/business-case]=\"Public benchmarks, carefully used\"
+  [/principles]=\"Human intent remains authoritative\"
+  [/aiops]=\"AIOps That Can Show Its Work\"
+  [/business-case]=\"The Business Case for BlackKnightController\"
   [/friends]=\"Good infrastructure work is stronger\"
 )
 
