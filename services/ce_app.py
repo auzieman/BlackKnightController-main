@@ -153,7 +153,8 @@ def init_ce_app(app: Flask) -> None:
 
         _ensure_db()
         if not current_user.is_authenticated:
-            return redirect(url_for("auth.login", next=request.url))
+            next_url = request.full_path if request.query_string else request.path
+            return redirect(url_for("auth.login", next=next_url))
         _bind_tenant_for_ui()
         return None
 
