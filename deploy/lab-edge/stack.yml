@@ -4,15 +4,24 @@ services:
   nginx:
     image: nginx:1.27-alpine
     configs:
-      - source: lab_edge_nginx_v18
+      - source: lab_edge_nginx_v19
         target: /etc/nginx/nginx.conf
       - source: lab_edge_index_v10
         target: /usr/share/nginx/html/index.html
       - source: lab_edge_proxmoxlib_v1
         target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
+    secrets:
+      - source: lab_auzietek_fullchain_v1
+        target: lab_auzietek_fullchain.pem
+      - source: lab_auzietek_privkey_v1
+        target: lab_auzietek_privkey.pem
     ports:
       - target: 80
         published: 80
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
         protocol: tcp
         mode: ingress
       - target: 8080
@@ -84,9 +93,15 @@ services:
         condition: on-failure
 
 configs:
-  lab_edge_nginx_v18:
+  lab_edge_nginx_v19:
     file: ./nginx.conf
   lab_edge_index_v10:
     file: ./index.html
   lab_edge_proxmoxlib_v1:
     file: ./proxmoxlib.js
+
+secrets:
+  lab_auzietek_fullchain_v1:
+    external: true
+  lab_auzietek_privkey_v1:
+    external: true

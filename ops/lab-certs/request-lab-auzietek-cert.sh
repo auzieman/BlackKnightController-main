@@ -16,7 +16,6 @@ certbot certonly \
   --preferred-challenges dns \
   --manual-auth-hook "$auth_hook" \
   --manual-cleanup-hook "$cleanup_hook" \
-  --manual-public-ip-logging-ok \
   --agree-tos \
   --non-interactive \
   --email "$email" \
