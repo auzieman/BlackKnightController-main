@@ -313,6 +313,42 @@ def _render_explainer_markdown(markdown: str) -> str:
     return "\n".join(blocks)
 
 
+def _drawio_brief_html(markdown: str, *, max_chars: int = 1700) -> str:
+    text = re.sub(r"^\[[^\]]+\]\s*", "", markdown or "").strip()
+    html = _render_explainer_markdown(text)
+    html = re.sub(r"</?(h3|h4)>", lambda match: "<br><b>" if not match.group(0).startswith("</") else "</b>", html)
+    html = html.replace("<p>", "").replace("</p>", "<br>")
+    html = html.replace("<ul>", "<br>").replace("</ul>", "")
+    html = html.replace("<li>", "• ").replace("</li>", "<br>")
+    html = html.replace("<pre><code>", "<br><font style='font-family:monospace'>")
+    html = html.replace("</code></pre>", "</font><br>")
+    html = html.replace("<code>", "<font style='font-family:monospace'>").replace("</code>", "</font>")
+    return html[:max_chars]
+
+
+def _stage_brief(stage: dict) -> dict[str, str]:
+    action = str(stage.get("action") or "").strip()
+    name = str(stage.get("name") or action or "stage").strip()
+    status = str(stage.get("status") or "planned").strip().lower()
+    detail = str(stage.get("detail") or "").strip()
+    targets = [str(item) for item in (stage.get("targets") or []) if item]
+    facts: list[str] = []
+    if action and action != name:
+        facts.append(f"action: {action}")
+    if targets:
+        facts.append("targets: " + ", ".join(targets[:3]))
+    for key in ("transport", "risk"):
+        value = str(stage.get(key) or "").strip()
+        if value:
+            facts.append(f"{key}: {value}")
+    return {
+        "name": name,
+        "status": status,
+        "facts": " · ".join(facts[:3]),
+        "detail": detail[:150],
+    }
+
+
 def _drawio_cell(root: ET.Element, cell_id: str, value: str = "", style: str = "", parent: str = "1", *, vertex: bool = False, edge: bool = False, source: str = "", target: str = "") -> ET.Element:
     attrs = {"id": cell_id, "parent": parent}
     if value:
@@ -361,9 +397,10 @@ def _export_pipeline_explainer_drawio(pipeline: dict, run_map: dict, explanation
         "version": "24.7.17",
     })
     diagram = ET.SubElement(mxfile, "diagram", {"id": scene_hash, "name": "BKC Pipeline Explainer"})
+    page_height = max(1200, 260 + min(len(stages), 28) * 112)
     model = ET.SubElement(diagram, "mxGraphModel", {
-        "dx": "1800",
-        "dy": "1200",
+        "dx": "2200",
+        "dy": str(page_height),
         "grid": "1",
         "gridSize": "10",
         "guides": "1",
@@ -373,8 +410,8 @@ def _export_pipeline_explainer_drawio(pipeline: dict, run_map: dict, explanation
         "fold": "1",
         "page": "1",
         "pageScale": "1",
-        "pageWidth": "1800",
-        "pageHeight": "1200",
+        "pageWidth": "2200",
+        "pageHeight": str(page_height),
         "math": "0",
         "shadow": "0",
     })
@@ -391,38 +428,42 @@ def _export_pipeline_explainer_drawio(pipeline: dict, run_map: dict, explanation
     )
     _drawio_geom(title, 40, 26, 920, 62)
 
-    brief_text = escape((explanation or "No explainer text supplied.")[:1800]).replace("\n", "<br>")
+    brief_text = _drawio_brief_html(explanation or "No explainer text supplied.")
     brief = _drawio_cell(
         root,
         "brief",
         f"<b>Operator brief</b><br>{brief_text}",
-        "rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#1f2937;fontSize=12;align=left;verticalAlign=top;spacing=10;",
+        "rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#1f2937;fontSize=13;fontFamily=Inter,Arial;align=left;verticalAlign=top;spacing=12;",
         vertex=True,
     )
-    _drawio_geom(brief, 40, 110, 430, 560)
+    _drawio_geom(brief, 40, 110, 520, 620)
 
     previous_id = ""
     for index, stage in enumerate(stages):
-        row = index % 12
-        column = index // 12
-        x = 540 + column * 390
-        y = 115 + row * 88
-        status = str(stage.get("status") or "planned").lower()
+        x = 660 + (index % 2) * 470
+        y = 115 + index * 106
+        if index % 2:
+            y += 28
+        brief_stage = _stage_brief(stage)
+        status = brief_stage["status"]
         fill = "#d5e8d4" if status == "complete" else "#ffe6cc" if status in {"active", "running", "queued"} else "#f8cecc" if status in {"failed", "blocked"} else "#fff2cc"
         stroke = "#82b366" if status == "complete" else "#d79b00" if status in {"active", "running", "queued", "planned"} else "#b85450"
-        label = escape(str(stage.get("name") or f"stage {index + 1}"))
-        detail = escape(str(stage.get("detail") or stage.get("action") or "")[:120])
-        target = escape(", ".join(str(item) for item in (stage.get("targets") or [])[:4]))
-        value = f"<b>{index + 1}. {label}</b><br><font style='font-size:10px;color:#52606d'>{escape(status)} · {target}</font><br><font style='font-size:10px'>{detail}</font>"
+        label = escape(brief_stage["name"])
+        detail = escape(brief_stage["detail"])
+        facts = escape(brief_stage["facts"])
+        status_label = escape(status.upper())
+        value = f"<b>{index + 1}. {label}</b><br><font style='font-size:11px;color:#52606d'>{status_label}{' · ' + facts if facts else ''}</font>"
+        if detail:
+            value += f"<br><font style='font-size:10px;color:#334155'>{detail}</font>"
         cell_id = f"stage:{index}"
         cell = _drawio_cell(
             root,
             cell_id,
             value,
-            f"rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor={fill};strokeColor={stroke};fontColor=#1f2937;fontSize=12;align=left;verticalAlign=top;spacing=8;",
+            f"rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor={fill};strokeColor={stroke};fontColor=#1f2937;fontSize=12;fontFamily=Inter,Arial;align=left;verticalAlign=top;spacing=10;",
             vertex=True,
         )
-        _drawio_geom(cell, x, y, 320, 66)
+        _drawio_geom(cell, x, y, 410, 76)
         if previous_id:
             edge = _drawio_cell(
                 root,

@@ -25,7 +25,7 @@
   "inputs": {
     "image": {
       "required": true,
-      "default": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-explainer-drawio-20260802100435"
+      "default": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-drawio-fontbind-20260802101739"
     },
     "portainer_endpoint_id": {
       "required": true,

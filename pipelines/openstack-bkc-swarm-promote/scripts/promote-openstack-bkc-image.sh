@@ -4,7 +4,7 @@ set -euo pipefail
 portainer_url="${PORTAINER_URL:-https://127.0.0.1:9443}"
 portainer_user="${PORTAINER_USER:-admin}"
 endpoint_id="${PORTAINER_ENDPOINT_ID:-6}"
-image="${BKC_PROMOTE_IMAGE:-192.168.1.15:5001/blackknightcontroller/bkc:pipeline-explainer-drawio-20260802100435}"
+image="${BKC_PROMOTE_IMAGE:-192.168.1.15:5001/blackknightcontroller/bkc:pipeline-drawio-fontbind-20260802101739}"
 services_csv="${BKC_PROMOTE_SERVICES:-bkc-alt_bkc,bkc-alt_worker}"
 
 if [[ -z "${PORTAINER_PASSWORD:-}" ]]; then

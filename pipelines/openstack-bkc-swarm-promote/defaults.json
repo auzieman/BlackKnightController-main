@@ -12,7 +12,7 @@
     "bkc-alt_bkc",
     "bkc-alt_worker"
   ],
-  "image": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-explainer-drawio-20260802100435",
+  "image": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-drawio-fontbind-20260802101739",
   "expected_digest": "sha256:9c672d3ce63cebd50223fc144205a0d8ada2030622dc983e7f3496c06d56c536",
   "edge_url": "https://bkc.lab.auzietek.com/",
   "expected_routes": {
