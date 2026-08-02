@@ -12,7 +12,7 @@
     "bkc-alt_bkc",
     "bkc-alt_worker"
   ],
-  "image": "192.168.1.15:5001/blackknightcontroller/bkc:resources-drawio-cmdb-20260802085729",
+  "image": "192.168.1.15:5001/blackknightcontroller/bkc:resources-pipeline-explainer-20260802092211",
   "expected_digest": "sha256:9c672d3ce63cebd50223fc144205a0d8ada2030622dc983e7f3496c06d56c536",
   "edge_url": "https://bkc.lab.auzietek.com/",
   "expected_routes": {
@@ -27,4 +27,3 @@
     "The edge BKC at 192.168.1.15:5000 is utility/fallback and may intentionally lag."
   ]
 }
-

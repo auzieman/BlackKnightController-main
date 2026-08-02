@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import shlex
 from datetime import datetime, timezone
 
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 from services import bkc_db
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
@@ -27,6 +28,7 @@ from services.pipeline_executor import (
     workflow_stage_definitions,
     workflow_supports_undeploy,
 )
+from services.remote_ops import run_remote_command
 from services.tenant_context import get_current_tenant_id, get_effective_tenant_slug
 
 pipelines_blueprint = Blueprint("pipelines", __name__)
@@ -35,6 +37,40 @@ pipelines_blueprint = Blueprint("pipelines", __name__)
 @pipelines_blueprint.route("/api/v1/pipelines/catalog-signature", methods=["GET"])
 def pipeline_catalog_signature_api():
     return jsonify(catalog_signature())
+
+
+@pipelines_blueprint.post("/api/v1/pipelines/explain")
+def pipeline_explain_api():
+    payload = request.get_json(silent=True) or {}
+    pipeline_id = str(payload.get("pipeline_id") or "").strip()
+    pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        return jsonify({"error": "pipeline_not_found"}), 404
+    runs = load_runs()
+    latest_runs_by_pipeline_key = {
+        _run_group_key(run): {
+            **run,
+            "stage_summary": _stage_summary(run),
+        }
+        for run in runs
+    }
+    latest = _pipeline_latest_run(pipeline, latest_runs_by_pipeline_key)
+    model = str(payload.get("model") or "qwen2.5-coder:1.5b")
+    host = str(payload.get("ollama_host") or "10.20.0.240")
+    try:
+        explanation = _explain_pipeline_with_ollama(pipeline, latest, model=model, host=host)
+        source = "ollama"
+    except Exception as exc:
+        current_app.logger.warning("Ollama pipeline explanation failed for %s: %s", pipeline_id, exc)
+        explanation = _fallback_pipeline_explanation(pipeline, latest)
+        source = "fallback"
+    return jsonify({
+        "status": "ok",
+        "pipeline_id": pipeline_id,
+        "model": model,
+        "source": source,
+        "explanation": explanation,
+    })
 
 
 PIPELINE_TAGS = (
@@ -144,6 +180,18 @@ def _run_group_key(run: dict) -> str:
     if pipeline_id:
         return f"pipeline:{pipeline_id}"
     return f"workflow:{str(run.get('workflow', '')).strip()}"
+
+
+def _pipeline_latest_run(pipeline: dict, latest_runs: dict[str, dict]) -> dict | None:
+    pipeline_id = str(pipeline.get("id", "")).strip()
+    workflow = str(pipeline.get("workflow", "")).strip()
+    if pipeline_id:
+        run = latest_runs.get(f"pipeline:{pipeline_id}")
+        if run:
+            return run
+    if workflow:
+        return latest_runs.get(f"workflow:{workflow}")
+    return None
 
 
 def _rx_demo_undeploy_workflow(workflow: str) -> str | None:
@@ -348,6 +396,77 @@ def _pipeline_run_map(pipeline: dict | None, latest_run: dict | None) -> dict:
             }
         )
     return {"run": latest_run, "stages": stages}
+
+
+def _pipeline_explain_payload(pipeline: dict, latest_run: dict | None) -> dict:
+    stages = list(pipeline.get("stages") or [])[:16]
+    actions = list(pipeline.get("actions") or [])[:16]
+    return {
+        "id": pipeline.get("id"),
+        "name": pipeline.get("name"),
+        "repo": pipeline.get("repo"),
+        "workflow": pipeline.get("workflow"),
+        "description": pipeline.get("description"),
+        "notes": pipeline.get("notes"),
+        "tags": list(pipeline.get("tags") or [])[:12],
+        "stages": stages,
+        "actions": actions,
+        "latest_run": {
+            "id": (latest_run or {}).get("id"),
+            "status": (latest_run or {}).get("status"),
+            "updated_at": (latest_run or {}).get("updated_at"),
+            "stage_summary": (latest_run or {}).get("stage_summary"),
+        } if latest_run else None,
+        "support": {
+            "executor_wired": workflow_is_supported(str(pipeline.get("workflow", ""))),
+            "undeploy_supported": workflow_supports_undeploy(str(pipeline.get("workflow", ""))),
+            "timeout_seconds": workflow_job_timeout(str(pipeline.get("workflow", ""))),
+        },
+    }
+
+
+def _fallback_pipeline_explanation(pipeline: dict, latest_run: dict | None) -> str:
+    stage_count = len(list(pipeline.get("stages") or []))
+    action_count = len(list(pipeline.get("actions") or []))
+    status = (latest_run or {}).get("status") or "not run"
+    risk = "destructive/rebuild lane" if any(token in " ".join(str(value) for value in pipeline.values()).lower() for token in ("baremetal", "wipe", "pxe", "provision")) else "standard automation lane"
+    return (
+        f"### {pipeline.get('name') or pipeline.get('id')}\n\n"
+        f"This is a {risk} in `{pipeline.get('repo')}` using workflow `{pipeline.get('workflow')}`.\n\n"
+        f"- Stages: {stage_count}\n"
+        f"- Action bricks: {action_count}\n"
+        f"- Latest run: {status}\n"
+        f"- Executor: {'wired' if workflow_is_supported(str(pipeline.get('workflow', ''))) else 'planned'}\n\n"
+        "Review the stage list, dictionary values, and latest run state before triggering it."
+    )
+
+
+def _explain_pipeline_with_ollama(pipeline: dict, latest_run: dict | None, *, model: str, host: str) -> str:
+    payload = _pipeline_explain_payload(pipeline, latest_run)
+    prompt = (
+        "You are BlackKnightController's local pipeline explainer. "
+        "Explain this pipeline to an infrastructure operator in concise markdown. "
+        "Do not invent external facts. Separate lifecycle/status from safety/risk. "
+        "Include: what it does, likely targets, whether it appears runnable, what to check before running, "
+        "and what evidence/output should be expected. Keep it under 350 words.\n\n"
+        f"PIPELINE_JSON:\n{json.dumps(payload, indent=2, sort_keys=True)}"
+    )
+    body = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2, "num_ctx": 8192},
+    }
+    command = (
+        "set -euo pipefail; "
+        f"curl -fsS http://127.0.0.1:11434/api/generate -d {shlex.quote(json.dumps(body))}"
+    )
+    output = run_remote_command(host=host, user="root", command=command, timeout=240)
+    response = json.loads(output)
+    explanation = str(response.get("response") or "").strip()
+    if not explanation:
+        raise RuntimeError("Ollama returned an empty explanation.")
+    return explanation[:6000]
 
 
 def _executor_source_files(workflow: str) -> list[str]:
@@ -674,6 +793,18 @@ def pipelines():
             return redirect(url_for("pipelines.pipelines"))
 
         extra = {"pipeline_id": pipeline["id"], "pipeline_name": pipeline["name"]}
+        declared_inputs = pipeline.get("inputs") if isinstance(pipeline.get("inputs"), dict) else {}
+        request_inputs: dict[str, object] = {}
+        for input_name, input_spec in declared_inputs.items():
+            field_name = f"input__{input_name}"
+            spec = input_spec if isinstance(input_spec, dict) else {}
+            default = spec.get("default")
+            if isinstance(default, bool):
+                request_inputs[input_name] = request.form.get(field_name) == "true"
+            elif field_name in request.form:
+                request_inputs[input_name] = request.form.get(field_name, "").strip()
+        if request_inputs:
+            extra["request_payload"] = {"inputs": request_inputs}
         resource_class = str(pipeline.get("resource_class", "")).strip().lower()
         if resource_class:
             extra["resource_class"] = resource_class
@@ -774,20 +905,23 @@ def pipelines():
         enriched["run_group_key"] = group_key
         ledger_runs.append(enriched)
 
-    latest_runs_by_workflow: dict[str, dict] = {}
+    latest_runs_by_pipeline_key: dict[str, dict] = {}
     for run in visible_runs:
-        latest_runs_by_workflow.setdefault(str(run.get("workflow", "")), run)
+        latest_runs_by_pipeline_key.setdefault(_run_group_key(run), run)
+        workflow = str(run.get("workflow", "")).strip()
+        if workflow:
+            latest_runs_by_pipeline_key.setdefault(f"workflow:{workflow}", run)
     visible_pipelines.sort(
         key=lambda item: (
-            latest_runs_by_workflow.get(str(item.get("workflow", ""))) is None,
-            -_run_timestamp(latest_runs_by_workflow.get(str(item.get("workflow", "")), {})).timestamp(),
+            _pipeline_latest_run(item, latest_runs_by_pipeline_key) is None,
+            -_run_timestamp(_pipeline_latest_run(item, latest_runs_by_pipeline_key) or {}).timestamp(),
             str(item.get("name", "")).lower(),
         )
     )
     selected_pipeline = next((item for item in visible_pipelines if item.get("id") == selected_pipeline_id), None)
     if not selected_pipeline and visible_pipelines:
         selected_pipeline = visible_pipelines[0]
-    selected_latest = latest_runs_by_workflow.get(str(selected_pipeline.get("workflow", ""))) if selected_pipeline else None
+    selected_latest = _pipeline_latest_run(selected_pipeline, latest_runs_by_pipeline_key) if selected_pipeline else None
 
     return render_template(
         "pipelines.html.j2",
@@ -798,7 +932,7 @@ def pipelines():
         selected_run_map=_pipeline_run_map(selected_pipeline, selected_latest),
         runs=ledger_runs[:12],
         raw_run_count=len(visible_runs),
-        latest_runs_by_workflow=latest_runs_by_workflow,
+        latest_runs_by_pipeline_key=latest_runs_by_pipeline_key,
         supported_workflows=supported_workflows,
         search_query=search_query,
         selected_tag=selected_tag,

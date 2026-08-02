@@ -4,7 +4,7 @@ set -euo pipefail
 portainer_url="${PORTAINER_URL:-https://127.0.0.1:9443}"
 portainer_user="${PORTAINER_USER:-admin}"
 endpoint_id="${PORTAINER_ENDPOINT_ID:-6}"
-image="${BKC_PROMOTE_IMAGE:-192.168.1.15:5001/blackknightcontroller/bkc:resources-drawio-cmdb-20260802085729}"
+image="${BKC_PROMOTE_IMAGE:-192.168.1.15:5001/blackknightcontroller/bkc:resources-pipeline-explainer-20260802092211}"
 services_csv="${BKC_PROMOTE_SERVICES:-bkc-alt_bkc,bkc-alt_worker}"
 
 if [[ -z "${PORTAINER_PASSWORD:-}" ]]; then
@@ -72,4 +72,3 @@ PY
 done < "${tmpdir}/service-map.tsv"
 
 echo "promotion_requested image=${image}"
-

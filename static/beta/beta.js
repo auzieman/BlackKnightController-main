@@ -1327,12 +1327,22 @@ ${data.label || data.id || ""}`;
             if (!response.ok) {
                 throw new Error(result.detail || result.error || `Draw.io export failed with HTTP ${response.status}`);
             }
+            if (!result.artifact_url) {
+                throw new Error("Draw.io export finished but did not return an artifact URL");
+            }
             button.textContent = "Export ready";
+            const download = document.createElement("a");
+            download.href = result.artifact_url;
+            download.download = "";
+            download.rel = "noopener";
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
             if (exportStatus) {
-                exportStatus.innerHTML = `Export ready · <a href="${escapeHtml(result.artifact_url || "#")}" target="_blank" rel="noopener">open Draw.io artifact</a> · scene ${escapeHtml(result.scene_hash || "")}`;
+                exportStatus.innerHTML = `Draw.io export ready · <a href="${escapeHtml(result.artifact_url)}" target="_blank" rel="noopener">open artifact</a> · <a href="${escapeHtml(result.artifact_url)}" download>download</a> · scene ${escapeHtml(result.scene_hash || "")}`;
             }
             actionTitle.textContent = "Draw.io export ready";
-            actionCopy.textContent = "BKC exported the visible resource scene as an editable diagrams.net artifact.";
+            actionCopy.textContent = "BKC exported the visible resource scene as an editable diagrams.net artifact and asked the browser to download it.";
             actionPayload.innerHTML = `<code>${syntaxJson(result)}</code>`;
         } catch (error) {
             console.error("BKC Draw.io export failed", error);
