@@ -5,7 +5,9 @@
 {% block page_heading %}Pipeline Run{% endblock %}
 
 {% block head_extra %}
+    {% if run.status not in ['complete', 'failed', 'blocked', 'cancelled'] %}
     <meta http-equiv="refresh" content="8">
+    {% endif %}
 {% endblock %}
 
 {% block content %}
@@ -86,6 +88,40 @@
                     <button class="button button-quiet" type="submit">Undeploy</button>
                 </form>
             {% endif %}
+        </div>
+    </section>
+
+    <section class="pipeline-ai-explainer top-gap" aria-label="Ollama run explainer">
+        <div>
+            <p class="eyebrow">Ollama explainer</p>
+            <h4>What ran, what changed, what proof matters</h4>
+            <p class="metric-copy">
+                Ask the lab model to summarize this specific run from the ledger, stage states, and known pipeline definition.
+            </p>
+        </div>
+        <div class="pipeline-ai-controls">
+            <label>
+                <span>model</span>
+                <select id="run-ollama-model">
+                    <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                    <option value="llama3.2:3b">llama3.2:3b</option>
+                    <option value="granite3.2-vision">granite3.2-vision</option>
+                    <option value="hemanth/diagramgenerator">diagramgenerator</option>
+                </select>
+            </label>
+            <button
+                class="button button-secondary"
+                id="run-ollama-explain"
+                type="button"
+                data-run-id="{{ run.id }}"
+                data-explain-url="{{ url_for('pipelines.pipeline_explain_api') }}"
+                data-drawio-url="{{ url_for('pipelines.pipeline_explain_drawio_api') }}"
+            >Explain run</button>
+            <button class="button button-quiet" id="run-ollama-copy" type="button">Copy markdown</button>
+            <button class="button button-quiet" id="run-ollama-drawio" type="button">Draw.io run</button>
+        </div>
+        <div id="run-ollama-output" class="pipeline-ai-output pipeline-ai-rendered" aria-live="polite">
+            <p>Select Explain run to generate a grounded summary of this execution.</p>
         </div>
     </section>
 
@@ -251,4 +287,93 @@
             {% endfor %}
         </section>
     {% endif %}
+
+    <script>
+        (() => {
+            const explainButton = document.getElementById("run-ollama-explain");
+            const copyButton = document.getElementById("run-ollama-copy");
+            const drawioButton = document.getElementById("run-ollama-drawio");
+            const output = document.getElementById("run-ollama-output");
+            const modelSelect = document.getElementById("run-ollama-model");
+            const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
+            let markdown = "";
+            if (!explainButton || !output || !modelSelect) return;
+            explainButton.addEventListener("click", async () => {
+                const originalText = explainButton.textContent;
+                explainButton.disabled = true;
+                explainButton.textContent = "Thinking…";
+                output.innerHTML = "<p>Asking Ollama to explain this specific run…</p>";
+                try {
+                    const response = await fetch(explainButton.dataset.explainUrl, {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json",
+                            "Content-Type": "application/json",
+                            ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+                        },
+                        body: JSON.stringify({
+                            run_id: explainButton.dataset.runId,
+                            model: modelSelect.value,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                    const source = data.source === "ollama" ? "Ollama" : "local fallback";
+                    markdown = `[${source} · ${data.model}]\n\n${data.explanation}`;
+                    output.innerHTML = `<p class="pipeline-ai-source">${source} · ${data.model}</p>${data.explanation_html || "<p>No rendered explanation returned.</p>"}`;
+                } catch (error) {
+                    output.innerHTML = `<p>Explainer failed cleanly: ${error.message}</p>`;
+                } finally {
+                    explainButton.disabled = false;
+                    explainButton.textContent = originalText;
+                }
+            });
+            copyButton?.addEventListener("click", async () => {
+                const originalText = copyButton.textContent;
+                try {
+                    await navigator.clipboard.writeText(markdown || output.textContent || "");
+                    copyButton.textContent = "Copied";
+                } catch (error) {
+                    copyButton.textContent = "Copy failed";
+                } finally {
+                    window.setTimeout(() => { copyButton.textContent = originalText; }, 1800);
+                }
+            });
+            drawioButton?.addEventListener("click", async () => {
+                const originalText = drawioButton.textContent;
+                drawioButton.disabled = true;
+                drawioButton.textContent = "Exporting…";
+                try {
+                    const response = await fetch(explainButton.dataset.drawioUrl, {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json",
+                            "Content-Type": "application/json",
+                            ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+                        },
+                        body: JSON.stringify({
+                            run_id: explainButton.dataset.runId,
+                            explanation: markdown,
+                        }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+                    const link = document.createElement("a");
+                    link.href = data.artifact_url;
+                    link.download = "";
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    drawioButton.textContent = "Draw.io ready";
+                } catch (error) {
+                    drawioButton.textContent = "Export failed";
+                } finally {
+                    window.setTimeout(() => {
+                        drawioButton.disabled = false;
+                        drawioButton.textContent = originalText;
+                    }, 2200);
+                }
+            });
+        })();
+    </script>
 {% endblock %}

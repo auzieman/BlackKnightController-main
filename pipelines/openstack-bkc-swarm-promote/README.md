@@ -23,7 +23,7 @@ The named lab BKC route points at the OpenStack swarm.
 
 ## Current validation
 
-The `resources-layout-guard-20260802095247` image was built on `bkc-build-01`, pushed to
+The `pipeline-explainer-drawio-20260802100435` image was built on `bkc-build-01`, pushed to
 the lab registry, and promoted to the OpenStack BKC services after the
 IONOS graph/search cleanup pass. It should be promoted to:
 

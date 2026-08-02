@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import shlex
+import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
+from html import escape
+from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -43,18 +49,28 @@ def pipeline_catalog_signature_api():
 def pipeline_explain_api():
     payload = request.get_json(silent=True) or {}
     pipeline_id = str(payload.get("pipeline_id") or "").strip()
-    pipeline = pipeline_by_id(pipeline_id)
-    if not pipeline:
-        return jsonify({"error": "pipeline_not_found"}), 404
-    runs = load_runs()
-    latest_runs_by_pipeline_key = {
-        _run_group_key(run): {
-            **run,
-            "stage_summary": _stage_summary(run),
+    run_id = str(payload.get("run_id") or "").strip()
+    latest = None
+    pipeline = None
+    if run_id:
+        latest = get_run(run_id)
+        if not latest or latest.get("tenant_slug") != get_effective_tenant_slug():
+            return jsonify({"error": "run_not_found"}), 404
+        latest = {**latest, "stage_summary": _stage_summary(latest)}
+        pipeline = pipeline_by_id(str(latest.get("extra", {}).get("pipeline_id", ""))) or _pipeline_from_run(latest)
+    else:
+        pipeline = pipeline_by_id(pipeline_id)
+        if not pipeline:
+            return jsonify({"error": "pipeline_not_found"}), 404
+        runs = load_runs()
+        latest_runs_by_pipeline_key = {
+            _run_group_key(run): {
+                **run,
+                "stage_summary": _stage_summary(run),
+            }
+            for run in runs
         }
-        for run in runs
-    }
-    latest = _pipeline_latest_run(pipeline, latest_runs_by_pipeline_key)
+        latest = _pipeline_latest_run(pipeline, latest_runs_by_pipeline_key)
     model = str(payload.get("model") or "qwen2.5-coder:1.5b")
     host = str(payload.get("ollama_host") or "10.20.0.240")
     try:
@@ -67,10 +83,39 @@ def pipeline_explain_api():
     return jsonify({
         "status": "ok",
         "pipeline_id": pipeline_id,
+        "run_id": run_id,
         "model": model,
         "source": source,
         "explanation": explanation,
+        "explanation_html": _render_explainer_markdown(explanation),
     })
+
+
+@pipelines_blueprint.post("/api/v1/pipelines/explain-drawio")
+def pipeline_explain_drawio_api():
+    payload = request.get_json(silent=True) or {}
+    pipeline_id = str(payload.get("pipeline_id") or "").strip()
+    run_id = str(payload.get("run_id") or "").strip()
+    run = get_run(run_id) if run_id else None
+    if run and run.get("tenant_slug") != get_effective_tenant_slug():
+        return jsonify({"error": "run_not_found"}), 404
+    pipeline = None
+    if run:
+        pipeline = pipeline_by_id(str(run.get("extra", {}).get("pipeline_id", ""))) or _pipeline_from_run(run)
+    elif pipeline_id:
+        pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        return jsonify({"error": "pipeline_not_found"}), 404
+    explanation = str(payload.get("explanation") or "").strip()
+    run_map = _pipeline_run_map(pipeline, {**run, "stage_summary": _stage_summary(run)} if run else None)
+    result = _export_pipeline_explainer_drawio(
+        pipeline,
+        run_map,
+        explanation,
+        Path(current_app.static_folder or "static") / "exports",
+        tenant_slug=get_effective_tenant_slug(),
+    )
+    return jsonify(result)
 
 
 PIPELINE_TAGS = (
@@ -192,6 +237,213 @@ def _pipeline_latest_run(pipeline: dict, latest_runs: dict[str, dict]) -> dict |
     if workflow:
         return latest_runs.get(f"workflow:{workflow}")
     return None
+
+
+def _pipeline_from_run(run: dict) -> dict:
+    workflow = str(run.get("workflow") or "").strip()
+    stages = [stage.get("name") for stage in run.get("stages", []) if stage.get("name")]
+    return {
+        "id": str(run.get("extra", {}).get("pipeline_id") or workflow or run.get("id")),
+        "name": str(run.get("extra", {}).get("pipeline_name") or workflow or "Pipeline run"),
+        "repo": str(run.get("repo") or "run-ledger"),
+        "workflow": workflow,
+        "description": str(run.get("notes") or "Run reconstructed from the automation ledger."),
+        "notes": str(run.get("notes") or ""),
+        "tags": ["run-ledger"],
+        "stages": stages,
+        "actions": [],
+    }
+
+
+def _render_inline_markdown(text: str) -> str:
+    rendered = escape(text)
+    rendered = re.sub(r"`([^`]+)`", r"<code>\1</code>", rendered)
+    rendered = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", rendered)
+    return rendered
+
+
+def _render_explainer_markdown(markdown: str) -> str:
+    """Render a small, safe markdown subset for Ollama operator briefs."""
+    blocks: list[str] = []
+    list_items: list[str] = []
+    in_code = False
+    code_lines: list[str] = []
+
+    def flush_list() -> None:
+        nonlocal list_items
+        if list_items:
+            blocks.append("<ul>" + "".join(f"<li>{item}</li>" for item in list_items) + "</ul>")
+            list_items = []
+
+    for raw_line in (markdown or "").splitlines():
+        line = raw_line.rstrip()
+        if line.strip().startswith("```"):
+            if in_code:
+                blocks.append("<pre><code>" + escape("\n".join(code_lines)) + "</code></pre>")
+                code_lines = []
+                in_code = False
+            else:
+                flush_list()
+                in_code = True
+            continue
+        if in_code:
+            code_lines.append(line)
+            continue
+        stripped = line.strip()
+        if not stripped:
+            flush_list()
+            continue
+        if stripped.startswith("### "):
+            flush_list()
+            blocks.append(f"<h4>{_render_inline_markdown(stripped[4:])}</h4>")
+        elif stripped.startswith("## "):
+            flush_list()
+            blocks.append(f"<h3>{_render_inline_markdown(stripped[3:])}</h3>")
+        elif stripped.startswith("# "):
+            flush_list()
+            blocks.append(f"<h3>{_render_inline_markdown(stripped[2:])}</h3>")
+        elif stripped.startswith(("- ", "* ")):
+            list_items.append(_render_inline_markdown(stripped[2:]))
+        else:
+            flush_list()
+            blocks.append(f"<p>{_render_inline_markdown(stripped)}</p>")
+    flush_list()
+    if in_code and code_lines:
+        blocks.append("<pre><code>" + escape("\n".join(code_lines)) + "</code></pre>")
+    return "\n".join(blocks)
+
+
+def _drawio_cell(root: ET.Element, cell_id: str, value: str = "", style: str = "", parent: str = "1", *, vertex: bool = False, edge: bool = False, source: str = "", target: str = "") -> ET.Element:
+    attrs = {"id": cell_id, "parent": parent}
+    if value:
+        attrs["value"] = value
+    if style:
+        attrs["style"] = style
+    if vertex:
+        attrs["vertex"] = "1"
+    if edge:
+        attrs["edge"] = "1"
+    if source:
+        attrs["source"] = source
+    if target:
+        attrs["target"] = target
+    return ET.SubElement(root, "mxCell", attrs)
+
+
+def _drawio_geom(parent: ET.Element, x: float, y: float, width: float, height: float, as_: str = "geometry") -> None:
+    ET.SubElement(parent, "mxGeometry", {
+        "x": str(round(x, 2)),
+        "y": str(round(y, 2)),
+        "width": str(round(width, 2)),
+        "height": str(round(height, 2)),
+        "as": as_,
+    })
+
+
+def _export_pipeline_explainer_drawio(pipeline: dict, run_map: dict, explanation: str, output_dir: Path, *, tenant_slug: str = "lab") -> dict:
+    stages = list(run_map.get("stages") or [])[:28]
+    seed = json.dumps({
+        "pipeline": pipeline.get("id"),
+        "run": (run_map.get("run") or {}).get("id"),
+        "stages": stages,
+        "explanation": explanation[:1200],
+    }, sort_keys=True, default=str)
+    scene_hash = hashlib.sha256(seed.encode()).hexdigest()[:16]
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    file_name = f"bkc-pipeline-explainer-{tenant_slug}-{stamp}-{scene_hash}.drawio"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / file_name
+
+    mxfile = ET.Element("mxfile", {
+        "host": "app.diagrams.net",
+        "modified": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "agent": "BlackKnightController pipeline explainer",
+        "version": "24.7.17",
+    })
+    diagram = ET.SubElement(mxfile, "diagram", {"id": scene_hash, "name": "BKC Pipeline Explainer"})
+    model = ET.SubElement(diagram, "mxGraphModel", {
+        "dx": "1800",
+        "dy": "1200",
+        "grid": "1",
+        "gridSize": "10",
+        "guides": "1",
+        "tooltips": "1",
+        "connect": "1",
+        "arrows": "1",
+        "fold": "1",
+        "page": "1",
+        "pageScale": "1",
+        "pageWidth": "1800",
+        "pageHeight": "1200",
+        "math": "0",
+        "shadow": "0",
+    })
+    root = ET.SubElement(model, "root")
+    _drawio_cell(root, "0", parent="")
+    _drawio_cell(root, "1", parent="0")
+
+    title = _drawio_cell(
+        root,
+        "title",
+        f"<b>{escape(str(pipeline.get('name') or pipeline.get('id') or 'Pipeline'))}</b><br><font style='font-size:11px;color:#64748b'>workflow {escape(str(pipeline.get('workflow') or ''))} · scene {scene_hash}</font>",
+        "text;html=1;strokeColor=none;fillColor=none;fontSize=22;fontColor=#0f172a;align=left;",
+        vertex=True,
+    )
+    _drawio_geom(title, 40, 26, 920, 62)
+
+    brief_text = escape((explanation or "No explainer text supplied.")[:1800]).replace("\n", "<br>")
+    brief = _drawio_cell(
+        root,
+        "brief",
+        f"<b>Operator brief</b><br>{brief_text}",
+        "rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#1f2937;fontSize=12;align=left;verticalAlign=top;spacing=10;",
+        vertex=True,
+    )
+    _drawio_geom(brief, 40, 110, 430, 560)
+
+    previous_id = ""
+    for index, stage in enumerate(stages):
+        row = index % 12
+        column = index // 12
+        x = 540 + column * 390
+        y = 115 + row * 88
+        status = str(stage.get("status") or "planned").lower()
+        fill = "#d5e8d4" if status == "complete" else "#ffe6cc" if status in {"active", "running", "queued"} else "#f8cecc" if status in {"failed", "blocked"} else "#fff2cc"
+        stroke = "#82b366" if status == "complete" else "#d79b00" if status in {"active", "running", "queued", "planned"} else "#b85450"
+        label = escape(str(stage.get("name") or f"stage {index + 1}"))
+        detail = escape(str(stage.get("detail") or stage.get("action") or "")[:120])
+        target = escape(", ".join(str(item) for item in (stage.get("targets") or [])[:4]))
+        value = f"<b>{index + 1}. {label}</b><br><font style='font-size:10px;color:#52606d'>{escape(status)} · {target}</font><br><font style='font-size:10px'>{detail}</font>"
+        cell_id = f"stage:{index}"
+        cell = _drawio_cell(
+            root,
+            cell_id,
+            value,
+            f"rounded=1;whiteSpace=wrap;html=1;arcSize=8;shadow=1;fillColor={fill};strokeColor={stroke};fontColor=#1f2937;fontSize=12;align=left;verticalAlign=top;spacing=8;",
+            vertex=True,
+        )
+        _drawio_geom(cell, x, y, 320, 66)
+        if previous_id:
+            edge = _drawio_cell(
+                root,
+                f"edge:{index}",
+                "",
+                "edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#64748b;endArrow=block;",
+                edge=True,
+                source=previous_id,
+                target=cell_id,
+            )
+            ET.SubElement(edge, "mxGeometry", {"relative": "1", "as": "geometry"})
+        previous_id = cell_id
+
+    ET.ElementTree(mxfile).write(output_path, encoding="utf-8", xml_declaration=True)
+    return {
+        "status": "ready",
+        "scene_hash": scene_hash,
+        "stage_count": len(stages),
+        "artifact_path": str(output_path),
+        "artifact_url": f"/static/exports/{file_name}",
+    }
 
 
 def _rx_demo_undeploy_workflow(workflow: str) -> str | None:

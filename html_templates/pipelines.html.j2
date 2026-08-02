@@ -133,13 +133,17 @@
                                 type="button"
                                 data-pipeline-id="{{ selected_pipeline.id }}"
                                 data-explain-url="{{ url_for('pipelines.pipeline_explain_api') }}"
+                                data-drawio-url="{{ url_for('pipelines.pipeline_explain_drawio_api') }}"
                             >Explain</button>
                             <button class="button button-quiet" id="pipeline-ollama-copy" type="button">Copy brief</button>
+                            <button class="button button-quiet" id="pipeline-ollama-drawio" type="button">Draw.io brief</button>
                             {% if latest %}
                                 <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_run_detail', run_id=latest.id) }}">Open latest run</a>
                             {% endif %}
                         </div>
-                        <pre id="pipeline-ollama-output" class="pipeline-ai-output" aria-live="polite">Select Explain to generate a grounded, pipeline-specific operator brief.</pre>
+                        <div id="pipeline-ollama-output" class="pipeline-ai-output pipeline-ai-rendered" aria-live="polite">
+                            <p>Select Explain to generate a grounded, pipeline-specific operator brief.</p>
+                        </div>
                     </section>
 
                     <div class="tab-strip pipeline-tabs">
@@ -450,15 +454,17 @@
         (function () {
             const explainButton = document.getElementById("pipeline-ollama-explain");
             const copyButton = document.getElementById("pipeline-ollama-copy");
+            const drawioButton = document.getElementById("pipeline-ollama-drawio");
             const explainOutput = document.getElementById("pipeline-ollama-output");
             const modelSelect = document.getElementById("pipeline-ollama-model");
             const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
+            let explainerMarkdown = "";
             if (explainButton && explainOutput && modelSelect) {
                 explainButton.addEventListener("click", async () => {
                     const originalText = explainButton.textContent;
                     explainButton.disabled = true;
                     explainButton.textContent = "Thinking…";
-                    explainOutput.textContent = "Asking the lab Ollama host for a short operator brief…";
+                    explainOutput.innerHTML = "<p>Asking the lab Ollama host for a short operator brief…</p>";
                     try {
                         const response = await fetch(explainButton.dataset.explainUrl, {
                             method: "POST",
@@ -477,9 +483,10 @@
                             throw new Error(data.error || `HTTP ${response.status}`);
                         }
                         const source = data.source === "ollama" ? "Ollama" : "local fallback";
-                        explainOutput.textContent = `[${source} · ${data.model}]\n\n${data.explanation}`;
+                        explainerMarkdown = `[${source} · ${data.model}]\n\n${data.explanation}`;
+                        explainOutput.innerHTML = `<p class="pipeline-ai-source">${source} · ${data.model}</p>${data.explanation_html || "<p>No rendered explanation returned.</p>"}`;
                     } catch (error) {
-                        explainOutput.textContent = `Explainer failed cleanly: ${error.message}`;
+                        explainOutput.innerHTML = `<p>Explainer failed cleanly: ${error.message}</p>`;
                     } finally {
                         explainButton.disabled = false;
                         explainButton.textContent = originalText;
@@ -488,7 +495,7 @@
             }
             if (copyButton && explainOutput) {
                 copyButton.addEventListener("click", async () => {
-                    const text = explainOutput.textContent || "";
+                    const text = explainerMarkdown || explainOutput.textContent || "";
                     if (!text.trim()) {
                         return;
                     }
@@ -502,6 +509,45 @@
                         window.setTimeout(() => {
                             copyButton.textContent = originalText;
                         }, 1800);
+                    }
+                });
+            }
+            if (drawioButton && explainButton) {
+                drawioButton.addEventListener("click", async () => {
+                    const originalText = drawioButton.textContent;
+                    drawioButton.disabled = true;
+                    drawioButton.textContent = "Exporting…";
+                    try {
+                        const response = await fetch(explainButton.dataset.drawioUrl, {
+                            method: "POST",
+                            headers: {
+                                "Accept": "application/json",
+                                "Content-Type": "application/json",
+                                ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+                            },
+                            body: JSON.stringify({
+                                pipeline_id: explainButton.dataset.pipelineId,
+                                explanation: explainerMarkdown,
+                            }),
+                        });
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data.error || `HTTP ${response.status}`);
+                        }
+                        const link = document.createElement("a");
+                        link.href = data.artifact_url;
+                        link.download = "";
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        drawioButton.textContent = "Draw.io ready";
+                    } catch (error) {
+                        drawioButton.textContent = "Export failed";
+                    } finally {
+                        window.setTimeout(() => {
+                            drawioButton.disabled = false;
+                            drawioButton.textContent = originalText;
+                        }, 2200);
                     }
                 });
             }

@@ -817,6 +817,57 @@ a {
   overflow-wrap: anywhere;
 }
 
+.pipeline-ai-rendered {
+  color: #d8e6ff;
+  white-space: normal;
+  line-height: 1.58;
+}
+
+.pipeline-ai-rendered .pipeline-ai-source {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 5px 9px;
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.1);
+  color: #c7fff7;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.pipeline-ai-rendered h3,
+.pipeline-ai-rendered h4 {
+  margin: 12px 0 6px;
+  color: #f8fafc;
+}
+
+.pipeline-ai-rendered p {
+  margin: 0 0 10px;
+}
+
+.pipeline-ai-rendered ul {
+  margin: 0 0 12px 1.2rem;
+  padding: 0;
+}
+
+.pipeline-ai-rendered li {
+  margin: 4px 0;
+}
+
+.pipeline-ai-rendered code {
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #d9f99d;
+}
+
+.pipeline-ai-rendered pre {
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 12, 0.92);
+}
+
 .pipeline-console-section {
   margin-top: 18px;
   padding: 16px;
