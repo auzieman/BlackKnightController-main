@@ -21,7 +21,9 @@ def main() -> None:
     from services.pipeline_catalog import pipeline_by_id
     from services.pipeline_executor import workflow_is_supported, workflow_job_timeout
 
-    pipeline_id = "micro-blog-esxi-lab-canary-refresh"
+    pipeline_id = os.environ.get("BKC_PIPELINE_ID", "micro-blog-esxi-lab-canary-refresh").strip()
+    if not pipeline_id:
+        pipeline_id = "micro-blog-esxi-lab-canary-refresh"
     app = bkc_server.app
     with app.app_context():
         pipeline = pipeline_by_id(pipeline_id)
@@ -45,7 +47,7 @@ def main() -> None:
             repo=pipeline.get("repo", "BlackKnightController"),
             workflow=workflow,
             ref=os.environ.get("BKC_PIPELINE_REF", "refs/heads/beta/company-mind-workbench-20260726"),
-            commit=os.environ.get("BKC_PIPELINE_COMMIT", "483dcc2"),
+            commit=os.environ.get("BKC_PIPELINE_COMMIT", "unknown"),
             notes=pipeline.get("notes", ""),
             extra=extra,
         )

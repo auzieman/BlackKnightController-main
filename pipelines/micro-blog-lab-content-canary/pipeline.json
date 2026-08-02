@@ -1,0 +1,31 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "micro-blog-lab-content-canary",
+  "name": "MICRO BLOG LAB — Content Canary",
+  "status": "candidate",
+  "workflow": "micro-blog-lab-content-canary",
+  "resource_class": "small",
+  "owner": "micro-blog",
+  "repo": "BlackKnightController",
+  "summary": "Refresh the existing lab micro-blog content by copying markdown/assets, calling the filesystem sync API, and validating proof strings. This is not an image rebuild or stack redeploy.",
+  "tags": ["micro-blog", "lab", "content", "canary", "bkc-channel", "auzietek", "blackknightcontroller", "repeatable", "candidate", "content-only"],
+  "targets": {
+    "lab_service": "service:micro-blog-lab",
+    "lab_host": "swarm1.lab.auzietek.com",
+    "content_source": "repo:bkc-channel",
+    "content_engine": "repo:micro-blog"
+  },
+  "inputs": {
+    "source_content_manifest": {"required": false, "default": ""},
+    "allow_content_reset": {"required": false, "default": false},
+    "lab_url": {"required": false, "default": "http://swarm1.lab.auzietek.com:8091"},
+    "expected_lanes": {"required": false, "default": ["auzietek", "blackknight", "linux", "retro"]}
+  },
+  "stages": [
+    {"id": "sync-content-files-to-lab", "action": "micro_blog.content.copy_tree_to_lab_nodes", "transport": "ssh+tar", "risk": "medium", "timeout_seconds": 600},
+    {"id": "run-filesystem-sync-api", "action": "micro_blog.content.filesystem_sync_api", "transport": "http-api", "risk": "low", "timeout_seconds": 180},
+    {"id": "validate-lab-content-routes", "action": "http.content.proof_strings", "transport": "http", "risk": "low", "timeout_seconds": 240},
+    {"id": "record-content-refresh-fragment", "action": "fragments.micro_blog.content_refresh.record", "transport": "internal", "risk": "low", "timeout_seconds": 60}
+  ],
+  "notes": "This lane is intentionally lab-first and repeatable. It updates persistent content only: no image build, no Swarm service update, no stack redeploy. Reset/import destructive behavior belongs in a separate explicitly named pipeline."
+}

@@ -1,0 +1,67 @@
+{
+  "pipeline_id": "micro-blog-lab-content-canary",
+  "build_host": "10.20.0.233",
+  "build_user": "admin-deploy",
+  "source_content_path": "/var/lib/bkc-builds/src/micro-blog/content",
+  "target_manager_host": "10.20.0.121",
+  "target_user": "admin-deploy",
+  "target_content_path": "/srv/micro-blog/content",
+  "target_node_hosts": [
+    "10.20.0.121",
+    "10.20.0.122",
+    "10.20.0.123",
+    "10.20.0.124",
+    "10.20.0.125"
+  ],
+  "api_internal_url": "http://10.20.0.121:18080",
+  "filesystem_sync_subdir": "posts/public-lanes",
+  "sync_mode": "update",
+  "theme_variant": "midnight",
+  "lab_host": "swarm1.lab.auzietek.com",
+  "lab_url": "http://swarm1.lab.auzietek.com:8091",
+  "remote_user": "root",
+  "remote_content_path": "/srv/nfs/swarm/micro-blog-lab-content",
+  "active_swarm_content_path": "/srv/micro-blog/content",
+  "content_sync_note": "Swarm bind mounts are node-local. Sync content to every node that can run blog-api/blog-ui, or constrain those services to nodes with the mounted content path. 2026-08-02 lab proof: blog-ui on 10.20.0.123 and blog-api on 10.20.0.125 needed the content tree, not only the manager.",
+  "known_live_content_nodes": [
+    "10.20.0.123",
+    "10.20.0.125"
+  ],
+  "source_content_manifest": "",
+  "allow_content_reset": false,
+  "compose_or_stack": "docker-swarm",
+  "expected_lanes": ["auzietek", "blackknight", "linux", "retro"],
+  "lab_smoke_urls": [
+    "http://swarm1.lab.auzietek.com:8091/",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=auzietek",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=blackknight",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=linux",
+    "http://swarm1.lab.auzietek.com:8091/blog?lane=retro"
+  ],
+  "lab_review_urls": [
+    "http://swarm1.lab.auzietek.com:8091/post/blackknightcontroller-company-mind-explains-itself?lane=blackknight",
+    "http://swarm1.lab.auzietek.com:8091/post/auzietek-human-led-aiops-leadership?lane=auzietek"
+  ],
+  "proof_strings": [
+    {
+      "path": "/",
+      "contains": "Human-first engineering for cleaner systems"
+    },
+    {
+      "path": "/articles",
+      "contains": "Articles, Proof, and Tutorial Lanes"
+    },
+    {
+      "path": "/blog?lane=linux",
+      "contains": "Linux find regex without long command chains"
+    },
+    {
+      "path": "/blog?lane=retro",
+      "contains": "Retro computing lessons for modern engineers"
+    },
+    {
+      "path": "/post/blackknightcontroller-company-mind-explains-itself?lane=blackknight",
+      "contains": "Company Mind"
+    }
+  ]
+}

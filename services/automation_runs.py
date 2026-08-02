@@ -589,6 +589,13 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
             "refresh-esxi-lab-canary-from-repo",
             "record-micro-blog-known-good-fragment",
         ]
+    if normalized == "micro-blog-lab-content-canary":
+        return [
+            "sync-content-files-to-lab",
+            "run-filesystem-sync-api",
+            "validate-lab-content-routes",
+            "record-content-refresh-fragment",
+        ]
     if normalized == "lab-demo":
         return [
             "repo-sync",

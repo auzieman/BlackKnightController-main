@@ -3551,6 +3551,37 @@ WORKFLOW_DEFINITIONS["micro-blog-esxi-lab-canary-refresh"] = {
     ],
     "complete_message": "Micro-blog ESXi lab canary refresh completed and validated.",
 }
+WORKFLOW_DEFINITIONS["micro-blog-lab-content-canary"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "sync-content-files-to-lab",
+            "kind": "micro-blog-content-sync-only",
+            "active": "Copying the staged micro-blog content tree to the ESXi lab swarm nodes without rebuilding or restarting the app runtime.",
+            "timeout": 600,
+        },
+        {
+            "name": "run-filesystem-sync-api",
+            "kind": "micro-blog-filesystem-sync-api",
+            "active": "Calling the micro-blog filesystem sync API so copied markdown/assets become published content.",
+            "timeout": 180,
+        },
+        {
+            "name": "validate-lab-content-routes",
+            "kind": "micro-blog-content-proof",
+            "active": "Validating the lab edge routes and expected proof strings after content sync.",
+            "timeout": 240,
+        },
+        {
+            "name": "record-content-refresh-fragment",
+            "kind": "micro-blog-content-fragment-note",
+            "active": "Recording the content-only refresh receipt and guardrail.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Micro-blog lab content canary synced and validated without a runtime redeploy.",
+}
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
     "settings_optional": True,
@@ -9168,6 +9199,10 @@ def _micro_blog_context(run_id: str) -> tuple[dict, dict, dict]:
     return _folder_pipeline_context("micro-blog-swarm-compose", _run_request_inputs(run_id))
 
 
+def _micro_blog_content_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("micro-blog-lab-content-canary", _run_request_inputs(run_id))
+
+
 def _micro_blog_remote(run_id: str, command: str, *, timeout: int = 300, host_override: str = "") -> str:
     _, _, values = _micro_blog_context(run_id)
     host = str(host_override or values.get("target_manager_host") or "10.20.0.121").strip()
@@ -9660,6 +9695,163 @@ def _run_micro_blog_note(run_id: str, stage_name: str, detail: str, payload: dic
     if payload:
         append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
     _set_stage(run_id, stage_name, "complete", detail)
+
+
+def _run_micro_blog_content_sync_only(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_content_context(run_id)
+    build_host = str(values.get("build_host") or "10.20.0.233").strip()
+    build_user = str(values.get("build_user") or "admin-deploy").strip()
+    source_content_path = str(values.get("source_content_path") or "/var/lib/bkc-builds/src/micro-blog/content").rstrip("/")
+    target_content_path = str(values.get("target_content_path") or "/srv/micro-blog/content").rstrip("/")
+    target_user = str(values.get("target_user") or "admin-deploy").strip()
+    target_hosts = values.get("target_node_hosts")
+    if not isinstance(target_hosts, list) or not target_hosts:
+        target_hosts = [str(values.get("target_manager_host") or "10.20.0.121")]
+    target_hosts = [str(item).strip() for item in target_hosts if str(item).strip()]
+    if not build_host or not build_user or not target_hosts:
+        raise PipelineExecutionError("micro-blog content sync requires build_host/build_user and target_node_hosts.")
+
+    host_lines = "\n".join(shlex.quote(host) for host in target_hosts)
+    command = f"""
+set -euo pipefail
+source_content_path={shlex.quote(source_content_path)}
+target_content_path={shlex.quote(target_content_path)}
+target_user={shlex.quote(target_user)}
+known_hosts=/tmp/bkc-micro-blog-content-known-hosts
+test -d "$source_content_path"
+find "$source_content_path" -maxdepth 2 -type f | sort | sed -n '1,60p'
+while IFS= read -r host; do
+  [ -n "$host" ] || continue
+  echo "+ content sync $host:$target_content_path"
+  tar -C "$source_content_path" -cf - . |
+    ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile="$known_hosts" "$target_user@$host" \
+      "sudo mkdir -p '$target_content_path' && sudo tar -C '$target_content_path' -xf - && sudo chown -R root:root '$target_content_path'"
+done <<'BKC_TARGET_HOSTS'
+{host_lines}
+BKC_TARGET_HOSTS
+echo content-sync-complete nodes={len(target_hosts)} source="$source_content_path" target="$target_content_path"
+"""
+    out = run_remote_command(host=build_host, user=build_user, command=command, timeout=600)
+    _store_run_extra(
+        run_id,
+        {
+            "micro_blog_content_sync": {
+                "mode": "copy-update-no-delete",
+                "build_host": build_host,
+                "source_content_path": source_content_path,
+                "target_content_path": target_content_path,
+                "target_node_hosts": target_hosts,
+            }
+        },
+    )
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog content files copied to lab swarm node content paths without runtime redeploy.")
+
+
+def _run_micro_blog_filesystem_sync_api(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_content_context(run_id)
+    manager_host = str(values.get("target_manager_host") or "10.20.0.121").strip()
+    target_user = str(values.get("target_user") or "admin-deploy").strip()
+    api_url = str(values.get("api_internal_url") or "http://127.0.0.1:18080").strip()
+    content_subdir = str(values.get("filesystem_sync_subdir") or "posts/public-lanes").strip()
+    sync_mode = str(values.get("sync_mode") or "update").strip()
+    status = str(values.get("status") or "published").strip()
+    theme_variant = str(values.get("theme_variant") or "midnight").strip()
+    command = f"""
+set -euo pipefail
+api_url={shlex.quote(api_url)}
+content_subdir={shlex.quote(content_subdir)}
+sync_mode={shlex.quote(sync_mode)}
+status={shlex.quote(status)}
+theme_variant={shlex.quote(theme_variant)}
+env_file=/srv/micro-blog-stack/.env
+admin_email=""
+if [ -f "$env_file" ]; then
+  admin_email="$(grep -E '^ADMIN_EMAIL=' "$env_file" | tail -n 1 | cut -d= -f2- || true)"
+fi
+admin_email="${{admin_email:-admin@example.invalid}}"
+payload="$(ADMIN_EMAIL="$admin_email" CONTENT_SUBDIR="$content_subdir" SYNC_MODE="$sync_mode" STATUS="$status" THEME_VARIANT="$theme_variant" python3 - <<'PY'
+import json
+import os
+print(json.dumps({
+    "admin_email": os.environ["ADMIN_EMAIL"],
+    "root_path": "/content",
+    "content_subdir": os.environ["CONTENT_SUBDIR"],
+    "sync_mode": os.environ["SYNC_MODE"],
+    "status": os.environ["STATUS"],
+    "theme_variant": os.environ["THEME_VARIANT"],
+}))
+PY
+)"
+curl -fsS -X POST "$api_url/admin/bootstrap/filesystem-sync" \
+  -H 'Content-Type: application/json' \
+  --data "$payload"
+"""
+    out = run_remote_command(host=manager_host, user=target_user, command=command, timeout=180)
+    _store_run_extra(
+        run_id,
+        {
+            "micro_blog_filesystem_sync": {
+                "api_url": api_url,
+                "content_subdir": content_subdir,
+                "sync_mode": sync_mode,
+                "status": status,
+                "theme_variant": theme_variant,
+            }
+        },
+    )
+    append_event(run_id, "info", stage_name, out[-4000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog filesystem sync API accepted the content refresh request.")
+
+
+def _run_micro_blog_content_proof(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_content_context(run_id)
+    lab_url = str(values.get("lab_url") or values.get("edge_url") or "http://swarm1.lab.auzietek.com:8091").rstrip("/")
+    smoke_urls = values.get("lab_smoke_urls") or values.get("public_smoke_urls") or []
+    proof_strings = values.get("proof_strings") or []
+    checked: list[dict] = []
+
+    for url in [str(item).strip() for item in smoke_urls if str(item).strip()]:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            status = int(getattr(response, "status", 200))
+            response.read(2048)
+        if status >= 400:
+            raise PipelineExecutionError(f"Smoke URL returned HTTP {status}: {url}")
+        checked.append({"url": url, "status": status})
+
+    for proof in proof_strings:
+        if not isinstance(proof, dict):
+            continue
+        path = str(proof.get("path") or "").strip()
+        needle = str(proof.get("contains") or "").strip()
+        if not path or not needle:
+            continue
+        url = path if path.startswith("http://") or path.startswith("https://") else f"{lab_url}{path}"
+        with urllib.request.urlopen(url, timeout=20) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            status = int(getattr(response, "status", 200))
+        if status >= 400:
+            raise PipelineExecutionError(f"Proof URL returned HTTP {status}: {url}")
+        if needle not in body:
+            raise PipelineExecutionError(f"Missing proof string {needle!r} at {url}")
+        checked.append({"url": url, "contains": needle, "status": status})
+
+    _store_run_extra(run_id, {"micro_blog_content_proof": checked})
+    append_event(run_id, "info", stage_name, json.dumps(checked, sort_keys=True)[-6000:])
+    _set_stage(run_id, stage_name, "complete", f"Validated {len(checked)} micro-blog lab route/proof checks.")
+
+
+def _run_micro_blog_content_fragment_note(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_content_context(run_id)
+    payload = {
+        "rating": "candidate-known-good",
+        "contract": "Content-only micro-blog refresh copies the mounted content tree, calls /admin/bootstrap/filesystem-sync, validates proof strings, and does not rebuild images or update Swarm services.",
+        "source_content_path": values.get("source_content_path") or "/var/lib/bkc-builds/src/micro-blog/content",
+        "target_content_path": values.get("target_content_path") or "/srv/micro-blog/content",
+        "sync_mode": values.get("sync_mode") or "update",
+        "lab_url": values.get("lab_url") or "http://swarm1.lab.auzietek.com:8091",
+    }
+    _run_micro_blog_note(run_id, stage_name, "Recorded content-only micro-blog refresh fragment.", payload)
 
 
 def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> None:
@@ -13675,6 +13867,22 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "micro-blog-esxi-lab-canary-refresh-script":
             _run_micro_blog_esxi_lab_canary_refresh(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-content-sync-only":
+            _run_micro_blog_content_sync_only(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-filesystem-sync-api":
+            _run_micro_blog_filesystem_sync_api(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-content-proof":
+            _run_micro_blog_content_proof(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-content-fragment-note":
+            _run_micro_blog_content_fragment_note(run_id, stage_name)
             continue
 
         if kind == "micro-blog-lab-journal-note":
