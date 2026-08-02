@@ -9670,10 +9670,8 @@ def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> Non
     if not script_path.exists():
         raise PipelineExecutionError(f"Refresh helper script is missing: {script_path}")
 
-    source_path = Path(str(values.get("source_path") or "/home/auzieman/Projects/micro-blog")).expanduser().resolve()
-    if not source_path.exists():
-        raise PipelineExecutionError(f"micro-blog source path is missing: {source_path}")
-
+    source_path_raw = str(values.get("source_path") or "/home/auzieman/Projects/micro-blog").strip()
+    source_path = Path(source_path_raw).expanduser()
     source_commit = str(values.get("source_commit") or "").strip()
     tag_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(values.get("image_tag_prefix") or "lab-canary")).strip("-")
     if not tag_prefix:
@@ -9683,16 +9681,9 @@ def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> Non
     image_tag = str(values.get("image_tag") or f"{tag_prefix}-{commit_part}-{run_part}").strip()
 
     content_overlay = str(values.get("content_overlay_dir") or "").strip()
-    command = [str(script_path), str(source_path), image_tag]
-    if content_overlay:
-        overlay_path = Path(content_overlay).expanduser().resolve()
-        if not overlay_path.exists():
-            raise PipelineExecutionError(f"Content overlay path is missing: {overlay_path}")
-        command.append(str(overlay_path))
-
-    env = os.environ.copy()
-    if str(values.get("target_password") or "").strip() and not env.get("BKC_ESXI_SWARM_PASSWORD"):
-        env["BKC_ESXI_SWARM_PASSWORD"] = str(values.get("target_password"))
+    build_host = str(values.get("build_host") or "").strip()
+    build_user = str(values.get("build_user") or "admin-deploy").strip()
+    build_script_path = str(values.get("build_script_path") or f"/tmp/bkc-{pipeline_id}-{run_part}.sh").strip()
 
     append_event(
         run_id,
@@ -9706,41 +9697,84 @@ def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> Non
                 "source_commit": source_commit,
                 "image_tag": image_tag,
                 "edge_url": values.get("edge_url") or "http://swarm1.lab.auzietek.com:8091",
+                "build_host": build_host or "local",
             },
             sort_keys=True,
         ),
     )
-    try:
-        completed = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=int(values.get("script_timeout_seconds") or 2400),
-            cwd=str(source_path),
-            env=env,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise PipelineExecutionError(f"micro-blog ESXi canary refresh timed out after {exc.timeout}s") from exc
-    except Exception as exc:  # noqa: BLE001
-        raise PipelineExecutionError(f"micro-blog ESXi canary refresh failed to start: {exc}") from exc
 
-    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+    if build_host:
+        upload_remote_bytes(
+            host=build_host,
+            user=build_user,
+            remote_path=build_script_path,
+            content=script_path.read_bytes(),
+            mode=0o700,
+            timeout=60,
+        )
+        args = [build_script_path, source_path_raw, image_tag]
+        if content_overlay:
+            args.append(content_overlay)
+        prefix = ""
+        if str(values.get("target_password") or "").strip():
+            prefix = f"BKC_ESXI_SWARM_PASSWORD={shlex.quote(str(values.get('target_password')))} "
+        command = prefix + " ".join(shlex.quote(arg) for arg in args)
+        try:
+            output = run_remote_command(
+                host=build_host,
+                user=build_user,
+                command=command,
+                timeout=int(values.get("script_timeout_seconds") or 2400),
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise PipelineExecutionError(f"micro-blog ESXi canary refresh failed on build host {build_host}: {exc}") from exc
+        returncode = 0
+    else:
+        source_path = source_path.resolve()
+        if not source_path.exists():
+            raise PipelineExecutionError(f"micro-blog source path is missing: {source_path}")
+        command = [str(script_path), str(source_path), image_tag]
+        if content_overlay:
+            overlay_path = Path(content_overlay).expanduser().resolve()
+            if not overlay_path.exists():
+                raise PipelineExecutionError(f"Content overlay path is missing: {overlay_path}")
+            command.append(str(overlay_path))
+
+        env = os.environ.copy()
+        if str(values.get("target_password") or "").strip() and not env.get("BKC_ESXI_SWARM_PASSWORD"):
+            env["BKC_ESXI_SWARM_PASSWORD"] = str(values.get("target_password"))
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=int(values.get("script_timeout_seconds") or 2400),
+                cwd=str(source_path),
+                env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise PipelineExecutionError(f"micro-blog ESXi canary refresh timed out after {exc.timeout}s") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise PipelineExecutionError(f"micro-blog ESXi canary refresh failed to start: {exc}") from exc
+
+        output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+        returncode = completed.returncode
+
     if output:
         append_event(run_id, "info", stage_name, output[-12000:])
     _store_run_extra(
         run_id,
         {
             "micro_blog_esxi_lab_canary_refresh": {
-                "source_path": str(source_path),
+                "source_path": source_path_raw,
                 "source_commit": source_commit,
                 "image_tag": image_tag,
-                "returncode": completed.returncode,
+                "build_host": build_host or "local",
+                "returncode": returncode,
             }
         },
     )
-    if completed.returncode != 0:
-        raise PipelineExecutionError(output[-4000:] or f"micro-blog ESXi canary refresh exited {completed.returncode}")
     _set_stage(run_id, stage_name, "complete", f"Micro-blog ESXi lab canary refreshed and validated with image tag {image_tag}.")
 
 
