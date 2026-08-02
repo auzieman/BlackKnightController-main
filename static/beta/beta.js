@@ -129,6 +129,10 @@
                 style: { "background-color": "#62451d", "border-color": "#d5a14b", color: "#fff6e8", shape: "ellipse", width: 96, height: 70, "font-size": 12 },
             },
             {
+                selector: "node[type = 'remote-site']",
+                style: { "background-color": "#37245e", "border-color": "#b4a2ff", color: "#fbf8ff", shape: "round-rectangle", width: 112, height: 68, "font-size": 12 },
+            },
+            {
                 selector: "node[type = 'service']",
                 style: { "background-color": "#1f5f47", "border-color": "#8ed8b0", color: "#f0fff7", shape: "round-rectangle", width: 92, height: 58, "font-size": 11 },
             },
@@ -392,7 +396,7 @@ ${data.label || data.id || ""}`;
                 { id: "wan:internet", label: "Internet\npublic", type: "isp", kind: "wan", status: "running", role: "public traffic / DNS resolution", breadcrumb: "Internet › Spectrum/IPFire › lab edge" },
                 { id: "wan:spectrum", label: "Spectrum\nrouter", type: "isp", kind: "uncontrolled-edge", status: "running", ip: "192.168.1.1", role: "uncontrolled home ISP edge", breadcrumb: "Internet › Spectrum › lab" },
                 { id: "edge:ipfire", label: "IPFire\nedge", type: "firewall", kind: "firewall", status: "running", ip: "10.20.0.254 / 192.168.1.82", role: "NAT / firewall / VPN candidate", breadcrumb: "Switch › IPFire edge" },
-                { id: "remote:ionos", label: "IONOS\npublic VPS", type: "cluster", kind: "remote-site", status: "running", ip: "74.208.45.165 / .164", role: "public VPS swarm / nginx / telemetry", breadcrumb: "Internet › IONOS › Auzietek sites" },
+                { id: "site:ionos", label: "IONOS\npublic VPS", type: "remote-site", kind: "remote-site", status: "running", ip: "74.208.45.165 / .164", role: "public VPS swarm / nginx / telemetry", breadcrumb: "Internet › IONOS › Auzietek sites" },
                 { id: "service:public-sites", label: "Public\nSites", type: "service", kind: "public-web", status: "running", role: "Auzietek / BlackKnight / Linux / Retro", breadcrumb: "IONOS › public sites" },
                 { id: "vm:ns1.lab.auzietek.com", label: "ns1\nDNS/NFS/PXE", type: "vm", kind: "core-vm", status: "running", ip: "10.20.0.10", platform: "Proxmox .9", role: "DHCP / DNS / NFS / PXE", parent_host: "pve1", breadcrumb: "Switch › pve1 › ns1", last_seen: "reachable now on 22" },
                 { id: "vm:swarm1.lab.auzietek.com", label: "swarm1\nBKC", type: "vm", kind: "swarm-manager", status: "running", ip: "10.20.0.15", platform: "Proxmox .9", role: "current Docker Swarm / BKC", parent_host: "pve1", breadcrumb: "Switch › pve1 › swarm1", last_seen: "docker stack ls responding" },
@@ -415,8 +419,8 @@ ${data.label || data.id || ""}`;
                 ["fabric:n2024", "switchport:n2024-p05", "has_port"],
                 ["fabric:n2024", "switchport:n2024-p06", "has_port"],
                 ["evidence:n2024-mac-snapshot", "fabric:n2024", "describes"],
-                ["wan:internet", "remote:ionos", "routes_to"],
-                ["remote:ionos", "service:public-sites", "serves"],
+                ["wan:internet", "site:ionos", "routes_to"],
+                ["site:ionos", "service:public-sites", "serves"],
                 ["wan:internet", "wan:spectrum", "routes_to"],
                 ["wan:spectrum", "edge:ipfire", "edge_to"],
                 ["edge:ipfire", "fabric:n2024", "protects"],
@@ -438,7 +442,7 @@ ${data.label || data.id || ""}`;
                     "wan:internet": { x: -520, y: -180 },
                     "wan:spectrum": { x: -360, y: -72 },
                     "edge:ipfire": { x: -210, y: 68 },
-                    "remote:ionos": { x: -520, y: 180 },
+                    "site:ionos": { x: -520, y: 180 },
                     "service:public-sites": { x: -330, y: 256 },
                     "switchport:n2024-p04": { x: -120, y: 168 },
                     "evidence:n2024-mac-snapshot": { x: -120, y: -208 },
@@ -479,6 +483,27 @@ ${data.label || data.id || ""}`;
                 ["vm:esxi-swarm-mgr-01", "vm:esxi-swarm-worker-03", "swarm-controls"],
             ],
             layout: { mode: "mindmap", direction: "right", distance: 300, rowGap: 74, start: -148 },
+        },
+        "site:ionos": {
+            summary: "IONOS is the public remote-site family: VPS hosts, public web lanes, telemetry, DNS, and backup/restore evidence.",
+            nodes: [
+                { id: "host:ionos-auzietek-01", label: "IONOS 01\n74.208.45.165", type: "host", kind: "vps", status: "running", role: "primary nginx / Docker / public sites", breadcrumb: "IONOS › primary VPS" },
+                { id: "host:ionos-auzietek-02", label: "IONOS 02\n74.208.45.164", type: "host", kind: "vps", status: "warning", role: "secondary / cleanup / failover candidate", breadcrumb: "IONOS › secondary VPS" },
+                { id: "service:public-sites", label: "Public\nSites", type: "service", kind: "public-web", status: "running", role: "Auzietek / BlackKnight / Linux / Retro", breadcrumb: "IONOS › public sites" },
+                { id: "service:ionos-dns-api", label: "DNS\nAPI", type: "service", kind: "provider-api", status: "running", role: "lab/public host records and validation", breadcrumb: "IONOS › DNS API" },
+                { id: "service:mon-auzietek", label: "mon\nGrafana", type: "service", kind: "telemetry", status: "running", role: "public dashboards / nginx logs / host metrics", breadcrumb: "IONOS › telemetry" },
+                { id: "evidence:ionos-backups", label: "Backups\nEvidence", type: "evidence", kind: "backup-receipt", status: "snapshot", role: "site backup / restore / content publish receipts", breadcrumb: "IONOS › evidence" },
+            ],
+            edges: [
+                ["site:ionos", "host:ionos-auzietek-01", "hosts"],
+                ["site:ionos", "host:ionos-auzietek-02", "hosts"],
+                ["host:ionos-auzietek-01", "service:public-sites", "serves"],
+                ["host:ionos-auzietek-01", "service:mon-auzietek", "serves"],
+                ["site:ionos", "service:ionos-dns-api", "uses"],
+                ["service:public-sites", "evidence:ionos-backups", "protected_by"],
+                ["service:mon-auzietek", "evidence:ionos-backups", "records"],
+            ],
+            layout: { mode: "mindmap", direction: "right", distance: 290, rowGap: 74, start: -185 },
         },
         "host:r630-proxmox-01": {
             summary: "Stale Server2 hypervisor snapshot. Kept as evidence, but no longer treated as the edge pve1 parent.",
@@ -630,6 +655,9 @@ ${data.label || data.id || ""}`;
     const expandedPacks = new Set();
     const expansionAliases = {
         "host:proxmox1.lab.auzietek.com:": "host:pve1",
+        "remote:ionos": "site:ionos",
+        "host:74.208.45.165": "site:ionos",
+        "host:74.208.45.164": "site:ionos",
         "vm:swarm1.lab.auzietek.com:": "vm:swarm1.lab.auzietek.com",
         "vm:ns1.lab.auzietek.com:": "vm:ns1.lab.auzietek.com",
     };
@@ -1223,7 +1251,7 @@ ${data.label || data.id || ""}`;
             .map((node) => {
                 const data = Object.assign({}, node.data());
                 delete data.iconLabel;
-                data.layoutImportance = node.locked() || ["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors"].includes(node.id())
+                data.layoutImportance = node.locked() || ["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors", "site:ionos"].includes(node.id())
                     ? "anchor"
                     : "";
                 return { data, position: node.position() };
@@ -1474,6 +1502,7 @@ ${data.label || data.id || ""}`;
                 const graphNode = cy.getElementById(String(selected.id || ""));
                 if (graphNode && !graphNode.empty()) {
                     renderSelection(graphNode);
+                    expandGraphPack(graphNode.id(), { auto: true });
                     cy.animate({ fit: { eles: graphNode.closedNeighborhood(), padding: 92 } }, { duration: 320 });
                     return;
                 }
@@ -1604,6 +1633,18 @@ ${data.label || data.id || ""}`;
         }
         if (q.includes("ns1") || q.includes("dns") || q.includes("nfs") || q.includes("pxe")) {
             if (cy.getElementById("vm:ns1.lab.auzietek.com").length) expandGraphPack("vm:ns1.lab.auzietek.com", { auto: true });
+        }
+        if (
+            q.includes("ionos") ||
+            q.includes("auzietek.com") ||
+            q.includes("blackknightcontroller.com") ||
+            q.includes("74.208.45") ||
+            q.includes("74.208.235") ||
+            q.includes("vps") ||
+            q.includes("public")
+        ) {
+            if (cy.getElementById("fabric:n2024").length) expandGraphPack("fabric:n2024", { auto: true });
+            preferredRootId = "site:ionos";
         }
         return preferredRootId;
     }

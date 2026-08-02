@@ -33,11 +33,18 @@
                 <div class="section-header compact-header">
                     <div>
                         <p class="eyebrow">Inventory tree</p>
-                        <h3>{{ resource_graph.resources|length }} resources</h3>
+                        <h3>{{ visible_resource_count if search else resource_graph.resources|length }} resources{% if search %} matching{% endif %}</h3>
                     </div>
                 </div>
+                <form method="get" class="resource-filter">
+                    <input type="hidden" name="tab" value="{{ tab }}">
+                    <input type="hidden" name="group" value="{{ selected_group }}">
+                    <input type="hidden" name="sort" value="{{ sort_key }}">
+                    <input type="search" name="q" value="{{ search }}" placeholder="IONOS, pve1, 10.20, Docker, BKC…">
+                    <button class="button secondary" type="submit">Search</button>
+                </form>
                 <div class="resource-tree">
-                    {% for tree_group in resource_graph.tree %}
+                    {% for tree_group in visible_resource_tree %}
                         <details class="tree-group" open>
                             <summary>
                                 <span><span class="resource-icon">{{ tree_group.meta.short }}</span> {{ tree_group.meta.label }}</span>

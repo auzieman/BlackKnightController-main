@@ -6,6 +6,23 @@ from services.rules_store import load_rules
 inventory_console_blueprint = Blueprint("inventory_console", __name__)
 
 
+def _resource_matches_search(resource: dict, query: str) -> bool:
+    if not query:
+        return True
+    haystack = [
+        resource.get("id", ""),
+        resource.get("name", ""),
+        resource.get("kind", ""),
+        resource.get("state", ""),
+        resource.get("summary", ""),
+        *[str(value) for value in (resource.get("facts") or {}).values()],
+    ]
+    for section in (resource.get("sections") or {}).values():
+        if isinstance(section, dict):
+            haystack.extend(str(value) for value in section.values())
+    return query in " ".join(haystack).lower()
+
+
 @inventory_console_blueprint.route("/inventory", methods=["GET"])
 def inventory_console():
     rules = load_rules()
@@ -47,12 +64,23 @@ def inventory_console():
             }
         )
 
+    visible_resource_tree = []
+    for tree_group in resource_graph["tree"]:
+        resources = [
+            resource
+            for resource in tree_group["resources"]
+            if _resource_matches_search(resource, search)
+        ]
+        if resources:
+            visible_resource_tree.append({**tree_group, "resources": resources})
+    visible_resources = [resource for group in visible_resource_tree for resource in group["resources"]]
+
     if not selected_group and group_rows:
         selected_group = group_rows[0]["name"]
     if not selected_resource_id and selected_group:
         selected_resource_id = f"group:{selected_group}"
     if selected_resource_id not in resource_graph["resources_by_id"]:
-        selected_resource_id = resource_graph["resources"][0]["id"] if resource_graph["resources"] else ""
+        selected_resource_id = visible_resources[0]["id"] if visible_resources else (resource_graph["resources"][0]["id"] if resource_graph["resources"] else "")
     selected_resource = resource_graph["resources_by_id"].get(selected_resource_id)
 
     shared_hosts = {
@@ -111,6 +139,8 @@ def inventory_console():
         sort_key=sort_key,
         shared_hosts=shared_hosts,
         resource_graph=resource_graph,
+        visible_resource_tree=visible_resource_tree,
+        visible_resource_count=len(visible_resources),
         resource_kind_meta=RESOURCE_KIND_META,
         selected_resource=selected_resource,
         selected_resource_id=selected_resource_id,
