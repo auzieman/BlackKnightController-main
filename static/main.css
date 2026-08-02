@@ -1900,6 +1900,77 @@ th {
   grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) 160px auto;
 }
 
+.cmdb-review-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.cmdb-filter-bar {
+  grid-template-columns: minmax(260px, 1fr) auto;
+}
+
+.cmdb-table td strong,
+.cmdb-table td small {
+  display: block;
+}
+
+.cmdb-table td small {
+  margin-top: 3px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.cmdb-finding-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.cmdb-finding-list span {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 1px solid rgba(251, 146, 60, 0.28);
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.1);
+  color: #fed7aa;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cmdb-finding-list .quiet {
+  border-color: rgba(45, 212, 191, 0.2);
+  background: rgba(45, 212, 191, 0.08);
+  color: #99f6e4;
+}
+
+.status-pill.lifecycle-active,
+.status-pill.health-healthy {
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.1);
+  color: #99f6e4;
+}
+
+.status-pill.lifecycle-stale,
+.status-pill.health-degraded {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}
+
+.status-pill.lifecycle-experimental,
+.status-pill.health-unknown {
+  border-color: rgba(167, 139, 250, 0.28);
+  background: rgba(167, 139, 250, 0.1);
+  color: #ddd6fe;
+}
+
+.status-pill.health-offline {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+}
+
 .resource-sidebar,
 .resource-main {
   min-width: 0;

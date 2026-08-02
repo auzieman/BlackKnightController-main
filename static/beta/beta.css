@@ -41,6 +41,51 @@ a:hover {
     min-height: 100vh;
 }
 
+.beta-shell.graph-focus {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.beta-shell.graph-focus .beta-rail,
+.beta-shell.graph-focus .beta-side,
+.beta-shell.graph-focus .metric-grid,
+.beta-shell.graph-focus .fabric-ribbon,
+.beta-shell.graph-focus .inspector,
+.beta-shell.graph-focus .detail-grid,
+.beta-shell.graph-focus .action-drawer,
+.beta-shell.graph-focus .lower-grid {
+    display: none;
+}
+
+.beta-shell.graph-focus .beta-main {
+    padding: 10px;
+}
+
+.beta-shell.graph-focus .beta-top {
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border: 1px solid rgba(148, 163, 184, .18);
+    border-radius: 18px;
+    background: rgba(8, 14, 26, .74);
+}
+
+.beta-shell.graph-focus .beta-top p,
+.beta-shell.graph-focus .beta-top .eyebrow {
+    display: none;
+}
+
+.beta-shell.graph-focus .workspace-grid {
+    display: block;
+}
+
+.beta-shell.graph-focus .graph-panel {
+    min-height: calc(100vh - 86px);
+}
+
+.beta-shell.graph-focus .beta-cy {
+    height: calc(100vh - 205px);
+    min-height: 720px;
+}
+
 .beta-rail,
 .beta-side,
 .glass-panel {

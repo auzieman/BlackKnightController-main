@@ -672,6 +672,8 @@ ${data.label || data.id || ""}`;
     const actionTitle = document.getElementById("beta-action-title");
     const actionCopy = document.getElementById("beta-action-copy");
     const actionPayload = document.getElementById("beta-action-payload");
+    const exportStatus = document.getElementById("beta-export-status");
+    let graphWasDragged = false;
     const nodePopover = document.getElementById("beta-node-popover");
     let selectedContext = { type: "none", id: "", label: "", data: {} };
     let selectedNodeId = "";
@@ -854,7 +856,21 @@ ${data.label || data.id || ""}`;
         })[char]);
     }
 
-    cy.on("tap", "node", (event) => renderSelection(event.target));
+    cy.on("grab", "node", () => {
+        graphWasDragged = false;
+        if (nodePopover) nodePopover.hidden = true;
+    });
+    cy.on("drag", "node", () => {
+        graphWasDragged = true;
+        if (nodePopover) nodePopover.hidden = true;
+    });
+    cy.on("free", "node", () => {
+        window.setTimeout(() => { graphWasDragged = false; }, 80);
+    });
+    cy.on("tap", "node", (event) => {
+        if (graphWasDragged) return;
+        renderSelection(event.target);
+    });
     cy.on("cxttap", "node", (event) => {
         renderSelection(event.target);
         showNodePopover(event.target);
@@ -870,6 +886,15 @@ ${data.label || data.id || ""}`;
     document.getElementById("beta-scope-one")?.addEventListener("click", () => applyScope(1));
     document.getElementById("beta-scope-two")?.addEventListener("click", () => applyScope(2));
     document.getElementById("beta-scope-all")?.addEventListener("click", () => applyScope("all"));
+    document.getElementById("beta-focus-graph")?.addEventListener("click", (event) => {
+        const shell = document.querySelector(".beta-shell");
+        const enabled = shell?.classList.toggle("graph-focus");
+        event.currentTarget.textContent = enabled ? "Exit focus" : "Focus graph";
+        window.setTimeout(() => {
+            cy.resize();
+            cy.animate({ fit: { eles: cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 72 } }, { duration: 220 });
+        }, 80);
+    });
 
     document.getElementById("beta-hide-healthy")?.addEventListener("click", () => {
         cy.nodes().forEach((node) => {
@@ -1264,6 +1289,63 @@ ${data.label || data.id || ""}`;
         return { nodes, edges };
     }
 
+    function visibleExportPayload() {
+        const nodes = cy.nodes()
+            .filter((node) => !node.hasClass("hidden-stale") && !node.hasClass("hidden-pipeline") && node.visible())
+            .slice(0, 120)
+            .map((node) => {
+                const data = Object.assign({}, node.data());
+                delete data.iconLabel;
+                return { data, position: node.position(), selected: node.hasClass("focus-root") || node.selected() };
+            });
+        const nodeIds = new Set(nodes.map((node) => node.data.id));
+        const edges = cy.edges()
+            .filter((edge) => nodeIds.has(edge.source().id()) && nodeIds.has(edge.target().id()) && edge.visible())
+            .slice(0, 220)
+            .map((edge) => ({ data: Object.assign({}, edge.data()) }));
+        return { nodes, edges };
+    }
+
+    async function exportVisibleDrawio() {
+        const button = document.getElementById("beta-export-drawio");
+        if (!button) return;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Preparing…";
+        if (exportStatus) exportStatus.textContent = "Preparing Draw.io export…";
+        try {
+            const response = await fetch("/resources/graph/export-drawio", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: Object.assign({ "Content-Type": "application/json", Accept: "application/json" }, csrfHeader()),
+                body: JSON.stringify({
+                    mode: "operational",
+                    elements: visibleExportPayload(),
+                }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || result.error || `Draw.io export failed with HTTP ${response.status}`);
+            }
+            button.textContent = "Export ready";
+            if (exportStatus) {
+                exportStatus.innerHTML = `Export ready · <a href="${escapeHtml(result.artifact_url || "#")}" target="_blank" rel="noopener">open Draw.io artifact</a> · scene ${escapeHtml(result.scene_hash || "")}`;
+            }
+            actionTitle.textContent = "Draw.io export ready";
+            actionCopy.textContent = "BKC exported the visible resource scene as an editable diagrams.net artifact.";
+            actionPayload.innerHTML = `<code>${syntaxJson(result)}</code>`;
+        } catch (error) {
+            console.error("BKC Draw.io export failed", error);
+            button.textContent = "Export failed";
+            if (exportStatus) exportStatus.textContent = `Export failed · ${String(error.message || error)}`;
+        } finally {
+            window.setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+            }, 3200);
+        }
+    }
+
     async function arrangeVisibleWithAi() {
         const button = document.getElementById("beta-ai-arrange");
         if (!button) return;
@@ -1447,6 +1529,7 @@ ${data.label || data.id || ""}`;
     });
 
     document.getElementById("beta-ai-arrange")?.addEventListener("click", arrangeVisibleWithAi);
+    document.getElementById("beta-export-drawio")?.addEventListener("click", exportVisibleDrawio);
 
     document.querySelectorAll(".pipeline-row-main").forEach((button) => {
         button.addEventListener("click", () => {

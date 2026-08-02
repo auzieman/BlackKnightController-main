@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
@@ -8,6 +9,7 @@ from services import bkc_db
 from services.access_control import Perm, require_perm
 from services.ai_graph_layout import AIGraphLayoutError, propose_cytoscape_layout
 from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
+from services.graph_drawio_export import export_visible_scene
 from services.job_queue import enqueue_job, job_queue_enabled
 from services.pipeline_catalog import pipeline_by_id
 from services.pipeline_executor import workflow_is_supported, workflow_job_timeout
@@ -165,6 +167,30 @@ def ai_resource_graph_layout():
             return jsonify({"error": "position_save_failed"}), 500
     proposal["tenant_slug"] = get_effective_tenant_slug()
     return jsonify(proposal)
+
+
+@resource_graph_blueprint.post("/resources/graph/export-drawio")
+@require_perm(Perm.INVENTORY_WRITE)
+def export_resource_graph_drawio():
+    tenant_id = get_current_tenant_id()
+    if tenant_id is None:
+        return jsonify({"error": "tenant_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    elements = payload.get("elements")
+    if not isinstance(elements, dict):
+        return jsonify({"error": "elements_required"}), 400
+    try:
+        result = export_visible_scene(
+            elements,
+            Path(current_app.static_folder or "static") / "exports",
+            tenant_slug=get_effective_tenant_slug(),
+        )
+    except Exception as exc:
+        current_app.logger.exception("Failed to export resource graph draw.io scene")
+        return jsonify({"error": "drawio_export_failed", "detail": str(exc)}), 500
+    result["tenant_slug"] = get_effective_tenant_slug()
+    result["mode"] = str(payload.get("mode") or "operational")
+    return jsonify(result)
 
 
 def _pipeline_from_node_id(node_id: str):
