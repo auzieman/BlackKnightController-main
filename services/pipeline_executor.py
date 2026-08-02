@@ -9774,12 +9774,12 @@ payload="$(ADMIN_EMAIL="$admin_email" CONTENT_SUBDIR="$content_subdir" SYNC_MODE
 import json
 import os
 print(json.dumps({
-    "admin_email": os.environ["ADMIN_EMAIL"],
-    "root_path": "/content",
-    "content_subdir": os.environ["CONTENT_SUBDIR"],
-    "sync_mode": os.environ["SYNC_MODE"],
-    "status": os.environ["STATUS"],
-    "theme_variant": os.environ["THEME_VARIANT"],
+    {json.dumps("admin_email")}: os.environ["ADMIN_EMAIL"],
+    {json.dumps("root_path")}: "/content",
+    {json.dumps("content_subdir")}: os.environ["CONTENT_SUBDIR"],
+    {json.dumps("sync_mode")}: os.environ["SYNC_MODE"],
+    {json.dumps("status")}: os.environ["STATUS"],
+    {json.dumps("theme_variant")}: os.environ["THEME_VARIANT"],
 }))
 PY
 )"
