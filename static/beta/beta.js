@@ -1306,13 +1306,20 @@ ${data.label || data.id || ""}`;
         return { nodes, edges };
     }
 
+    function setReadyTray(state, html) {
+        if (!exportStatus) return;
+        exportStatus.classList.remove("ready", "failed");
+        if (state) exportStatus.classList.add(state);
+        exportStatus.innerHTML = `<span class="ready-dot"></span><span>${html}</span>`;
+    }
+
     async function exportVisibleDrawio() {
         const button = document.getElementById("beta-export-drawio");
         if (!button) return;
         const originalText = button.textContent;
         button.disabled = true;
         button.textContent = "Preparing…";
-        if (exportStatus) exportStatus.textContent = "Preparing Draw.io export…";
+        setReadyTray("", "Preparing Draw.io export…");
         try {
             const response = await fetch("/resources/graph/export-drawio", {
                 method: "POST",
@@ -1338,16 +1345,14 @@ ${data.label || data.id || ""}`;
             document.body.appendChild(download);
             download.click();
             download.remove();
-            if (exportStatus) {
-                exportStatus.innerHTML = `Draw.io export ready · <a href="${escapeHtml(result.artifact_url)}" target="_blank" rel="noopener">open artifact</a> · <a href="${escapeHtml(result.artifact_url)}" download>download</a> · scene ${escapeHtml(result.scene_hash || "")}`;
-            }
+            setReadyTray("ready", `Draw.io artifact ready · <a href="${escapeHtml(result.artifact_url)}" target="_blank" rel="noopener">open</a> · <a href="${escapeHtml(result.artifact_url)}" download>download</a> · scene ${escapeHtml(result.scene_hash || "")}`);
             actionTitle.textContent = "Draw.io export ready";
             actionCopy.textContent = "BKC exported the visible resource scene as an editable diagrams.net artifact and asked the browser to download it.";
             actionPayload.innerHTML = `<code>${syntaxJson(result)}</code>`;
         } catch (error) {
             console.error("BKC Draw.io export failed", error);
             button.textContent = "Export failed";
-            if (exportStatus) exportStatus.textContent = `Export failed · ${String(error.message || error)}`;
+            setReadyTray("failed", `Draw.io export failed · ${escapeHtml(String(error.message || error))}`);
         } finally {
             window.setTimeout(() => {
                 button.disabled = false;

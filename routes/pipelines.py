@@ -445,9 +445,11 @@ def _explain_pipeline_with_ollama(pipeline: dict, latest_run: dict | None, *, mo
     payload = _pipeline_explain_payload(pipeline, latest_run)
     prompt = (
         "You are BlackKnightController's local pipeline explainer. "
-        "Explain this pipeline to an infrastructure operator in concise markdown. "
+        "Explain this pipeline to an infrastructure operator in concise markdown using these exact sections: "
+        "Operator read, Safety/risk, Before running, Expected proof, Rerun notes. "
         "Do not invent external facts. Separate lifecycle/status from safety/risk. "
-        "Include: what it does, likely targets, whether it appears runnable, what to check before running, "
+        "If the pipeline is destructive, say so plainly without scolding. "
+        "Include likely targets, whether it appears runnable, what to check before running, "
         "and what evidence/output should be expected. Keep it under 350 words.\n\n"
         f"PIPELINE_JSON:\n{json.dumps(payload, indent=2, sort_keys=True)}"
     )

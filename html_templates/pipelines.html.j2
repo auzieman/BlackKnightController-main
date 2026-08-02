@@ -134,6 +134,10 @@
                                 data-pipeline-id="{{ selected_pipeline.id }}"
                                 data-explain-url="{{ url_for('pipelines.pipeline_explain_api') }}"
                             >Explain</button>
+                            <button class="button button-quiet" id="pipeline-ollama-copy" type="button">Copy brief</button>
+                            {% if latest %}
+                                <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_run_detail', run_id=latest.id) }}">Open latest run</a>
+                            {% endif %}
                         </div>
                         <pre id="pipeline-ollama-output" class="pipeline-ai-output" aria-live="polite">Select Explain to generate a grounded, pipeline-specific operator brief.</pre>
                     </section>
@@ -445,6 +449,7 @@
     <script>
         (function () {
             const explainButton = document.getElementById("pipeline-ollama-explain");
+            const copyButton = document.getElementById("pipeline-ollama-copy");
             const explainOutput = document.getElementById("pipeline-ollama-output");
             const modelSelect = document.getElementById("pipeline-ollama-model");
             const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
@@ -478,6 +483,25 @@
                     } finally {
                         explainButton.disabled = false;
                         explainButton.textContent = originalText;
+                    }
+                });
+            }
+            if (copyButton && explainOutput) {
+                copyButton.addEventListener("click", async () => {
+                    const text = explainOutput.textContent || "";
+                    if (!text.trim()) {
+                        return;
+                    }
+                    const originalText = copyButton.textContent;
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        copyButton.textContent = "Copied";
+                    } catch (error) {
+                        copyButton.textContent = "Copy failed";
+                    } finally {
+                        window.setTimeout(() => {
+                            copyButton.textContent = originalText;
+                        }, 1800);
                     }
                 });
             }
