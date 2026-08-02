@@ -1,0 +1,55 @@
+{
+  "tenant_slug": "lab",
+  "rack": "delivery-rack-01",
+  "provisioning_network_node_id": "node:network:lab-provisioning",
+  "management_network_node_id": "node:network:lab-management",
+  "dhcp_service_node_id": "node:service:ns1-dhcpd",
+  "pxe_service_node_id": "node:service:ns1-pxe",
+  "http_image_service_node_id": "node:service:ns1-http-images",
+  "proxmox_profile_node_id": "node:provisioning_profile:proxmox-ve-9.2-auto-install",
+  "proxmox_image_node_id": "node:image_asset:proxmox-ve-9.2-1-bkc-unattended",
+  "provisioning_host": "10.20.0.10",
+  "provisioning_ssh_host": "10.20.0.10",
+  "provisioning_ssh_user": "root",
+  "provisioning_mac": "20:04:0f:e9:70:40",
+  "installer_lease_address": "10.20.0.241",
+  "installer_iso_path": "/srv/pxe/proxmox/9.2-1/proxmox-ve_9.2-1-bkc-unattended.iso",
+  "installer_iso_url": "http://10.20.0.10/pxe/proxmox/9.2-1/proxmox-ve_9.2-1-bkc-unattended.iso",
+  "installer_iso_sha256": "4146550e8a907175cd091f7bd9404e7d3655911d198e2b1b753e448ae3cdaa3b",
+  "ipxe_script_path": "/srv/pxe/server2-proxmox.ipxe",
+  "dhcp_fragment_path": "/etc/dhcp/dhcpd.d/bkc-server2-proxmox-one-shot.conf",
+  "dhcp_broad_fragment_path": "/etc/dhcp/dhcpd.d/bkc-provisioning.conf",
+  "dhcp_main_path": "/etc/dhcp/dhcpd.conf",
+  "arm_script": "scripts/arm-proxmox-one-shot-pxe.sh",
+  "proxmox_hostname": "r630-proxmox-01.lab.auzietek.com",
+  "proxmox_management_address": "10.20.0.41",
+  "proxmox_management_url": "https://10.20.0.41:8006/",
+  "proxmox_root_user": "root@pam",
+  "proxmox_root_password": "changeme123",
+  "proxmox_gateway": "10.20.0.9",
+  "proxmox_dns": "10.20.0.10",
+  "physical_hosts": [
+    {
+      "node_id": "node:physical_machine:r630-proxmox-01",
+      "label": "r630-proxmox-01",
+      "model": "Dell PowerEdge R630",
+      "serial_number": "CN747516B80013",
+      "role": "proxmox-lab-hypervisor",
+      "bmc_node_id": "node:bmc:r630-proxmox-01-idrac",
+      "bmc_provider": "redfish-or-ipmi",
+      "bmc_observed_address": "10.20.0.102",
+      "bmc_credential_ref": "secret:bmc/r630-proxmox-01/idrac",
+      "provisioning_nic_node_id": "node:network_interface:r630-proxmox-01-lom1",
+      "provisioning_mac": "20:04:0f:e9:70:40",
+      "management_address": "10.20.0.41"
+    }
+  ],
+  "validation_targets": [
+    {
+      "id": "proxmox-web",
+      "label": "Proxmox Web/API",
+      "type": "proxmox-management",
+      "expected_url": "https://10.20.0.41:8006/"
+    }
+  ]
+}

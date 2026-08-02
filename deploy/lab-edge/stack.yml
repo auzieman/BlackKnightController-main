@@ -1,0 +1,107 @@
+version: "3.8"
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    configs:
+      - source: lab_edge_nginx_v19
+        target: /etc/nginx/nginx.conf
+      - source: lab_edge_index_v10
+        target: /usr/share/nginx/html/index.html
+      - source: lab_edge_proxmoxlib_v1
+        target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
+    secrets:
+      - source: lab_auzietek_fullchain_v1
+        target: lab_auzietek_fullchain.pem
+      - source: lab_auzietek_privkey_v1
+        target: lab_auzietek_privkey.pem
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: ingress
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: ingress
+      - target: 8082
+        published: 8082
+        protocol: tcp
+        mode: ingress
+      - target: 8083
+        published: 8083
+        protocol: tcp
+        mode: ingress
+      - target: 8084
+        published: 8084
+        protocol: tcp
+        mode: ingress
+      - target: 8085
+        published: 8085
+        protocol: tcp
+        mode: ingress
+      - target: 8086
+        published: 8086
+        protocol: tcp
+        mode: ingress
+      - target: 8087
+        published: 8087
+        protocol: tcp
+        mode: ingress
+      - target: 8088
+        published: 8088
+        protocol: tcp
+        mode: ingress
+      - target: 8089
+        published: 8089
+        protocol: tcp
+        mode: ingress
+      - target: 8090
+        published: 8090
+        protocol: tcp
+        mode: ingress
+      - target: 8091
+        published: 8091
+        protocol: tcp
+        mode: ingress
+      - target: 8443
+        published: 8443
+        protocol: tcp
+        mode: ingress
+      - target: 19091
+        published: 19091
+        protocol: tcp
+        mode: ingress
+      - target: 19092
+        published: 19092
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+
+configs:
+  lab_edge_nginx_v19:
+    file: ./nginx.conf
+  lab_edge_index_v10:
+    file: ./index.html
+  lab_edge_proxmoxlib_v1:
+    file: ./proxmoxlib.js
+
+secrets:
+  lab_auzietek_fullchain_v1:
+    external: true
+  lab_auzietek_privkey_v1:
+    external: true

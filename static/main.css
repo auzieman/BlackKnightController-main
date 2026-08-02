@@ -760,6 +760,114 @@ a {
   margin-top: 18px;
 }
 
+.pipeline-ai-explainer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.16), transparent 35%),
+    rgba(4, 14, 24, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pipeline-ai-explainer h4 {
+  margin: 2px 0 4px;
+  color: #ecfeff;
+}
+
+.pipeline-ai-controls {
+  display: grid;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.pipeline-ai-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pipeline-ai-controls select {
+  width: 100%;
+  border: 1px solid rgba(130, 156, 207, 0.24);
+  border-radius: 12px;
+  background: rgba(5, 10, 22, 0.78);
+  color: var(--text);
+  padding: 9px 10px;
+}
+
+.pipeline-ai-output {
+  grid-column: 1 / -1;
+  min-height: 96px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba(130, 156, 207, 0.18);
+  border-radius: 16px;
+  background: rgba(2, 6, 12, 0.86);
+  color: #d9f99d;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pipeline-ai-rendered {
+  color: #d8e6ff;
+  white-space: normal;
+  line-height: 1.58;
+}
+
+.pipeline-ai-rendered .pipeline-ai-source {
+  display: inline-flex;
+  margin: 0 0 10px;
+  padding: 5px 9px;
+  border: 1px solid rgba(45, 212, 191, 0.32);
+  border-radius: 999px;
+  background: rgba(45, 212, 191, 0.1);
+  color: #c7fff7;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.pipeline-ai-rendered h3,
+.pipeline-ai-rendered h4 {
+  margin: 12px 0 6px;
+  color: #f8fafc;
+}
+
+.pipeline-ai-rendered p {
+  margin: 0 0 10px;
+}
+
+.pipeline-ai-rendered ul {
+  margin: 0 0 12px 1.2rem;
+  padding: 0;
+}
+
+.pipeline-ai-rendered li {
+  margin: 4px 0;
+}
+
+.pipeline-ai-rendered code {
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #d9f99d;
+}
+
+.pipeline-ai-rendered pre {
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 12, 0.92);
+}
+
 .pipeline-console-section {
   margin-top: 18px;
   padding: 16px;
@@ -1900,6 +2008,77 @@ th {
   grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr) 160px auto;
 }
 
+.cmdb-review-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.cmdb-filter-bar {
+  grid-template-columns: minmax(260px, 1fr) auto;
+}
+
+.cmdb-table td strong,
+.cmdb-table td small {
+  display: block;
+}
+
+.cmdb-table td small {
+  margin-top: 3px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.cmdb-finding-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.cmdb-finding-list span {
+  display: inline-flex;
+  padding: 4px 7px;
+  border: 1px solid rgba(251, 146, 60, 0.28);
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.1);
+  color: #fed7aa;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.cmdb-finding-list .quiet {
+  border-color: rgba(45, 212, 191, 0.2);
+  background: rgba(45, 212, 191, 0.08);
+  color: #99f6e4;
+}
+
+.status-pill.lifecycle-active,
+.status-pill.health-healthy {
+  border-color: rgba(45, 212, 191, 0.32);
+  background: rgba(45, 212, 191, 0.1);
+  color: #99f6e4;
+}
+
+.status-pill.lifecycle-stale,
+.status-pill.health-degraded {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}
+
+.status-pill.lifecycle-experimental,
+.status-pill.health-unknown {
+  border-color: rgba(167, 139, 250, 0.28);
+  background: rgba(167, 139, 250, 0.1);
+  color: #ddd6fe;
+}
+
+.status-pill.health-offline {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+}
+
 .resource-sidebar,
 .resource-main {
   min-width: 0;
@@ -2314,6 +2493,7 @@ pre code {
   .inventory-summary-grid,
   .pipeline-console-layout,
   .pipeline-summary-grid,
+  .pipeline-ai-explainer,
   .builder-layout,
   .card-grid,
   .form-grid,
@@ -2334,6 +2514,10 @@ pre code {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .pipeline-ai-controls {
+    min-width: 0;
   }
 
   .sidebar,

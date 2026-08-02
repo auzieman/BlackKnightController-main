@@ -1,0 +1,70 @@
+{
+  "fragments": [
+    {
+      "id": "seed.openstack-smoke-instance",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "6f1853bd-2160-410a-baa6-271a1e4ae2e0"
+      ],
+      "source_paths": [
+        "pipelines/openstack-lab-seed-and-validate/defaults.json",
+        "services/pipeline_executor.py"
+      ],
+      "contract": "Create or reuse the demo OpenStack project/user/flavor/network/security group/keypair/image and boot bkc-openstack-smoke-01 ACTIVE on lab-internal.",
+      "why_it_matters": "The proof of OpenStack is not merely Horizon loading; it must create a real tenant resource and show a running instance.",
+      "do_not_repeat": "Do not call 30 complete when only preflight/planned steps ran or when the smoke server has not reached ACTIVE."
+    },
+    {
+      "id": "seed.proxmox-vm132-to-base-guests",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "6f1853bd-2160-410a-baa6-271a1e4ae2e0",
+        "f220c742-7d16-4dae-8adc-43f9c55a2bad"
+      ],
+      "source_paths": [
+        {
+          "path": "pipelines/openstack-lab-seed-and-validate/defaults.json",
+          "sha256": "a6124d68aaa8ce80c25cd117685dda13344896e17de81188bdd403ae62f1ff0e"
+        },
+        "services/pipeline_executor.py"
+      ],
+      "contract": "Use the old Proxmox source host 192.168.1.9 and source VMID 132 as the known-good Trixie source. Source auth is BKC SSH key based unless proxmox_source_password is explicitly set. Stream an uncompressed VMA restore into target VM201 on 10.20.0.41, clone VM202, attach vmbr0 networking, and start both guests.",
+      "why_it_matters": "The simple source-to-target migration is the reusable Proxmox model: API/SSH pull a VM from the old hypervisor and push it into the new one.",
+      "do_not_repeat": "Do not couple the migration source password to the global BKC Proxmox integration; the old source should use BKC key auth and the global integration should point to the current target after validation."
+    },
+    {
+      "id": "edge.proxmox-http-cookie-bridge",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "manual-edge-validation-2026-07-24"
+      ],
+      "source_paths": [
+        {
+          "path": "deploy/lab-edge/nginx.conf",
+          "sha256": "ee7533f900667ad94ef0d8e1fb8ad725104127244af5dc34791918371343f532"
+        },
+        {
+          "path": "deploy/lab-edge/proxmoxlib.js",
+          "sha256": "81063d058fdabb9ef04dae229204a33e43a07af7fc75e93d0155408b64d98fab"
+        }
+      ],
+      "contract": "The lab HTTP edge on 8081 serves Proxmox UI normally except for a patched proxmoxlib.js that sets PVEAuthCookie secure only when the browser URL is HTTPS. With that cookie present, /api2/json/cluster/resources returns real VM inventory.",
+      "why_it_matters": "Proxmox 9's UI forces a secure auth cookie. Through a plain HTTP lab edge, the browser minted a ticket but did not send it back, producing 401 No ticket and an empty Datacenter.",
+      "do_not_repeat": "Do not debug Proxmox API credentials or VM inventory for this symptom until checking browser cookie behavior through the edge."
+    },
+    {
+      "id": "bkc.proxmox-inventory-current-target",
+      "status": "known-good-proven",
+      "proof_run_ids": [
+        "manual-runtime-sync-2026-07-24",
+        "6f1853bd-2160-410a-baa6-271a1e4ae2e0"
+      ],
+      "source_paths": [
+        "services/pipeline_executor.py"
+      ],
+      "contract": "30's final validation must point BKC's Proxmox integration at the newly built target 10.20.0.41, pull the Proxmox snapshot, save it, and sync the inventory into BKC rules.",
+      "why_it_matters": "After migration, the old .9 host remains a source, but BKC's operator UI and graph should describe the new Server2 Proxmox role.",
+      "do_not_repeat": "Do not leave BKC inventory pointed at .9 after a successful 20/30 rehearsal."
+    }
+  ]
+}

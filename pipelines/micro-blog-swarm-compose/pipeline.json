@@ -1,0 +1,143 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "micro-blog-swarm-compose",
+  "name": "MICROBLOG CANDIDATE — Deploy Compose App to Docker Swarm",
+  "status": "candidate",
+  "workflow": "micro-blog-swarm-compose",
+  "resource_class": "standard",
+  "owner": "micro-blog",
+  "repo": "BlackKnightController",
+  "summary": "Use micro-blog as the small real app canary for the ESXi/OpenStack Docker Swarm deployment path: validate target, build/push app images to the lab registry, render a swarm-safe stack, deploy, smoke-test the UI/API, and optionally seed a markdown lab journal.",
+  "tags": [
+    "micro-blog",
+    "docker-compose",
+    "docker-swarm",
+    "registry",
+    "esxi",
+    "openstack",
+    "candidate",
+    "known-good-fragment"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "source_repo": "repo:micro-blog",
+    "image_registry": "service:demo-swarm-image-registry",
+    "target_swarm": "node:cluster:docker-swarm-on-esxi",
+    "target_manager": "node:vm:esxi-swarm-mgr-01",
+    "target_workers": "node_group:esxi-swarm-workers",
+    "edge": "service:lab-edge"
+  },
+  "inputs": {
+    "source_path": {
+      "required": true,
+      "default": "/home/auzieman/Projects/micro-blog"
+    },
+    "stack_name": {
+      "required": true,
+      "default": "micro-blog"
+    },
+    "target_manager_host": {
+      "required": true,
+      "default": "10.20.0.121"
+    },
+    "registry_host": {
+      "required": true,
+      "default": "swarm1.lab.auzietek.com:5001"
+    },
+    "image_tag": {
+      "required": false,
+      "default": "candidate"
+    },
+    "env_source_mode": {
+      "required": true,
+      "default": "secret-or-local-env"
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-micro-blog-source",
+      "action": "micro_blog.source.validate",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 90
+    },
+    {
+      "id": "preflight-lab-registry",
+      "action": "registry.v2.health",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "preflight-target-swarm",
+      "action": "docker.swarm.preflight",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "build-and-push-micro-blog-images",
+      "action": "micro_blog.images.build_push",
+      "transport": "docker-cli+registry",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "render-micro-blog-swarm-stack",
+      "action": "micro_blog.compose.render_stack",
+      "transport": "template",
+      "risk": "medium",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "stage-micro-blog-stack-on-manager",
+      "action": "micro_blog.stack.stage",
+      "transport": "bkc-ssh+filesystem",
+      "risk": "medium",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "deploy-micro-blog-stack",
+      "action": "docker.stack.deploy",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "medium",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "validate-micro-blog-rollout",
+      "action": "micro_blog.stack.validate",
+      "transport": "bkc-ssh+docker-cli+http",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "optional-seed-micro-blog-lab-journal",
+      "action": "micro_blog.content.seed_markdown",
+      "transport": "filesystem+http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "optional-wire-micro-blog-telemetry",
+      "action": "micro_blog.telemetry.wire",
+      "transport": "otel+prometheus",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "publish-micro-blog-edge-pointer",
+      "action": "lab_edge.pointer.record_or_update",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "record-micro-blog-known-good-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "This is the small-app canary before rx-demo. Do not deploy the raw Compose file directly to Swarm: build app images, push them to the lab registry, render image-based Swarm YAML, then deploy. Compose depends_on health conditions are useful for local compose but are not a Swarm readiness gate. Micro-blog also speaks markdown, so it can carry a lightweight lab-journal feed from BKC fragments/docs without becoming the deployment blocker."
+}

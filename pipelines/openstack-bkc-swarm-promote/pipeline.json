@@ -1,0 +1,71 @@
+{
+  "id": "openstack-bkc-swarm-promote",
+  "name": "BKC LAB — Promote OpenStack Swarm Controller",
+  "repo": "BlackKnightController",
+  "workflow": "openstack-bkc-swarm-promote",
+  "resource_class": "standard",
+  "status": "candidate",
+  "tags": [
+    "bkc",
+    "openstack",
+    "docker-swarm",
+    "portainer",
+    "promotion",
+    "lab",
+    "guardrail"
+  ],
+  "summary": "Promote the canonical OpenStack-hosted BKC bkc-alt services to a validated image through the Portainer-controlled OpenStack swarm endpoint.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "edge": "node:swarm1",
+    "openstack_swarm": "platform:openstack-swarm",
+    "primary_bkc": "service:bkc.lab.auzietek.com",
+    "stack": "stack:bkc-alt"
+  },
+  "inputs": {
+    "image": {
+      "required": true,
+      "default": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-drawio-fontbind-20260802101739"
+    },
+    "portainer_endpoint_id": {
+      "required": true,
+      "default": 6
+    },
+    "enable_promote": {
+      "required": false,
+      "default": true
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-portainer-openstack-endpoint",
+      "action": "portainer.endpoint.preflight",
+      "transport": "portainer-api",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "promote-bkc-alt-services",
+      "action": "portainer.swarm.services.update_image",
+      "transport": "portainer-api",
+      "risk": "medium",
+      "enabled_by": "enable_promote",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "validate-primary-bkc-routes",
+      "action": "http.routes.validate",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "record-environment-promotion-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "This pipeline exists to prevent the edge-vs-OpenStack split-brain regression. bkc.lab.auzietek.com is the OpenStack bkc-alt target; the edge controller is utility/fallback."
+}

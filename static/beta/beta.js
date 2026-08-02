@@ -129,6 +129,10 @@
                 style: { "background-color": "#62451d", "border-color": "#d5a14b", color: "#fff6e8", shape: "ellipse", width: 96, height: 70, "font-size": 12 },
             },
             {
+                selector: "node[type = 'remote-site']",
+                style: { "background-color": "#37245e", "border-color": "#b4a2ff", color: "#fbf8ff", shape: "round-rectangle", width: 112, height: 68, "font-size": 12 },
+            },
+            {
                 selector: "node[type = 'service']",
                 style: { "background-color": "#1f5f47", "border-color": "#8ed8b0", color: "#f0fff7", shape: "round-rectangle", width: 92, height: 58, "font-size": 11 },
             },
@@ -392,7 +396,7 @@ ${data.label || data.id || ""}`;
                 { id: "wan:internet", label: "Internet\npublic", type: "isp", kind: "wan", status: "running", role: "public traffic / DNS resolution", breadcrumb: "Internet › Spectrum/IPFire › lab edge" },
                 { id: "wan:spectrum", label: "Spectrum\nrouter", type: "isp", kind: "uncontrolled-edge", status: "running", ip: "192.168.1.1", role: "uncontrolled home ISP edge", breadcrumb: "Internet › Spectrum › lab" },
                 { id: "edge:ipfire", label: "IPFire\nedge", type: "firewall", kind: "firewall", status: "running", ip: "10.20.0.254 / 192.168.1.82", role: "NAT / firewall / VPN candidate", breadcrumb: "Switch › IPFire edge" },
-                { id: "remote:ionos", label: "IONOS\npublic VPS", type: "cluster", kind: "remote-site", status: "running", ip: "74.208.45.165 / .164", role: "public VPS swarm / nginx / telemetry", breadcrumb: "Internet › IONOS › Auzietek sites" },
+                { id: "site:ionos", label: "IONOS\npublic VPS", type: "remote-site", kind: "remote-site", status: "running", ip: "74.208.45.165 / .164", role: "public VPS swarm / nginx / telemetry", breadcrumb: "Internet › IONOS › Auzietek sites" },
                 { id: "service:public-sites", label: "Public\nSites", type: "service", kind: "public-web", status: "running", role: "Auzietek / BlackKnight / Linux / Retro", breadcrumb: "IONOS › public sites" },
                 { id: "vm:ns1.lab.auzietek.com", label: "ns1\nDNS/NFS/PXE", type: "vm", kind: "core-vm", status: "running", ip: "10.20.0.10", platform: "Proxmox .9", role: "DHCP / DNS / NFS / PXE", parent_host: "pve1", breadcrumb: "Switch › pve1 › ns1", last_seen: "reachable now on 22" },
                 { id: "vm:swarm1.lab.auzietek.com", label: "swarm1\nBKC", type: "vm", kind: "swarm-manager", status: "running", ip: "10.20.0.15", platform: "Proxmox .9", role: "current Docker Swarm / BKC", parent_host: "pve1", breadcrumb: "Switch › pve1 › swarm1", last_seen: "docker stack ls responding" },
@@ -415,8 +419,8 @@ ${data.label || data.id || ""}`;
                 ["fabric:n2024", "switchport:n2024-p05", "has_port"],
                 ["fabric:n2024", "switchport:n2024-p06", "has_port"],
                 ["evidence:n2024-mac-snapshot", "fabric:n2024", "describes"],
-                ["wan:internet", "remote:ionos", "routes_to"],
-                ["remote:ionos", "service:public-sites", "serves"],
+                ["wan:internet", "site:ionos", "routes_to"],
+                ["site:ionos", "service:public-sites", "serves"],
                 ["wan:internet", "wan:spectrum", "routes_to"],
                 ["wan:spectrum", "edge:ipfire", "edge_to"],
                 ["edge:ipfire", "fabric:n2024", "protects"],
@@ -438,7 +442,7 @@ ${data.label || data.id || ""}`;
                     "wan:internet": { x: -520, y: -180 },
                     "wan:spectrum": { x: -360, y: -72 },
                     "edge:ipfire": { x: -210, y: 68 },
-                    "remote:ionos": { x: -520, y: 180 },
+                    "site:ionos": { x: -520, y: 180 },
                     "service:public-sites": { x: -330, y: 256 },
                     "switchport:n2024-p04": { x: -120, y: 168 },
                     "evidence:n2024-mac-snapshot": { x: -120, y: -208 },
@@ -479,6 +483,27 @@ ${data.label || data.id || ""}`;
                 ["vm:esxi-swarm-mgr-01", "vm:esxi-swarm-worker-03", "swarm-controls"],
             ],
             layout: { mode: "mindmap", direction: "right", distance: 300, rowGap: 74, start: -148 },
+        },
+        "site:ionos": {
+            summary: "IONOS is the public remote-site family: VPS hosts, public web lanes, telemetry, DNS, and backup/restore evidence.",
+            nodes: [
+                { id: "host:ionos-auzietek-01", label: "IONOS 01\n74.208.45.165", type: "host", kind: "vps", status: "running", role: "primary nginx / Docker / public sites", breadcrumb: "IONOS › primary VPS" },
+                { id: "host:ionos-auzietek-02", label: "IONOS 02\n74.208.45.164", type: "host", kind: "vps", status: "warning", role: "secondary / cleanup / failover candidate", breadcrumb: "IONOS › secondary VPS" },
+                { id: "service:public-sites", label: "Public\nSites", type: "service", kind: "public-web", status: "running", role: "Auzietek / BlackKnight / Linux / Retro", breadcrumb: "IONOS › public sites" },
+                { id: "service:ionos-dns-api", label: "DNS\nAPI", type: "service", kind: "provider-api", status: "running", role: "lab/public host records and validation", breadcrumb: "IONOS › DNS API" },
+                { id: "service:mon-auzietek", label: "mon\nGrafana", type: "service", kind: "telemetry", status: "running", role: "public dashboards / nginx logs / host metrics", breadcrumb: "IONOS › telemetry" },
+                { id: "evidence:ionos-backups", label: "Backups\nEvidence", type: "evidence", kind: "backup-receipt", status: "snapshot", role: "site backup / restore / content publish receipts", breadcrumb: "IONOS › evidence" },
+            ],
+            edges: [
+                ["site:ionos", "host:ionos-auzietek-01", "hosts"],
+                ["site:ionos", "host:ionos-auzietek-02", "hosts"],
+                ["host:ionos-auzietek-01", "service:public-sites", "serves"],
+                ["host:ionos-auzietek-01", "service:mon-auzietek", "serves"],
+                ["site:ionos", "service:ionos-dns-api", "uses"],
+                ["service:public-sites", "evidence:ionos-backups", "protected_by"],
+                ["service:mon-auzietek", "evidence:ionos-backups", "records"],
+            ],
+            layout: { mode: "mindmap", direction: "right", distance: 290, rowGap: 74, start: -185 },
         },
         "host:r630-proxmox-01": {
             summary: "Stale Server2 hypervisor snapshot. Kept as evidence, but no longer treated as the edge pve1 parent.",
@@ -630,6 +655,9 @@ ${data.label || data.id || ""}`;
     const expandedPacks = new Set();
     const expansionAliases = {
         "host:proxmox1.lab.auzietek.com:": "host:pve1",
+        "remote:ionos": "site:ionos",
+        "host:74.208.45.165": "site:ionos",
+        "host:74.208.45.164": "site:ionos",
         "vm:swarm1.lab.auzietek.com:": "vm:swarm1.lab.auzietek.com",
         "vm:ns1.lab.auzietek.com:": "vm:ns1.lab.auzietek.com",
     };
@@ -644,6 +672,8 @@ ${data.label || data.id || ""}`;
     const actionTitle = document.getElementById("beta-action-title");
     const actionCopy = document.getElementById("beta-action-copy");
     const actionPayload = document.getElementById("beta-action-payload");
+    const exportStatus = document.getElementById("beta-export-status");
+    let graphWasDragged = false;
     const nodePopover = document.getElementById("beta-node-popover");
     let selectedContext = { type: "none", id: "", label: "", data: {} };
     let selectedNodeId = "";
@@ -826,7 +856,21 @@ ${data.label || data.id || ""}`;
         })[char]);
     }
 
-    cy.on("tap", "node", (event) => renderSelection(event.target));
+    cy.on("grab", "node", () => {
+        graphWasDragged = false;
+        if (nodePopover) nodePopover.hidden = true;
+    });
+    cy.on("drag", "node", () => {
+        graphWasDragged = true;
+        if (nodePopover) nodePopover.hidden = true;
+    });
+    cy.on("free", "node", () => {
+        window.setTimeout(() => { graphWasDragged = false; }, 80);
+    });
+    cy.on("tap", "node", (event) => {
+        if (graphWasDragged) return;
+        renderSelection(event.target);
+    });
     cy.on("cxttap", "node", (event) => {
         renderSelection(event.target);
         showNodePopover(event.target);
@@ -842,6 +886,15 @@ ${data.label || data.id || ""}`;
     document.getElementById("beta-scope-one")?.addEventListener("click", () => applyScope(1));
     document.getElementById("beta-scope-two")?.addEventListener("click", () => applyScope(2));
     document.getElementById("beta-scope-all")?.addEventListener("click", () => applyScope("all"));
+    document.getElementById("beta-focus-graph")?.addEventListener("click", (event) => {
+        const shell = document.querySelector(".beta-shell");
+        const enabled = shell?.classList.toggle("graph-focus");
+        event.currentTarget.textContent = enabled ? "Exit focus" : "Focus graph";
+        window.setTimeout(() => {
+            cy.resize();
+            cy.animate({ fit: { eles: cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 72 } }, { duration: 220 });
+        }, 80);
+    });
 
     document.getElementById("beta-hide-healthy")?.addEventListener("click", () => {
         cy.nodes().forEach((node) => {
@@ -1223,7 +1276,7 @@ ${data.label || data.id || ""}`;
             .map((node) => {
                 const data = Object.assign({}, node.data());
                 delete data.iconLabel;
-                data.layoutImportance = node.locked() || ["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors"].includes(node.id())
+                data.layoutImportance = node.locked() || ["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors", "site:ionos"].includes(node.id())
                     ? "anchor"
                     : "";
                 return { data, position: node.position() };
@@ -1234,6 +1287,145 @@ ${data.label || data.id || ""}`;
             .slice(0, 150)
             .map((edge) => ({ data: Object.assign({}, edge.data()) }));
         return { nodes, edges };
+    }
+
+    function visibleExportPayload() {
+        const nodes = cy.nodes()
+            .filter((node) => !node.hasClass("hidden-stale") && !node.hasClass("hidden-pipeline") && node.visible())
+            .slice(0, 120)
+            .map((node) => {
+                const data = Object.assign({}, node.data());
+                delete data.iconLabel;
+                return { data, position: node.position(), selected: node.hasClass("focus-root") || node.selected() };
+            });
+        const nodeIds = new Set(nodes.map((node) => node.data.id));
+        const edges = cy.edges()
+            .filter((edge) => nodeIds.has(edge.source().id()) && nodeIds.has(edge.target().id()) && edge.visible())
+            .slice(0, 220)
+            .map((edge) => ({ data: Object.assign({}, edge.data()) }));
+        return { nodes, edges };
+    }
+
+    function setReadyTray(state, html) {
+        if (!exportStatus) return;
+        exportStatus.classList.remove("ready", "failed");
+        if (state) exportStatus.classList.add(state);
+        exportStatus.innerHTML = `<span class="ready-dot"></span><span>${html}</span>`;
+    }
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function currentGraphEnvelope(nodes) {
+        const positions = nodes.map((node) => node.position());
+        const xs = positions.map((position) => position.x);
+        const ys = positions.map((position) => position.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        return {
+            minX: minX - 260,
+            maxX: maxX + 260,
+            minY: minY - 180,
+            maxY: maxY + 180,
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY),
+        };
+    }
+
+    function sanitizeAiPositions(rawPositions) {
+        const visibleNodes = cy.nodes()
+            .filter((node) => !node.hasClass("hidden-stale") && !node.hasClass("hidden-pipeline") && node.visible());
+        if (!visibleNodes.length) return [];
+        const envelope = currentGraphEnvelope(visibleNodes);
+        const maxMove = Math.max(260, Math.min(620, Math.max(envelope.width, envelope.height) * 0.42));
+        const anchors = new Set(["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors", "site:ionos"]);
+        const sanitized = [];
+        const occupied = [];
+        const minGapX = 132;
+        const minGapY = 78;
+
+        (rawPositions || []).forEach((position) => {
+            const id = String(position.id || "");
+            const node = cy.getElementById(id);
+            if (!node.length || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y))) {
+                return;
+            }
+            const current = node.position();
+            let x = clamp(Number(position.x), envelope.minX, envelope.maxX);
+            let y = clamp(Number(position.y), envelope.minY, envelope.maxY);
+            const dx = x - current.x;
+            const dy = y - current.y;
+            const distance = Math.hypot(dx, dy);
+            const nodeIsAnchor = anchors.has(id) || String(node.data("layoutImportance") || "") === "anchor";
+            const allowedMove = nodeIsAnchor ? Math.min(maxMove, 180) : maxMove;
+            if (distance > allowedMove) {
+                const scale = allowedMove / distance;
+                x = current.x + dx * scale;
+                y = current.y + dy * scale;
+            }
+            let attempts = 0;
+            while (occupied.some((other) => Math.abs(other.x - x) < minGapX && Math.abs(other.y - y) < minGapY) && attempts < 14) {
+                const angle = (Math.PI * 2 * attempts) / 7;
+                const radius = 58 + attempts * 18;
+                x = clamp(x + Math.cos(angle) * radius, envelope.minX, envelope.maxX);
+                y = clamp(y + Math.sin(angle) * radius, envelope.minY, envelope.maxY);
+                attempts += 1;
+            }
+            occupied.push({ x, y });
+            sanitized.push({ id, x, y });
+        });
+        return sanitized;
+    }
+
+    async function exportVisibleDrawio() {
+        const button = document.getElementById("beta-export-drawio");
+        if (!button) return;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Preparing…";
+        setReadyTray("", "Preparing Draw.io export…");
+        try {
+            const response = await fetch("/resources/graph/export-drawio", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: Object.assign({ "Content-Type": "application/json", Accept: "application/json" }, csrfHeader()),
+                body: JSON.stringify({
+                    mode: "operational",
+                    elements: visibleExportPayload(),
+                }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || result.error || `Draw.io export failed with HTTP ${response.status}`);
+            }
+            if (!result.artifact_url) {
+                throw new Error("Draw.io export finished but did not return an artifact URL");
+            }
+            button.textContent = "Export ready";
+            const download = document.createElement("a");
+            download.href = result.artifact_url;
+            download.download = "";
+            download.rel = "noopener";
+            document.body.appendChild(download);
+            download.click();
+            download.remove();
+            setReadyTray("ready", `Draw.io artifact ready · <a href="${escapeHtml(result.artifact_url)}" target="_blank" rel="noopener">open</a> · <a href="${escapeHtml(result.artifact_url)}" download>download</a> · scene ${escapeHtml(result.scene_hash || "")}`);
+            actionTitle.textContent = "Draw.io export ready";
+            actionCopy.textContent = "BKC exported the visible resource scene as an editable diagrams.net artifact and asked the browser to download it.";
+            actionPayload.innerHTML = `<code>${syntaxJson(result)}</code>`;
+        } catch (error) {
+            console.error("BKC Draw.io export failed", error);
+            button.textContent = "Export failed";
+            setReadyTray("failed", `Draw.io export failed · ${escapeHtml(String(error.message || error))}`);
+        } finally {
+            window.setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+            }, 3200);
+        }
     }
 
     async function arrangeVisibleWithAi() {
@@ -1263,19 +1455,21 @@ ${data.label || data.id || ""}`;
             if (!response.ok) {
                 throw new Error(result.detail || result.error || `AI layout failed with HTTP ${response.status}`);
             }
-            (result.positions || []).forEach((position) => {
+            const positions = sanitizeAiPositions(result.positions || []);
+            positions.forEach((position) => {
                 const node = cy.getElementById(String(position.id || ""));
-                if (node.length && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) {
-                    node.animate({ position: { x: Number(position.x), y: Number(position.y) } }, { duration: 420 });
-                }
+                if (node.length) node.animate({ position: { x: position.x, y: position.y } }, { duration: 420 });
             });
             window.setTimeout(() => {
-                cy.animate({ fit: { eles: cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 72 } }, { duration: 280 });
+                const arrangedIds = new Set(positions.map((position) => position.id));
+                const arranged = cy.nodes().filter((node) => arrangedIds.has(node.id()));
+                cy.animate({ fit: { eles: arranged.nonempty() ? arranged : cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 92 } }, { duration: 280 });
             }, 450);
-            actionTitle.textContent = "AI-arranged company mind";
-            actionCopy.textContent = result.notes || "Ollama proposed positions for the visible/recent graph subset; BKC validated node IDs and bounds before previewing them.";
-            actionPayload.innerHTML = `<code>${syntaxJson({ model: result.model, nodes: result.node_count, positions: result.position_count, saved: false, contract: "visible subset only" })}</code>`;
-            button.textContent = `AI arranged ${result.position_count || 0}`;
+            actionTitle.textContent = "Ollama layout preview";
+            actionCopy.textContent = result.notes || "Ollama proposed positions for the visible/recent graph subset; BKC clamped movement, preserved anchors, and spread overlapping nodes. Use Draw.io for the cleaner shareable artifact.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ model: result.model, nodes: result.node_count, proposed: result.position_count, applied: positions.length, saved: false, contract: "preview only; proposal sanitized by BKC geometry guardrails", polished_export: "Draw.io" })}</code>`;
+            setReadyTray("ready", `Ollama preview applied · ${positions.length} nodes · use Draw.io for polished export`);
+            button.textContent = `Previewed ${positions.length || 0}`;
         } catch (error) {
             console.error("BKC beta AI arrange failed", error);
             button.textContent = "AI arrange failed";
@@ -1419,6 +1613,7 @@ ${data.label || data.id || ""}`;
     });
 
     document.getElementById("beta-ai-arrange")?.addEventListener("click", arrangeVisibleWithAi);
+    document.getElementById("beta-export-drawio")?.addEventListener("click", exportVisibleDrawio);
 
     document.querySelectorAll(".pipeline-row-main").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1474,6 +1669,7 @@ ${data.label || data.id || ""}`;
                 const graphNode = cy.getElementById(String(selected.id || ""));
                 if (graphNode && !graphNode.empty()) {
                     renderSelection(graphNode);
+                    expandGraphPack(graphNode.id(), { auto: true });
                     cy.animate({ fit: { eles: graphNode.closedNeighborhood(), padding: 92 } }, { duration: 320 });
                     return;
                 }
@@ -1604,6 +1800,18 @@ ${data.label || data.id || ""}`;
         }
         if (q.includes("ns1") || q.includes("dns") || q.includes("nfs") || q.includes("pxe")) {
             if (cy.getElementById("vm:ns1.lab.auzietek.com").length) expandGraphPack("vm:ns1.lab.auzietek.com", { auto: true });
+        }
+        if (
+            q.includes("ionos") ||
+            q.includes("auzietek.com") ||
+            q.includes("blackknightcontroller.com") ||
+            q.includes("74.208.45") ||
+            q.includes("74.208.235") ||
+            q.includes("vps") ||
+            q.includes("public")
+        ) {
+            if (cy.getElementById("fabric:n2024").length) expandGraphPack("fabric:n2024", { auto: true });
+            preferredRootId = "site:ionos";
         }
         return preferredRootId;
     }

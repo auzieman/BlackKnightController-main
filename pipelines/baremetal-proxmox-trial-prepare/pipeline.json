@@ -1,0 +1,25 @@
+{
+  "id": "baremetal-proxmox-trial-prepare",
+  "name": "20 VIDEO — Server2 Proxmox Auto-Install",
+  "status": "proven",
+  "repo": "BlackKnightController",
+  "workflow": "baremetal-proxmox-deploy",
+  "resource_class": "slow",
+  "tags": ["20-video", "proven", "bare-metal", "destructive", "proxmox"],
+  "proof": {
+    "run_id": "01019545-3d0c-42b3-ae8d-97588680e47f",
+    "target": "node:physical_machine:r630-proxmox-01",
+    "evidence": "Fresh destructive Proxmox 9.2.2 install, PERC disk boot, SSH, API, KVM, local storage, and local-lvm validated at 10.20.0.41."
+  },
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_pxe_arm": {"required": false, "default": true},
+    "enable_destructive_install": {"required": false, "default": true}
+  },
+  "stages": [
+    {"id": "validate-unattended-media", "action": "proxmox.auto_iso.validate", "transport": "bkc-ssh+http", "risk": "low", "timeout_seconds": 300},
+    {"id": "arm-and-boot-server2", "action": "baremetal.pxe_once.cold_boot", "transport": "redfish+bkc-ssh", "risk": "high", "timeout_seconds": 180},
+    {"id": "wipe-install-observe-and-disarm", "action": "proxmox.auto_install.execute", "transport": "pxe+http+bkc-ssh", "risk": "destructive", "timeout_seconds": 1800},
+    {"id": "validate-proxmox-firstboot", "action": "proxmox.platform.validate", "transport": "bkc-ssh+https", "risk": "low", "timeout_seconds": 3600}
+  ]
+}

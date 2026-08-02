@@ -50,34 +50,62 @@ repeatable.
 
 ## Visual Tour
 
-![BKC overview page](docs/images/Overview-page.png)
+![BKC Company Mind resource workbench](docs/images/generated/bkc-beta-resources.png)
 
-The overview page is the landing console: resource counts, inferred
-relationships, active and failed run summaries, and jump points into the graph,
-inventory, integrations, and pipelines.
+The Company Mind resource workbench joins inventory, relationships, pipeline
+context, and operator actions into one living view. This screenshot is generated
+from the fresh lab BKC instance so documentation can track real working state.
 
-![BKC resource graph](docs/images/ResourceGraph.png)
+![BKC edge ownership graph](docs/images/generated/bkc-beta-edge-graph.png)
 
-The resource graph shows APIs, clusters, groups, hosts, VMs, containers,
-repositories, pipelines, actions, and credentials as related resources.
+The graph can be captured in focused story modes such as topology, edge
+ownership, and pipeline paths. These generated artifacts are useful for README
+updates, site content, video decks, and run evidence.
 
-![BKC inventory console](docs/images/InventoryConsole.png)
+![BKC pipeline workbench](docs/images/generated/bkc-pipelines.png)
+
+The pipeline workbench turns the catalog into an operator surface. Runs,
+resolved dictionaries, stages, actions, source layers, and latest state sit next
+to the pipeline list, so repeatable work stays reviewable.
+
+![BKC inventory console](docs/images/generated/bkc-inventory.png)
 
 The inventory console keeps resources first and launch paths underneath. Groups,
 host facts, relationships, status grids, and direct inspect/deploy actions come
 together here.
 
-![BKC integrations screen](docs/images/API-Integrations.png)
+![BKC integrations screen](docs/images/generated/bkc-integrations.png)
 
-The integrations screen is where operators store credentials, test endpoints,
-pull inventories, and sync discovered resources into BKC.
+The integrations screen is where operators connect Proxmox, Ansible, Docker,
+Kubernetes, SSH, and other sources so BKC can refresh inventory and execute the
+right action through the right path.
+
+![BKC overview page](docs/images/Overview-page.png)
+
+Older screenshots remain in the repository as historical UI references, but the
+generated captures above are the preferred documentation source when the lab is
+available.
 
 ![BKC pipelines screen](docs/images/PipeLines.png)
 
-The pipelines screen turns manual fixes into tracked runs. Operators can browse
-templates, inspect stages, queue work, and review recent run state.
+This older pipelines screenshot is kept as a historical reference for the first
+generation UI.
 
 ## Core Concepts
+
+### Hardware Bring-Up
+
+BKC is being shaped to manage physical lab hardware before an operating system
+exists. The current hardware path covers IPMI/iDRAC identity, managed switch
+port evidence, PXE validation, OpenStack/VMware tracks, and later service
+migration into the new lab networks.
+
+Start with [docs/hardware-bringup-ipmi-switch-pxe.md](docs/hardware-bringup-ipmi-switch-pxe.md)
+for the operator checklist, then see
+[docs/bare-metal-provisioning-architecture.md](docs/bare-metal-provisioning-architecture.md),
+[docs/openstack-lab-topology.md](docs/openstack-lab-topology.md), and
+[docs/switch-discovery-and-pxe.md](docs/switch-discovery-and-pxe.md) for the
+model details.
 
 ### Resource Graph
 
@@ -289,6 +317,9 @@ they stabilize.
 
 ## Quick Start
 
+For full Docker Compose, NFS-backed runtime, and Kubernetes install notes, see
+[install.md](install.md).
+
 Install dependencies for local development:
 
 ```bash
@@ -372,6 +403,8 @@ uses Redis database `/0` for rate limits and `/2` for jobs.
   catalog structure.
 - [docs/ui-resource-graph.md](docs/ui-resource-graph.md) - resource graph
   information architecture.
+- [docs/bkc-view-capture.md](docs/bkc-view-capture.md) - regenerate UI view
+  screenshots for docs, site content, and run evidence.
 - [docs/docker-kubernetes-api-targets.md](docs/docker-kubernetes-api-targets.md)
   - Docker and Kubernetes API target notes.
 - [docs/k3s-deployment-linkage.md](docs/k3s-deployment-linkage.md) - k3s

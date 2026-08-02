@@ -4,9 +4,7 @@
 {% block title %}Pipelines{% endblock %}
 {% block page_heading %}Pipelines{% endblock %}
 
-{% block head_extra %}
-    <meta http-equiv="refresh" content="8">
-{% endblock %}
+{% block head_extra %}{% endblock %}
 
 {% block content %}
     <section class="pipeline-card pipeline-console-filter">
@@ -40,6 +38,13 @@
                 <a class="button button-quiet" href="{{ url_for('pipelines.pipelines') }}">Reset</a>
             </div>
         </form>
+        <div id="pipeline-catalog-live-notice"
+             class="workflow-empty top-gap-sm"
+             hidden
+             data-signature="{{ catalog_signature|tojson|forceescape }}"
+             data-endpoint="{{ url_for('pipelines.pipeline_catalog_signature_api') }}">
+            Pipeline catalog files changed. <a href="{{ request.full_path }}">Refresh pipeline view</a>
+        </div>
     </section>
 
     <section class="pipeline-console-layout top-gap">
@@ -50,7 +55,7 @@
             </div>
             <div class="pipeline-tree-list">
                 {% for pipeline in pipelines %}
-                    {% set latest = latest_runs_by_workflow.get(pipeline.workflow) %}
+                    {% set latest = latest_runs_by_pipeline_key.get('pipeline:' ~ pipeline.id) or latest_runs_by_pipeline_key.get('workflow:' ~ pipeline.workflow) %}
                     {% set supported = supported_workflows.get(pipeline.workflow) %}
                     <a class="pipeline-tree-node{% if selected_pipeline and selected_pipeline.id == pipeline.id %} active{% endif %}"
                        href="{{ url_for('pipelines.pipelines', q=search_query, tag=selected_tag, pipeline=pipeline.id) }}">
@@ -86,7 +91,7 @@
 
         <section class="pipeline-console-main">
             {% if selected_pipeline %}
-                {% set latest = latest_runs_by_workflow.get(selected_pipeline.workflow) %}
+                {% set latest = latest_runs_by_pipeline_key.get('pipeline:' ~ selected_pipeline.id) or latest_runs_by_pipeline_key.get('workflow:' ~ selected_pipeline.workflow) %}
                 {% set supported = supported_workflows.get(selected_pipeline.workflow) %}
                 <article class="pipeline-card pipeline-selected-card">
                     <div class="pipeline-card-top">
@@ -103,6 +108,43 @@
                         </span>
                     </div>
                     <p class="metric-copy">{{ selected_pipeline.description }}</p>
+
+                    <section class="pipeline-ai-explainer" aria-label="Ollama pipeline explainer">
+                        <div>
+                            <p class="eyebrow">Ollama explainer</p>
+                            <h4>Operator brief for this pipeline</h4>
+                            <p class="metric-copy">
+                                Ask the lab model to summarize intent, destructive scope, dependencies, expected outputs, and safe rerun notes before you press the shiny button.
+                            </p>
+                        </div>
+                        <div class="pipeline-ai-controls">
+                            <label>
+                                <span>model</span>
+                                <select id="pipeline-ollama-model">
+                                    <option value="qwen2.5-coder:1.5b">qwen2.5-coder:1.5b</option>
+                                    <option value="llama3.2:3b">llama3.2:3b</option>
+                                    <option value="granite3.2-vision">granite3.2-vision</option>
+                                    <option value="hemanth/diagramgenerator">diagramgenerator</option>
+                                </select>
+                            </label>
+                            <button
+                                class="button button-secondary"
+                                id="pipeline-ollama-explain"
+                                type="button"
+                                data-pipeline-id="{{ selected_pipeline.id }}"
+                                data-explain-url="{{ url_for('pipelines.pipeline_explain_api') }}"
+                                data-drawio-url="{{ url_for('pipelines.pipeline_explain_drawio_api') }}"
+                            >Explain</button>
+                            <button class="button button-quiet" id="pipeline-ollama-copy" type="button">Copy brief</button>
+                            <button class="button button-quiet" id="pipeline-ollama-drawio" type="button">Draw.io brief</button>
+                            {% if latest %}
+                                <a class="button button-quiet" href="{{ url_for('pipelines.pipeline_run_detail', run_id=latest.id) }}">Open latest run</a>
+                            {% endif %}
+                        </div>
+                        <div id="pipeline-ollama-output" class="pipeline-ai-output pipeline-ai-rendered" aria-live="polite">
+                            <p>Select Explain to generate a grounded, pipeline-specific operator brief.</p>
+                        </div>
+                    </section>
 
                     <div class="tab-strip pipeline-tabs">
                         <a class="tab-link active" href="#pipeline-summary">Summary</a>
@@ -266,6 +308,19 @@
                                 Commit
                                 <input type="text" name="commit" placeholder="optional commit sha">
                             </label>
+                            {% for input_name, input_spec in selected_pipeline.inputs.items() %}
+                                {% if input_spec.default in [true, false] %}
+                                    <label class="pipeline-boolean-input">
+                                        <input type="checkbox" name="input__{{ input_name }}" value="true" {% if input_spec.default %}checked{% endif %}>
+                                        {{ input_name|replace('_', ' ') }}
+                                    </label>
+                                {% elif input_name != 'tenant_slug' %}
+                                    <label>
+                                        {{ input_name|replace('_', ' ') }}
+                                        <input type="text" name="input__{{ input_name }}" value="{{ input_spec.default }}" {% if input_spec.required %}required{% endif %}>
+                                    </label>
+                                {% endif %}
+                            {% endfor %}
                             {% if selected_pipeline.workflow in ['fedora-cosmic-postinstall', 'demo-k3s-add-node'] %}
                                 <label>
                                     Target host
@@ -394,4 +449,145 @@
             </section>
         {% endfor %}
     </section>
+
+    <script>
+        (function () {
+            const explainButton = document.getElementById("pipeline-ollama-explain");
+            const copyButton = document.getElementById("pipeline-ollama-copy");
+            const drawioButton = document.getElementById("pipeline-ollama-drawio");
+            const explainOutput = document.getElementById("pipeline-ollama-output");
+            const modelSelect = document.getElementById("pipeline-ollama-model");
+            const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content") || "";
+            let explainerMarkdown = "";
+            if (explainButton && explainOutput && modelSelect) {
+                explainButton.addEventListener("click", async () => {
+                    const originalText = explainButton.textContent;
+                    explainButton.disabled = true;
+                    explainButton.textContent = "Thinking…";
+                    explainOutput.innerHTML = "<p>Asking the lab Ollama host for a short operator brief…</p>";
+                    try {
+                        const response = await fetch(explainButton.dataset.explainUrl, {
+                            method: "POST",
+                            headers: {
+                                "Accept": "application/json",
+                                "Content-Type": "application/json",
+                                ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+                            },
+                            body: JSON.stringify({
+                                pipeline_id: explainButton.dataset.pipelineId,
+                                model: modelSelect.value,
+                            }),
+                        });
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data.error || `HTTP ${response.status}`);
+                        }
+                        const source = data.source === "ollama" ? "Ollama" : "local fallback";
+                        explainerMarkdown = `[${source} · ${data.model}]\n\n${data.explanation}`;
+                        explainOutput.innerHTML = `<p class="pipeline-ai-source">${source} · ${data.model}</p>${data.explanation_html || "<p>No rendered explanation returned.</p>"}`;
+                    } catch (error) {
+                        explainOutput.innerHTML = `<p>Explainer failed cleanly: ${error.message}</p>`;
+                    } finally {
+                        explainButton.disabled = false;
+                        explainButton.textContent = originalText;
+                    }
+                });
+            }
+            if (copyButton && explainOutput) {
+                copyButton.addEventListener("click", async () => {
+                    const text = explainerMarkdown || explainOutput.textContent || "";
+                    if (!text.trim()) {
+                        return;
+                    }
+                    const originalText = copyButton.textContent;
+                    try {
+                        await navigator.clipboard.writeText(text);
+                        copyButton.textContent = "Copied";
+                    } catch (error) {
+                        copyButton.textContent = "Copy failed";
+                    } finally {
+                        window.setTimeout(() => {
+                            copyButton.textContent = originalText;
+                        }, 1800);
+                    }
+                });
+            }
+            if (drawioButton && explainButton) {
+                drawioButton.addEventListener("click", async () => {
+                    const originalText = drawioButton.textContent;
+                    drawioButton.disabled = true;
+                    drawioButton.textContent = "Exporting…";
+                    try {
+                        const response = await fetch(explainButton.dataset.drawioUrl, {
+                            method: "POST",
+                            headers: {
+                                "Accept": "application/json",
+                                "Content-Type": "application/json",
+                                ...(csrfToken ? {"X-CSRFToken": csrfToken} : {}),
+                            },
+                            body: JSON.stringify({
+                                pipeline_id: explainButton.dataset.pipelineId,
+                                explanation: explainerMarkdown,
+                            }),
+                        });
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data.error || `HTTP ${response.status}`);
+                        }
+                        const link = document.createElement("a");
+                        link.href = data.artifact_url;
+                        link.download = "";
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        drawioButton.textContent = "Draw.io ready";
+                    } catch (error) {
+                        drawioButton.textContent = "Export failed";
+                    } finally {
+                        window.setTimeout(() => {
+                            drawioButton.disabled = false;
+                            drawioButton.textContent = originalText;
+                        }, 2200);
+                    }
+                });
+            }
+
+            const notice = document.getElementById("pipeline-catalog-live-notice");
+            if (!notice || !window.fetch) {
+                return;
+            }
+            let current = {};
+            try {
+                current = JSON.parse(notice.dataset.signature || "{}");
+            } catch (error) {
+                current = {};
+            }
+            const endpoint = notice.dataset.endpoint;
+            function sameSignature(next) {
+                return next
+                    && next.file_count === current.file_count
+                    && next.newest_mtime_ns === current.newest_mtime_ns
+                    && next.total_size === current.total_size
+                    && next.pipeline_count === current.pipeline_count;
+            }
+            async function pollCatalog() {
+                try {
+                    const response = await fetch(endpoint, {
+                        headers: { "Accept": "application/json" },
+                        credentials: "same-origin"
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    const next = await response.json();
+                    if (!sameSignature(next)) {
+                        notice.hidden = false;
+                    }
+                } catch (error) {
+                    // Polling is advisory. The normal page request still loads live catalog state.
+                }
+            }
+            window.setInterval(pollCatalog, 8000);
+        }());
+    </script>
 {% endblock %}

@@ -4,10 +4,13 @@ import crypt
 import ipaddress
 import hashlib
 import json
+import os
 import re
 import shlex
 import socket
 import secrets
+import ssl
+import subprocess
 import tempfile
 import time
 import urllib.error
@@ -23,6 +26,7 @@ from services.automation_pipeline import (
     append_event,
     mark_run_active,
     mark_run_complete,
+    mark_run_failed,
 )
 from services.automation_runs import get_run, load_runs, update_run, update_stage
 from services.docker_swarm import scan_docker_controller, sync_docker_inventory_to_rules
@@ -32,11 +36,13 @@ from services.integration_store import (
     load_proxmox_snapshot,
     save_ansible_snapshot,
     save_docker_snapshot,
+    save_integrations,
+    save_proxmox_snapshot,
 )
 from services.inventory_model import reconcile_rules_inventory, resolve_group_hosts
 from services.kubernetes_api import kubectl_text
 from services.pipeline_catalog import pipeline_by_id, resolve_pipeline_dictionary
-from services.proxmox import ProxmoxClient, load_proxmox_config
+from services.proxmox import ProxmoxClient, load_proxmox_config, summarize_inventory, sync_inventory_to_rules
 from services.remote_ops import (
     download_remote_file,
     run_remote_command,
@@ -2549,6 +2555,1041 @@ WORKFLOW_DEFINITIONS["ns1-provisioning-dhcp-prepare"] = {
         },
     ],
     "complete_message": "ns1 provisioning DHCP prepare review completed.",
+}
+WORKFLOW_DEFINITIONS["baremetal-bmc-discovery-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-bmc-discovery-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-bmc-discovery-prepare",
+            "active": "Reviewing DHCP iDRAC/BMC discovery intent.",
+            "complete": "DHCP iDRAC/BMC discovery intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "observe-ns1-neighbors",
+            "transport": "bkc-ssh",
+            "kind": "bmc-discovery-neighbors",
+            "pipeline_id": "baremetal-bmc-discovery-prepare",
+            "active": "Collecting ns1 ARP/neighbor evidence for candidate iDRACs.",
+            "complete": "ns1 ARP/neighbor evidence collected.",
+            "timeout": 30,
+        },
+        {
+            "name": "probe-redfish-roots",
+            "transport": "bkc-ssh",
+            "kind": "bmc-discovery-redfish",
+            "pipeline_id": "baremetal-bmc-discovery-prepare",
+            "active": "Probing candidate iDRAC Redfish roots from ns1.",
+            "complete": "Candidate iDRAC Redfish roots probed.",
+            "timeout": 45,
+        },
+        {
+            "name": "map-bmcs-to-hosts",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-bmc-discovery-prepare",
+            "active": "Reviewing BMC to physical host mapping.",
+            "complete": "BMC to physical host mapping reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "record-discovery-handoff",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-bmc-discovery-prepare",
+            "active": "Reviewing BMC discovery handoff.",
+            "complete": "BMC discovery handoff reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Bare metal BMC discovery preparation completed.",
+}
+WORKFLOW_DEFINITIONS["ns1-lan-mac-pxe-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-ns1-node",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Resolving ns1 LAN MAC PXE target.",
+            "complete": "ns1 LAN MAC PXE target reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-lan-interface",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-validate",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Validating ns1 LAN interface for MAC-only PXE.",
+            "complete": "ns1 LAN interface validated.",
+            "timeout": 30,
+        },
+        {
+            "name": "ensure-dhcp-include",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-ensure-include",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Ensuring DHCP root config includes the BKC LAN MAC PXE fragment.",
+            "complete": "DHCP root config includes the BKC LAN MAC PXE fragment.",
+            "timeout": 30,
+        },
+        {
+            "name": "render-lan-mac-pxe-fragment",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-render-fragment",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Rendering LAN MAC-only PXE DHCP fragment on ns1.",
+            "complete": "LAN MAC-only PXE DHCP fragment rendered.",
+            "timeout": 30,
+        },
+        {
+            "name": "render-lan-dhcp-defaults",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-render-defaults",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Rendering DHCP interface defaults on ns1.",
+            "complete": "DHCP interface defaults rendered.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-dhcp-config",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-validate-config",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Validating DHCP syntax for LAN MAC-only PXE.",
+            "complete": "DHCP syntax validated.",
+            "timeout": 30,
+        },
+        {
+            "name": "restart-dhcp-if-enabled",
+            "transport": "bkc-ssh",
+            "kind": "ns1-lan-mac-pxe-restart",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Restarting DHCP when LAN PXE enable gate is true.",
+            "complete": "DHCP restart gate evaluated.",
+            "timeout": 60,
+        },
+        {
+            "name": "record-pxe-mac-relationship",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-lan-mac-pxe-prepare",
+            "active": "Recording R630 MAC PXE relationship intent.",
+            "complete": "R630 MAC PXE relationship intent reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "ns1 LAN MAC-only PXE preparation completed.",
+}
+WORKFLOW_DEFINITIONS["baremetal-r630-pxe-validation"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "resolve-physical-identity",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing first R630 physical identity resolution.",
+            "complete": "First R630 physical identity resolution reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-bmc-reachability",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing first R630 BMC reachability evidence.",
+            "complete": "First R630 BMC reachability evidence reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-provisioning-services",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing ns1 DHCP/PXE service evidence for the first R630.",
+            "complete": "ns1 DHCP/PXE service evidence reviewed for the first R630.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-image-assets",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing Debian Trixie image asset validation intent.",
+            "complete": "Debian Trixie image asset validation intent reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-storage-visibility",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing first R630 storage controller and disk visibility.",
+            "complete": "First R630 storage controller and disk visibility reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "render-boot-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing first R630 one-shot boot intent.",
+            "complete": "First R630 one-shot boot intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "record-validation-evidence",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-r630-pxe-validation",
+            "active": "Reviewing first R630 provisioning evidence recording.",
+            "complete": "First R630 provisioning evidence recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Bare metal R630 PXE validation review completed.",
+}
+WORKFLOW_DEFINITIONS["ns1-default-pxe-diagnostics"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-diagnostic-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing default PXE diagnostic intent.",
+            "complete": "Default PXE diagnostic intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-diagnostic-boundary",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing bounded PXE-only diagnostic DHCP boundary.",
+            "complete": "Bounded PXE-only diagnostic DHCP boundary reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "render-default-diagnostic-ipxe",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing default diagnostic iPXE render plan.",
+            "complete": "Default diagnostic iPXE render plan reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "render-dhcp-diagnostic-fragment",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing DHCP fragment render plan for default PXE diagnostics.",
+            "complete": "DHCP fragment render plan for default PXE diagnostics reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-live-assets",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing Debian live diagnostic asset validation plan.",
+            "complete": "Debian live diagnostic asset validation plan reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "plan-enable-lease-only-boundary",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing guarded enablement of the lease-only PXE boundary.",
+            "complete": "Lease-only PXE boundary enablement reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "record-default-diagnostic-profile",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "ns1-default-pxe-diagnostics",
+            "active": "Reviewing default PXE diagnostic profile relationships.",
+            "complete": "Default PXE diagnostic profile relationships reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Default PXE diagnostics review completed.",
+}
+WORKFLOW_DEFINITIONS["baremetal-openstack-lab-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-hardware-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 Trixie/OpenStack hardware intent.",
+            "complete": "First R630 Trixie/OpenStack hardware intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "register-physical-nodes",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 physical node registration.",
+            "complete": "First R630 physical node registration reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-bmc-access",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 BMC access validation.",
+            "complete": "First R630 BMC access validation reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-provisioning-services",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 provisioning service validation.",
+            "complete": "First R630 provisioning service validation reviewed.",
+            "timeout": 45,
+        },
+        {
+            "name": "plan-openstack-edge-network",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing OpenStack lab edge network plan.",
+            "complete": "OpenStack lab edge network plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-base-os-image",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing Debian Trixie base OS image validation.",
+            "complete": "Debian Trixie base OS image validation reviewed.",
+            "timeout": 45,
+        },
+        {
+            "name": "select-storage-profile",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 OpenStack storage profile selection.",
+            "complete": "First R630 OpenStack storage profile selection reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "render-openstack-base-boot-intent",
+            "transport": "internal",
+            "kind": "openstack-base-boot-render",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Rendering first R630 Trixie iPXE and preseed assets on ns1.",
+            "complete": "First R630 Trixie iPXE and preseed assets rendered.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-base-os-install",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 base OS install gate.",
+            "complete": "First R630 base OS install gate reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-firstboot-enrollment",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing first R630 BKC SSH enrollment plan.",
+            "complete": "First R630 BKC SSH enrollment plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-openstack-host-baseline",
+            "transport": "internal",
+            "kind": "openstack-base-boot-validate",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Validating first R630 PXE boot assets from ns1.",
+            "complete": "First R630 PXE boot assets validated.",
+            "timeout": 120,
+        },
+        {
+            "name": "prepare-trixie-neutron-hosts",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing Trixie OpenStack host prep handoff.",
+            "complete": "Trixie OpenStack host prep handoff reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "plan-openstack-installer-handoff",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-openstack-lab-prepare",
+            "active": "Reviewing OpenStack installer provider handoff.",
+            "complete": "OpenStack installer provider handoff reviewed.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Bare metal OpenStack lab prepare review completed.",
+}
+WORKFLOW_DEFINITIONS["trixie-openstack-host-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-openstack-host-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Reviewing Trixie OpenStack host intent.",
+            "complete": "Trixie OpenStack host intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-firstboot-login",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-firstboot-login",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Validating first-boot BKC SSH and demo login expectations.",
+            "complete": "First-boot BKC SSH and demo login expectations validated.",
+            "timeout": 120,
+        },
+        {
+            "name": "normalize-firstboot-baseline",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-base-normalize",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Normalizing first-boot hostname, admin sudo, tools, and BKC marker.",
+            "complete": "First-boot hostname, admin sudo, tools, and BKC marker normalized.",
+            "timeout": 600,
+        },
+        {
+            "name": "validate-network-sides",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-network-sides",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Validating current bootstrap network and planned OpenStack side networks.",
+            "complete": "Current bootstrap network and planned OpenStack side networks validated.",
+            "timeout": 120,
+        },
+        {
+            "name": "prepare-neutron-host-packages",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-package-prepare",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Preparing Trixie host packages for OpenStack Neutron/OVS.",
+            "complete": "Trixie host package preparation completed.",
+            "timeout": 1200,
+        },
+        {
+            "name": "validate-neutron-host-readiness",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-neutron-validate",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Validating Trixie OpenStack Neutron/OVS readiness.",
+            "complete": "Trixie OpenStack Neutron/OVS readiness validated.",
+            "timeout": 180,
+        },
+        {
+            "name": "cache-openstack-image-assets",
+            "transport": "bkc-ssh",
+            "kind": "openstack-host-image-cache",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Caching OpenStack QCOW/image assets on the prepared host.",
+            "complete": "OpenStack QCOW/image assets cached on the prepared host.",
+            "timeout": 1800,
+        },
+        {
+            "name": "validate-openstack-web-target",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Reviewing OpenStack web/API validation target.",
+            "complete": "OpenStack web/API validation target reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "record-openstack-network-profile",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "trixie-openstack-host-prepare",
+            "active": "Reviewing OpenStack network profile relationship recording.",
+            "complete": "OpenStack network profile relationship recording reviewed.",
+            "timeout": 15,
+        },
+    ],
+    "complete_message": "Trixie OpenStack host preparation completed.",
+}
+WORKFLOW_DEFINITIONS["openstack-lab-seed-and-validate"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-openstack-seed-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack seed and validation intent.",
+            "complete": "OpenStack seed and validation intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-openstack-api-access",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack API credential validation.",
+            "complete": "OpenStack API credential validation reviewed.",
+            "timeout": 120,
+        },
+        {
+            "name": "validate-horizon-dashboard",
+            "transport": "http",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing Horizon dashboard validation.",
+            "complete": "Horizon dashboard validation reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "seed-project-and-user",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack project and user seed.",
+            "complete": "OpenStack project and user seed reviewed.",
+            "timeout": 180,
+        },
+        {
+            "name": "seed-networks",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack provider and tenant network seed.",
+            "complete": "OpenStack provider and tenant network seed reviewed.",
+            "timeout": 240,
+        },
+        {
+            "name": "seed-image-flavor-keypair-security",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack image, flavor, keypair, and security group seed.",
+            "complete": "OpenStack image, flavor, keypair, and security group seed reviewed.",
+            "timeout": 600,
+        },
+        {
+            "name": "launch-smoke-instance",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack smoke instance launch.",
+            "complete": "OpenStack smoke instance launch reviewed.",
+            "timeout": 600,
+        },
+        {
+            "name": "validate-smoke-instance",
+            "transport": "openstack-api",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing OpenStack smoke instance validation.",
+            "complete": "OpenStack smoke instance validation reviewed.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-bkc-openstack-ownership",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-lab-seed-and-validate",
+            "active": "Reviewing BKC OpenStack ownership relationships.",
+            "complete": "BKC OpenStack ownership relationships reviewed.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "OpenStack lab seed and validation review completed.",
+}
+WORKFLOW_DEFINITIONS["openstack-kolla-single-node-install"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-kolla-install-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "active": "Reviewing Kolla single-node install intent.",
+            "complete": "Kolla single-node install intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-kolla-host-readiness",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "preflight",
+            "active": "Validating host readiness for a real Kolla install.",
+            "complete": "Host readiness for Kolla validated.",
+            "timeout": 180,
+        },
+        {
+            "name": "prepare-kolla-dependencies",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "dependencies",
+            "operation_modes": ["prepare"],
+            "active": "Installing Kolla host dependencies.",
+            "complete": "Kolla host dependencies installed.",
+            "timeout": 1800,
+        },
+        {
+            "name": "install-kolla-ansible",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "install",
+            "operation_modes": ["prepare"],
+            "active": "Installing Kolla Ansible into the BKC venv.",
+            "complete": "Kolla Ansible installed into the BKC venv.",
+            "timeout": 1800,
+        },
+        {
+            "name": "render-kolla-configuration",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "configure",
+            "operation_modes": ["precheck"],
+            "active": "Rendering Kolla single-node configuration.",
+            "complete": "Kolla single-node configuration rendered.",
+            "timeout": 600,
+        },
+        {
+            "name": "kolla-bootstrap-servers",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "bootstrap",
+            "operation_modes": ["precheck"],
+            "active": "Running kolla-ansible bootstrap-servers.",
+            "complete": "Kolla bootstrap-servers completed.",
+            "timeout": 2400,
+        },
+        {
+            "name": "kolla-prechecks",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "prechecks",
+            "operation_modes": ["precheck"],
+            "active": "Running Kolla prechecks.",
+            "complete": "Kolla prechecks completed.",
+            "timeout": 2400,
+        },
+        {
+            "name": "kolla-deploy",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "deploy",
+            "operation_modes": ["deploy"],
+            "active": "Deploying OpenStack with Kolla.",
+            "complete": "OpenStack deploy completed.",
+            "timeout": 7200,
+        },
+        {
+            "name": "kolla-post-deploy",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "postdeploy",
+            "operation_modes": ["validate"],
+            "active": "Running Kolla post-deploy credential export.",
+            "complete": "Kolla post-deploy credential export completed.",
+            "timeout": 900,
+        },
+        {
+            "name": "validate-horizon-keystone",
+            "transport": "bkc-ssh",
+            "kind": "openstack-kolla-phase",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "phase": "validate",
+            "operation_modes": ["validate"],
+            "active": "Validating Horizon and Keystone on the OpenStack host.",
+            "complete": "Horizon and Keystone validation completed.",
+            "timeout": 300,
+        },
+        {
+            "name": "record-kolla-handoff",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "openstack-kolla-single-node-install",
+            "operation_modes": ["validate"],
+            "active": "Recording BKC to OpenStack ownership handoff.",
+            "complete": "BKC to OpenStack ownership handoff recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "OpenStack Kolla single-node install pipeline completed.",
+}
+WORKFLOW_DEFINITIONS["baremetal-vmware-trial-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-hardware-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing experimental ESXi hardware intent.",
+            "complete": "Experimental ESXi hardware intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "register-physical-nodes",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing experimental ESXi physical node registration.",
+            "complete": "Experimental ESXi physical node registration reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-bmc-access",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing experimental ESXi BMC access validation.",
+            "complete": "Experimental ESXi BMC access validation reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-provisioning-services",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing experimental ESXi provisioning services.",
+            "complete": "Experimental ESXi provisioning services reviewed.",
+            "timeout": 45,
+        },
+        {
+            "name": "validate-operator-supplied-media",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing operator-supplied VMware installer media.",
+            "complete": "Operator-supplied VMware installer media reviewed.",
+            "timeout": 45,
+        },
+        {
+            "name": "render-vmware-kickstart-intent",
+            "transport": "internal",
+            "kind": "vmware-esxi-boot-assets-render",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Rendering experimental ESXi boot.cfg, ks.cfg, and firstboot intent when enabled.",
+            "complete": "Experimental ESXi boot.cfg, ks.cfg, and firstboot intent rendered or reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-stage-vmware-installer-media",
+            "transport": "bkc-ssh",
+            "kind": "vmware-esxi-media-stage",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Validating and publishing operator-supplied ESXi media on ns1.",
+            "complete": "ESXi media, vendor boot configuration, and HTTP assets validated on ns1.",
+            "timeout": 900,
+        },
+        {
+            "name": "plan-esxi-install",
+            "transport": "pxe+http+redfish",
+            "kind": "vmware-esxi-iso-handoff",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Booting Server2 from the intact vendor ESXi ISO and waiting for operator handoff.",
+            "complete": "Server2 reached the intact ESXi ISO handoff boundary.",
+            "timeout": 1800,
+        },
+        {
+            "name": "validate-vmware-firstboot",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing experimental ESXi first boot validation.",
+            "complete": "Experimental ESXi first boot validation reviewed.",
+            "timeout": 120,
+        },
+        {
+            "name": "validate-esxi-web-target",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing ESXi web/API validation target.",
+            "complete": "ESXi web/API validation target reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-vcenter-registration",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-vmware-trial-prepare",
+            "active": "Reviewing optional vCenter registration plan.",
+            "complete": "Optional vCenter registration plan reviewed.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Experimental bare metal VMware trial prepare review completed.",
+}
+WORKFLOW_DEFINITIONS["baremetal-proxmox-trial-prepare"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-proxmox-intent",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Reviewing Server2 Proxmox installation intent.",
+            "complete": "Server2 Proxmox installation intent reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "validate-unattended-media",
+            "transport": "bkc-ssh",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Reviewing the checksum-gated Proxmox unattended media.",
+            "complete": "Proxmox unattended media validation intent reviewed.",
+            "timeout": 180,
+        },
+        {
+            "name": "arm-server2-one-shot-pxe",
+            "transport": "bkc-ssh",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Evaluating the guarded Server2 one-shot PXE arm.",
+            "complete": "Server2 one-shot PXE arm gate evaluated.",
+            "timeout": 180,
+        },
+        {
+            "name": "plan-server2-install",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Reviewing the destructive Server2 install boundary.",
+            "complete": "Destructive Server2 install boundary reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "validate-proxmox-management",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Reviewing Proxmox management validation targets.",
+            "complete": "Proxmox management validation targets reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "disarm-server2-one-shot-pxe",
+            "transport": "bkc-ssh",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-proxmox-trial-prepare",
+            "active": "Reviewing the mandatory post-install PXE disarm boundary.",
+            "complete": "Post-install PXE disarm boundary reviewed.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Server2 Proxmox filming preflight completed.",
+}
+
+# Filming workflows deliberately use separate IDs from the older review recipes.
+# Every stage below either changes the target or validates live evidence.
+WORKFLOW_DEFINITIONS["baremetal-openstack-lab-deploy"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "destructive-one-shot-trixie", "kind": "video-openstack-one-shot", "active": "Erasing all Server1 disks and performing one unattended Trixie PXE transaction.", "timeout": 4200},
+    ], "complete_message": "Server1 all-drive destructive Trixie PXE installation completed and SSH-validated.",
+}
+WORKFLOW_DEFINITIONS["baremetal-proxmox-deploy"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "validate-unattended-media", "kind": "video-proxmox-media", "active": "Validating the checksum-pinned Proxmox auto-install media and PXE initrd.", "timeout": 300},
+        {"name": "arm-and-boot-server2", "kind": "video-proxmox-boot", "active": "Arming Server2 one-shot PXE and requesting the destructive install.", "timeout": 180},
+        {"name": "wipe-install-observe-and-disarm", "kind": "video-proxmox-handoff", "active": "Running the destructive Proxmox install, observing payload handoff, then disarming DHCP PXE.", "timeout": 1800},
+        {"name": "validate-proxmox-firstboot", "kind": "video-proxmox-validate", "active": "Waiting for disk boot and validating Proxmox API, SSH, and KVM.", "timeout": 3600},
+    ], "complete_message": "Server2 bare-metal Proxmox deployment completed and validated.",
+}
+WORKFLOW_DEFINITIONS["native-openstack-all-in-one"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "install-native-openstack", "kind": "video-openstack-install", "active": "Installing Keystone, Horizon, Glance, Placement, Nova, and Neutron on Server1.", "timeout": 7200},
+        {"name": "validate-openstack-services", "kind": "video-openstack-validate", "active": "Validating OpenStack APIs and Horizon on Server1.", "timeout": 300},
+    ], "complete_message": "Server1 native OpenStack services and Horizon completed and validated.",
+}
+WORKFLOW_DEFINITIONS["lab-dual-platform-seed-validate"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "seed-openstack-resources", "kind": "video-seed-openstack", "active": "Seeding real OpenStack project, network, image, flavor, and smoke server.", "timeout": 1800},
+        {"name": "seed-proxmox-base-guests", "kind": "video-seed-proxmox", "active": "Migrating the proven Trixie VM from Proxmox .9 and creating both base guests.", "timeout": 3600},
+        {"name": "validate-both-platforms", "kind": "video-seed-validate", "active": "Validating OpenStack, Proxmox guests, KVM, and edge dashboards.", "timeout": 600},
+    ], "complete_message": "Both lab platforms were seeded with real resources and validated.",
+}
+WORKFLOW_DEFINITIONS["openstack-local-ai-openwebui-preflight"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-server1-ai-capacity", "kind": "video-local-ai-capacity", "active": "Measuring Server1/OpenStack capacity, egress, and container/runtime state for the local-AI bonus lane.", "timeout": 300},
+        {"name": "ensure-openstack-ai-vm", "kind": "video-local-ai-vm", "active": "Ensuring the cattle OpenStack AI VM flavor, security group, keypair, and server exist.", "timeout": 1800},
+        {"name": "install-ollama-baremetal", "kind": "video-local-ai-ollama", "active": "Installing and validating Ollama as a Server1 systemd service.", "timeout": 1800},
+        {"name": "deploy-openwebui-container", "kind": "video-local-ai-openwebui", "active": "Installing Podman if needed and running OpenWebUI against Server1 Ollama.", "timeout": 1800},
+        {"name": "validate-local-ai-stack", "kind": "video-local-ai-validate", "active": "Validating Ollama API, OpenWebUI HTTP, and local-AI service receipts.", "timeout": 300},
+        {"name": "record-ollama-openwebui-fragments", "kind": "video-local-ai-fragments", "active": "Recording the Ollama, OpenWebUI, benchmark, and Cytoscape layout fragments for promotion review.", "timeout": 60},
+    ], "complete_message": "Local-AI/OpenWebUI candidate preflight completed.",
+}
+WORKFLOW_DEFINITIONS["openstack-docker-swarm-seed"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-openstack-swarm-base", "kind": "video-openstack-swarm-preflight", "active": "Validating OpenStack API, Debian cloud image, lab network, keypair source, and optional Fedora metadata.", "timeout": 300},
+        {"name": "ensure-openstack-swarm-vms", "kind": "video-openstack-swarm-vms", "active": "Ensuring the five Debian OpenStack VMs for the cattle Docker Swarm exist and are ACTIVE.", "timeout": 1800},
+        {"name": "bootstrap-openstack-docker-swarm", "kind": "video-openstack-swarm-bootstrap", "active": "Installing Docker, initializing manager 1, joining manager 2, and joining three workers.", "timeout": 2400},
+        {"name": "validate-openstack-docker-swarm", "kind": "video-openstack-swarm-validate", "active": "Validating SSH, Docker, swarm membership, and OpenStack server state.", "timeout": 600},
+        {"name": "record-openstack-swarm-fragments", "kind": "video-openstack-swarm-fragments", "active": "Recording known-good OpenStack swarm image, VM, SSH, and bootstrap fragments.", "timeout": 60},
+    ], "complete_message": "OpenStack-hosted three-node Docker Swarm seed completed and validated.",
+}
+WORKFLOW_DEFINITIONS["openstack-bkc-compose-deploy"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-openstack-bkc-vm", "kind": "openstack-bkc-compose-preflight", "active": "Validating SSH, OS tools, ns1 runtime export, and Docker Compose readiness on the OpenStack BKC VM.", "timeout": 180},
+        {"name": "stage-openstack-bkc-runtime", "kind": "openstack-bkc-compose-runtime", "active": "Preparing /srv/bkc, mounting ns1 runtime, and ensuring mutable runtime subfolders exist.", "timeout": 300},
+        {"name": "render-openstack-bkc-compose", "kind": "openstack-bkc-compose-render", "active": "Rendering the target .env and Docker Compose file from known-good templates.", "timeout": 180},
+        {"name": "deploy-openstack-bkc-compose", "kind": "openstack-bkc-compose-up", "active": "Updating source and running docker compose up -d --build on the OpenStack BKC VM.", "timeout": 1800},
+        {"name": "validate-openstack-bkc", "kind": "openstack-bkc-compose-validate", "active": "Validating the new BKC /ready endpoint and container state.", "timeout": 300},
+        {"name": "publish-openstack-bkc-edge-pointer", "kind": "openstack-bkc-compose-edge-pointer", "active": "Publishing the intended edge pointer for the OpenStack-side BKC.", "timeout": 60},
+    ], "complete_message": "OpenStack-side BKC Docker Compose deployment completed and validated.",
+}
+WORKFLOW_DEFINITIONS["esxi-docker-swarm-seed"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-esxi-api", "kind": "video-esxi-api-preflight", "active": "Validating ESXi API login, datastore visibility, network names, and current inventory.", "timeout": 120},
+        {"name": "validate-known-good-base", "kind": "video-esxi-swarm-inventory", "active": "Validating the known-good bkc-trixie-base and target guest inventory.", "timeout": 120},
+        {"name": "clone-esxi-swarm-vms", "kind": "video-esxi-swarm-shells", "active": "Ensuring ESXi Docker Swarm VM clones exist with the known-good VMX shape.", "timeout": 900},
+        {"name": "pin-esxi-swarm-dhcp", "kind": "video-esxi-swarm-dhcp", "active": "Discovering generated MACs and pinning ns1 DHCP reservations for 10.20.0.121-.125.", "timeout": 180},
+        {"name": "configure-esxi-docker-swarm", "kind": "video-esxi-swarm-bootstrap", "active": "Installing Docker and converging the two-manager/three-worker ESXi swarm.", "timeout": 2400},
+        {"name": "validate-esxi-guest-inventory", "kind": "video-esxi-swarm-inventory", "active": "Validating ESXi inventory for imported/created guest VMs.", "timeout": 120},
+        {"name": "record-esxi-swarm-fragments", "kind": "video-esxi-swarm-fragments", "active": "Recording ESXi clone/config/bootstrap known-good fragments.", "timeout": 60},
+    ], "complete_message": "ESXi Docker Swarm seed converged and validated.",
+}
+WORKFLOW_DEFINITIONS["micro-blog-swarm-compose"] = {
+    "supports_undeploy": False, "settings_optional": True,
+    "stage_plan": [
+        {"name": "preflight-micro-blog-source", "kind": "micro-blog-source-preflight", "active": "Validating the NFS-staged micro-blog source bundle and required Dockerfiles.", "timeout": 120},
+        {"name": "preflight-lab-registry", "kind": "micro-blog-registry-preflight", "active": "Validating lab registry reachability from the target swarm manager.", "timeout": 120},
+        {"name": "preflight-target-swarm", "kind": "micro-blog-target-swarm-preflight", "active": "Validating ESXi Docker Swarm manager reachability, node shape, and worker labels.", "timeout": 180},
+        {"name": "build-and-push-micro-blog-images", "kind": "micro-blog-build-push", "active": "Building and pushing micro-blog app images from the NFS-staged source bundle.", "timeout": 1200},
+        {"name": "render-micro-blog-swarm-stack", "kind": "micro-blog-render-stack", "active": "Rendering the Swarm-safe micro-blog stack file on the target manager.", "timeout": 180},
+        {"name": "stage-micro-blog-stack-on-manager", "kind": "micro-blog-stage-stack", "active": "Staging .env, collector config, content path, and stack bundle on the target manager.", "timeout": 180},
+        {"name": "deploy-micro-blog-stack", "kind": "micro-blog-deploy-stack", "active": "Deploying the micro-blog stack through Docker Swarm.", "timeout": 900},
+        {"name": "validate-micro-blog-rollout", "kind": "micro-blog-validate-rollout", "active": "Validating micro-blog service replicas and HTTP health endpoints.", "timeout": 360},
+        {"name": "optional-seed-micro-blog-lab-journal", "kind": "micro-blog-lab-journal-note", "active": "Recording the optional markdown lab-journal seed path for follow-up.", "timeout": 60},
+        {"name": "optional-wire-micro-blog-telemetry", "kind": "micro-blog-telemetry-note", "active": "Recording the optional telemetry backhaul choice for follow-up.", "timeout": 60},
+        {"name": "publish-micro-blog-edge-pointer", "kind": "micro-blog-edge-note", "active": "Recording the intended edge pointer for the micro-blog deployment.", "timeout": 60},
+        {"name": "record-micro-blog-known-good-fragment", "kind": "micro-blog-fragment-note", "active": "Recording the known-good micro-blog canary fragment.", "timeout": 60},
+    ], "complete_message": "Micro-blog Docker Swarm canary completed and validated.",
+}
+WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-reset-scope",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab reset scope.",
+            "complete": "Physical lab reset scope reviewed.",
+            "timeout": 15,
+        },
+        {
+            "name": "archive-current-evidence",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab evidence archive plan.",
+            "complete": "Physical lab evidence archive plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-pxe-state-clear",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab PXE state cleanup plan.",
+            "complete": "Physical lab PXE state cleanup plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-unattended-profile-restore",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing unattended PXE profile restore plan.",
+            "complete": "Unattended PXE profile restore plan reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "plan-power-reset",
+            "transport": "internal",
+            "kind": "baremetal-bmc-power-reset",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Evaluating guarded physical lab BMC power reset.",
+            "complete": "Physical lab BMC power reset gate evaluated.",
+            "timeout": 60,
+        },
+        {
+            "name": "plan-disk-wipe",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab disk wipe gate.",
+            "complete": "Physical lab disk wipe gate reviewed.",
+            "timeout": 60,
+        },
+        {
+            "name": "plan-rerun-sequence",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab rerun sequence.",
+            "complete": "Physical lab rerun sequence reviewed.",
+            "timeout": 30,
+        },
+        {
+            "name": "verify-rerun-boundary",
+            "transport": "internal",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "baremetal-lab-reset",
+            "active": "Reviewing physical lab rerun boundary.",
+            "complete": "Physical lab rerun boundary reviewed.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "Bare metal lab reset review completed.",
 }
 WORKFLOW_DEFINITIONS["ns1-trixie-pxe-smoke"] = {
     "supports_undeploy": False,
@@ -6808,7 +7849,7 @@ def _run_folder_pipeline_review_stage(run_id: str, stage: dict) -> None:
     if not pipeline:
         raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is not available in the catalog.")
 
-    resolved = resolve_pipeline_dictionary(pipeline)
+    resolved = resolve_pipeline_dictionary(pipeline, run_inputs=_run_request_inputs(run_id))
     missing = list(resolved.get("missing", []))
     if missing:
         raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is missing required dictionary values: {', '.join(missing)}")
@@ -6867,11 +7908,11 @@ def _run_folder_pipeline_review_stage(run_id: str, stage: dict) -> None:
     _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Folder pipeline review stage completed.")))
 
 
-def _folder_pipeline_context(pipeline_id: str) -> tuple[dict, dict, dict]:
+def _folder_pipeline_context(pipeline_id: str, run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
     pipeline = pipeline_by_id(pipeline_id)
     if not pipeline:
         raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is not available in the catalog.")
-    resolved = resolve_pipeline_dictionary(pipeline)
+    resolved = resolve_pipeline_dictionary(pipeline, run_inputs=run_inputs)
     missing = list(resolved.get("missing", []))
     if missing:
         raise PipelineExecutionError(f"Pipeline '{pipeline_id}' is missing required dictionary values: {', '.join(missing)}")
@@ -6888,15 +7929,26 @@ def _repo_pipeline_folder(pipeline: dict) -> Path:
     return source_path.parent if source_path.exists() else Path.cwd()
 
 
+def _template_value(values: dict, key: str) -> object:
+    current: object = values
+    for part in key.split("."):
+        if isinstance(current, dict):
+            current = current.get(part, "")
+        else:
+            return ""
+    return current
+
+
 def _render_pipeline_template(template_text: str, values: dict) -> str:
     def replace(match: re.Match[str]) -> str:
-        scope = match.group(1)
+        _scope = match.group(1)
         key = match.group(2)
-        if scope == "dictionary":
-            return str(values.get(key, ""))
-        return str(values.get(key, ""))
+        value = _template_value(values, key)
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, sort_keys=True)
+        return str(value)
 
-    return re.sub(r"\$\{(dictionary|inputs)\.([A-Za-z0-9_]+)\}", replace, template_text)
+    return re.sub(r"\$\{(dictionary|inputs)\.([A-Za-z0-9_.]+)\}", replace, template_text)
 
 
 def _run_ns1_command(values: dict, command: str, *, timeout: int = 120) -> str:
@@ -6906,6 +7958,351 @@ def _run_ns1_command(values: dict, command: str, *, timeout: int = 120) -> str:
         command=command,
         timeout=timeout,
     )
+
+
+def _bmc_discovery_context() -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("baremetal-bmc-discovery-prepare")
+
+
+def _run_bmc_observer_command(values: dict, command: str, *, timeout: int = 120) -> str:
+    return run_remote_command(
+        host=str(values.get("observer_host") or "").strip(),
+        user="root",
+        command=command,
+        timeout=timeout,
+    )
+
+
+def _run_bmc_discovery_neighbors(run_id: str, stage_name: str) -> None:
+    _, _, values = _bmc_discovery_context()
+    interface = shlex.quote(str(values.get("observer_interface") or "ens18"))
+    candidates = values.get("candidate_bmcs") if isinstance(values.get("candidate_bmcs"), list) else []
+    expected = []
+    for item in candidates:
+        if isinstance(item, dict):
+            address = str(item.get("expected_address") or "").strip()
+            mac = str(item.get("observed_mac") or "").strip().lower()
+            if address:
+                expected.append(address)
+            if mac:
+                expected.append(mac)
+    pattern = "|".join(re.escape(item) for item in expected) or "a^"
+    command = (
+        "set -e; "
+        f"echo interface={interface}; "
+        f"ip -br addr show {interface}; "
+        "printf '\\n-- neighbors --\\n'; "
+        "ip neigh show nud all | sort; "
+        "printf '\\n-- expected matches --\\n'; "
+        f"ip neigh show nud all | sort | grep -Ei {shlex.quote(pattern)} || true"
+    )
+    output = _run_bmc_observer_command(values, command, timeout=30)
+    _store_run_extra(run_id, {"bmc_neighbor_evidence": output})
+    _set_stage(run_id, stage_name, "complete", "ns1 neighbor evidence collected for candidate iDRACs.")
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "no neighbor output")
+
+
+def _run_bmc_discovery_redfish(run_id: str, stage_name: str) -> None:
+    _, _, values = _bmc_discovery_context()
+    path = str(values.get("redfish_path") or "/redfish/v1/").strip() or "/redfish/v1/"
+    candidates = values.get("candidate_bmcs") if isinstance(values.get("candidate_bmcs"), list) else []
+    if not candidates:
+        raise PipelineExecutionError("candidate_bmcs is required for Redfish probing.")
+    probes = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        address = str(item.get("expected_address") or "").strip()
+        if not address:
+            continue
+        probes.append(
+            "printf '%s ' "
+            + shlex.quote(address)
+            + "; curl -kfsS --connect-timeout 3 -o /dev/null -w '%{http_code}\\n' "
+            + shlex.quote(f"https://{address}{path}")
+            + " || true"
+        )
+    command = "set -e; " + "; ".join(probes)
+    output = _run_bmc_observer_command(values, command, timeout=45)
+    statuses = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            statuses[parts[0]] = parts[1]
+    failures = {address: status for address, status in statuses.items() if status != "200"}
+    if failures:
+        raise PipelineExecutionError(f"Redfish root probe failed: {failures}")
+    _store_run_extra(run_id, {"bmc_redfish_status": statuses})
+    _set_stage(run_id, stage_name, "complete", "Candidate iDRAC Redfish roots responded with HTTP 200.")
+    append_event(run_id, "info", stage_name, json.dumps(statuses, sort_keys=True))
+
+
+def _ns1_lan_mac_pxe_context(run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("ns1-lan-mac-pxe-prepare", run_inputs)
+
+
+def _run_ns1_lan_mac_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _ns1_lan_mac_pxe_context(_run_request_inputs(run_id))
+    interface = str(values.get("lan_interface") or "").strip()
+    router = str(values.get("lan_router") or "").strip()
+    if not interface or not router:
+        raise PipelineExecutionError("LAN MAC PXE validation requires lan_interface and lan_router.")
+    command = (
+        "set -e; "
+        f"ip -br addr show {shlex.quote(interface)}; "
+        f"ip route get {shlex.quote(router)}"
+    )
+    output = _run_ns1_command(values, command, timeout=30)
+    _set_stage(run_id, stage_name, "complete", "ns1 LAN interface is present for MAC-only PXE.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "lan-interface-ok")
+
+
+def _run_ns1_lan_mac_ensure_include(run_id: str, stage_name: str) -> None:
+    _, _, values = _ns1_lan_mac_pxe_context(_run_request_inputs(run_id))
+    config_path = str(values.get("dhcp_config_path") or "").strip()
+    include_line = str(values.get("dhcp_include_line") or "").strip()
+    if not config_path.startswith("/etc/dhcp/") or not include_line:
+        raise PipelineExecutionError("Refusing to update DHCP include outside /etc/dhcp.")
+    command = (
+        "set -e; "
+        f"touch {shlex.quote(config_path)}; "
+        f"grep -Fxq {shlex.quote(include_line)} {shlex.quote(config_path)} || "
+        f"(cp -a {shlex.quote(config_path)} {shlex.quote(config_path + '.bkc-backup')} && "
+        f"printf '\\n%s\\n' {shlex.quote(include_line)} >> {shlex.quote(config_path)}); "
+        f"grep -Fx {shlex.quote(include_line)} {shlex.quote(config_path)}"
+    )
+    output = _run_ns1_command(values, command, timeout=30)
+    _set_stage(run_id, stage_name, "complete", "DHCP root config includes the BKC LAN MAC PXE fragment.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else include_line)
+
+
+def _run_ns1_lan_mac_upload_template(run_id: str, stage_name: str, template_name: str, target_key: str) -> None:
+    pipeline, _, values = _ns1_lan_mac_pxe_context(_run_request_inputs(run_id))
+    template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+    target_path = str(values.get(target_key) or "").strip()
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found: {template_path}")
+    if not target_path.startswith("/etc/dhcp/") and not target_path.startswith("/etc/default/"):
+        raise PipelineExecutionError(f"Refusing to write template outside DHCP paths: {target_path}")
+    content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), values).encode("utf-8")
+    _run_ns1_command(values, f"mkdir -p {shlex.quote(str(Path(target_path).parent))}", timeout=30)
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=target_path,
+        content=content,
+        mode=0o644,
+        timeout=60,
+    )
+    output = _run_ns1_command(values, f"test -s {shlex.quote(target_path)} && sed -n '1,120p' {shlex.quote(target_path)}", timeout=30)
+    append_event(run_id, "info", stage_name, output[-2400:] if output else target_path)
+
+
+def _run_ns1_lan_mac_render_fragment(run_id: str, stage_name: str) -> None:
+    _run_ns1_lan_mac_upload_template(run_id, stage_name, "dhcpd-lan-mac-pxe.conf.tpl", "dhcp_fragment_path")
+    _set_stage(run_id, stage_name, "complete", "LAN MAC-only PXE DHCP fragment rendered on ns1.")
+
+
+def _openstack_bkc_compose_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("openstack-bkc-compose-deploy", _run_request_inputs(run_id))
+
+
+def _openstack_bkc_target(values: dict) -> tuple[str, str, str]:
+    host = str(values.get("target_host") or "").strip()
+    user = str(values.get("target_user") or "root").strip() or "root"
+    password = str(values.get("target_password") or "")
+    if not host:
+        raise PipelineExecutionError("openstack-bkc-compose-deploy requires target_host.")
+    return host, user, password
+
+
+def _run_openstack_bkc_command(values: dict, command: str, *, timeout: int = 120) -> str:
+    host, user, password = _openstack_bkc_target(values)
+    return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+
+
+def _openstack_bkc_quote_values(values: dict) -> dict[str, str]:
+    keys = [
+        "target_root",
+        "runtime_mount",
+        "runtime_export",
+        "repo_url",
+        "repo_branch",
+        "compose_path",
+        "env_path",
+        "bkc_internal_url",
+    ]
+    return {key: shlex.quote(str(values.get(key) or "")) for key in keys}
+
+
+def _run_openstack_bkc_compose_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        "printf 'host='; hostname; "
+        "printf 'kernel='; uname -sr; "
+        "printf 'ip='; hostname -I || true; "
+        "command -v apt-get >/dev/null; "
+        "getent hosts ns1.example.local >/dev/null 2>&1 || true; "
+        f"showmount -e {shlex.quote(str(values.get('runtime_export') or '').split(':', 1)[0])} >/tmp/bkc-nfs-showmount.txt 2>&1 || true; "
+        "printf '\\n-- docker --\\n'; docker --version 2>/dev/null || true; "
+        "printf '\\n-- compose --\\n'; docker compose version 2>/dev/null || true; "
+        "printf '\\n-- nfs export --\\n'; sed -n '1,80p' /tmp/bkc-nfs-showmount.txt || true; "
+        f"printf '\\nplanned_runtime=%s\\n' {q['runtime_mount']}; "
+        f"printf 'planned_repo=%s branch=%s\\n' {q['repo_url']} {q['repo_branch']}"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=120)
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "openstack-bkc-preflight-ok")
+    _set_stage(run_id, stage_name, "complete", "OpenStack BKC VM responded over SSH and basic deploy prerequisites were inspected.")
+
+
+def _run_openstack_bkc_compose_runtime(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    runtime_mount = str(values.get("runtime_mount") or "/srv/bkc/runtime")
+    runtime_export = str(values.get("runtime_export") or "")
+    if not runtime_mount.startswith("/srv/bkc/"):
+        raise PipelineExecutionError(f"Refusing runtime mount outside /srv/bkc: {runtime_mount}")
+    if ":" not in runtime_export:
+        raise PipelineExecutionError("runtime_export must be an NFS server:path value.")
+    fstab_line = f"{runtime_export} {runtime_mount} nfs defaults,_netdev,nofail 0 0"
+    command = (
+        "set -e; "
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get update; "
+        "apt-get install -y --no-install-recommends git curl ca-certificates nfs-common docker.io docker-compose-plugin; "
+        "systemctl enable --now docker; "
+        f"mkdir -p {q['target_root']} {q['runtime_mount']}; "
+        f"grep -Fxq {shlex.quote(fstab_line)} /etc/fstab || printf '%s\\n' {shlex.quote(fstab_line)} >> /etc/fstab; "
+        f"mountpoint -q {q['runtime_mount']} || mount {q['runtime_mount']}; "
+        f"mkdir -p {q['runtime_mount']}/dictionaries {q['runtime_mount']}/file_templates {q['runtime_mount']}/keys {q['runtime_mount']}/pipelines {q['runtime_mount']}/redis; "
+        f"chmod 700 {q['runtime_mount']}/keys; "
+        f"if [ ! -d {q['target_root']}/source/.git ]; then git clone {q['repo_url']} {q['target_root']}/source; fi; "
+        f"cd {q['target_root']}/source; git fetch --all --prune; git switch {q['repo_branch']}; git pull --ff-only; "
+        f"test -d {q['runtime_mount']}/pipelines; mountpoint {q['runtime_mount']} || true; "
+        "docker --version; docker compose version"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=900)
+    append_event(run_id, "info", stage_name, output[-4000:] if output else "openstack-bkc-runtime-ready")
+    _set_stage(run_id, stage_name, "complete", "Target runtime, ns1 NFS mount, Docker, Compose plugin, and source checkout are ready.")
+
+
+def _run_openstack_bkc_compose_render(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _openstack_bkc_compose_context(run_id)
+    folder = _repo_pipeline_folder(pipeline)
+    compose_template = folder / "templates" / "bkc-compose.yml.tpl"
+    env_template = folder / "templates" / "bkc.env.tpl"
+    if not compose_template.exists() or not env_template.exists():
+        raise PipelineExecutionError("OpenStack BKC compose templates are missing.")
+
+    compose_path = str(values.get("compose_path") or "/srv/bkc/compose.yml")
+    env_path = str(values.get("env_path") or "/srv/bkc/.env")
+    for path in (compose_path, env_path):
+        if not path.startswith("/srv/bkc/"):
+            raise PipelineExecutionError(f"Refusing to write OpenStack BKC artifact outside /srv/bkc: {path}")
+
+    compose_content = _render_pipeline_template(compose_template.read_text(encoding="utf-8"), values).encode("utf-8")
+    env_content = _render_pipeline_template(env_template.read_text(encoding="utf-8"), values).encode("utf-8")
+    host, user, password = _openstack_bkc_target(values)
+    _run_openstack_bkc_command(values, "mkdir -p /srv/bkc", timeout=30)
+    upload_remote_bytes(host=host, user=user, password=password, remote_path=compose_path, content=compose_content, mode=0o644, timeout=60)
+    upload_remote_bytes(host=host, user=user, password=password, remote_path=env_path, content=env_content, mode=0o600, timeout=60)
+    output = _run_openstack_bkc_command(
+        values,
+        f"set -e; ls -l {shlex.quote(compose_path)} {shlex.quote(env_path)}; sed -n '1,160p' {shlex.quote(compose_path)}",
+        timeout=30,
+    )
+    append_event(run_id, "info", stage_name, output[-3000:] if output else "compose-and-env-rendered")
+    _set_stage(run_id, stage_name, "complete", "Docker Compose file and target-local .env were rendered on the OpenStack BKC VM.")
+
+
+def _run_openstack_bkc_compose_up(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        f"cd {q['target_root']}/source; "
+        "git fetch --all --prune; "
+        f"git switch {q['repo_branch']}; "
+        "git pull --ff-only; "
+        f"cd {q['target_root']}; "
+        f"docker compose --env-file {q['env_path']} -f {q['compose_path']} up -d --build; "
+        f"docker compose -f {q['compose_path']} ps"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=1800)
+    append_event(run_id, "info", stage_name, output[-5000:] if output else "docker-compose-up-complete")
+    _set_stage(run_id, stage_name, "complete", "BKC web, worker, and Redis Compose services were deployed on the OpenStack VM.")
+
+
+def _run_openstack_bkc_compose_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    q = _openstack_bkc_quote_values(values)
+    command = (
+        "set -e; "
+        "for i in $(seq 1 30); do "
+        f"code=$(curl -fsS -o /tmp/bkc-ready.out -w '%{{http_code}}' {q['bkc_internal_url']}/ready 2>/tmp/bkc-ready.err || true); "
+        "[ \"$code\" = 200 ] && break; "
+        "sleep 5; "
+        "done; "
+        "cat /tmp/bkc-ready.out 2>/dev/null || true; "
+        "printf '\\nhttp_code=%s\\n' \"$code\"; "
+        "[ \"$code\" = 200 ]; "
+        f"cd {q['target_root']}; docker compose -f {q['compose_path']} ps"
+    )
+    output = _run_openstack_bkc_command(values, command, timeout=240)
+    _store_run_extra(run_id, {"openstack_bkc_backend": f"http://{values.get('target_host')}:{values.get('bkc_public_port', 5000)}"})
+    append_event(run_id, "info", stage_name, output[-5000:] if output else "new-bkc-ready")
+    _set_stage(run_id, stage_name, "complete", "The OpenStack-side BKC /ready endpoint returned HTTP 200.")
+
+
+def _run_openstack_bkc_edge_pointer(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_bkc_compose_context(run_id)
+    backend = f"http://{values.get('target_host')}:{values.get('bkc_public_port', 5000)}"
+    payload = {
+        "label": str(values.get("bkc_edge_label") or "BlackKnightController — OpenStack"),
+        "mode": str(values.get("edge_pointer_mode") or "record-only"),
+        "edge_mode": str(values.get("bkc_edge_mode") or "proxy-or-nat"),
+        "edge_public_port": values.get("bkc_edge_public_port"),
+        "enabled": _truthy(values.get("enable_edge_pointer")),
+        "edge_url": str(values.get("bkc_edge_url") or ""),
+        "backend": backend,
+        "notes": str(values.get("edge_notes") or ""),
+    }
+    _store_run_extra(run_id, {"openstack_bkc_edge_pointer": payload})
+    append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", f"{payload['label']} edge pointer recorded: {payload['edge_url']} -> {backend}")
+
+
+def _run_ns1_lan_mac_render_defaults(run_id: str, stage_name: str) -> None:
+    _run_ns1_lan_mac_upload_template(run_id, stage_name, "isc-dhcp-server-lan.defaults.tpl", "dhcp_defaults_path")
+    _set_stage(run_id, stage_name, "complete", "DHCP interface defaults rendered on ns1.")
+
+
+def _run_ns1_lan_mac_validate_config(run_id: str, stage_name: str) -> None:
+    _, _, values = _ns1_lan_mac_pxe_context(_run_request_inputs(run_id))
+    config_path = str(values.get("dhcp_config_path") or "").strip()
+    output = _run_ns1_command(values, f"dhcpd -t -cf {shlex.quote(config_path)}", timeout=30)
+    _set_stage(run_id, stage_name, "complete", "DHCP config syntax is valid.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "dhcpd-config-ok")
+
+
+def _run_ns1_lan_mac_restart(run_id: str, stage_name: str) -> None:
+    _, _, values = _ns1_lan_mac_pxe_context(_run_request_inputs(run_id))
+    if not _truthy(values.get("enable_lan_pxe_service")):
+        _set_stage(run_id, stage_name, "complete", "DHCP restart skipped because enable_lan_pxe_service is not true.")
+        return
+    service = str(values.get("dhcp_service_name") or "isc-dhcp-server").strip()
+    command = (
+        "set -e; "
+        f"svc={shlex.quote(service)}; "
+        "systemctl list-unit-files \"$svc.service\" >/dev/null 2>&1 || svc=dhcpd; "
+        "systemctl restart \"$svc.service\"; "
+        "systemctl is-active \"$svc.service\""
+    )
+    output = _run_ns1_command(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "DHCP service restarted with LAN MAC-only PXE enabled.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "dhcp-service-active")
 
 
 def _run_trixie_pxe_prereqs(run_id: str, stage_name: str) -> None:
@@ -6940,6 +8337,1211 @@ def _run_trixie_netboot_fetch(run_id: str, stage_name: str) -> None:
     output = _run_ns1_command(values, command, timeout=300)
     _set_stage(run_id, stage_name, "complete", "Debian Trixie netboot assets are cached on ns1.")
     append_event(run_id, "info", stage_name, output[-1600:] if output else "trixie netboot cached")
+
+
+def _openstack_lab_context(run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("baremetal-openstack-lab-prepare", run_inputs)
+
+
+def _openstack_lab_upload_template(
+    run_id: str,
+    stage_name: str,
+    template_name: str,
+    target_key: str,
+    values: dict,
+    *,
+    mode: int = 0o644,
+) -> None:
+    pipeline, _, _ = _openstack_lab_context()
+    template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found: {template_path}")
+    target_path = str(values.get(target_key) or "").strip()
+    if not target_path.startswith("/srv/") and not target_path.startswith("/etc/dhcp/"):
+        raise PipelineExecutionError(f"Refusing to write template outside approved paths: {target_path}")
+    content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), values).encode("utf-8")
+    _run_ns1_command(values, f"mkdir -p {shlex.quote(str(Path(target_path).parent))}", timeout=60)
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=target_path,
+        content=content,
+        mode=mode,
+        timeout=60,
+    )
+    output = _run_ns1_command(values, f"test -s {shlex.quote(target_path)} && ls -l {shlex.quote(target_path)}", timeout=60)
+    append_event(run_id, "info", stage_name, output[-1200:] if output else target_path)
+
+
+def _run_openstack_base_boot_render(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_lab_context(_run_request_inputs(run_id))
+    render_values = dict(values)
+    if not str(render_values.get("target_ssh_authorized_key") or "").strip():
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        render_values["target_ssh_authorized_key"] = read_key_pair(
+            ssh["private_key_path"],
+            ssh["public_key_path"],
+        ).get("public_key", "")
+    if not str(render_values.get("target_ssh_authorized_key") or "").startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is missing or invalid.")
+
+    _openstack_lab_upload_template(
+        run_id,
+        stage_name,
+        "r630-openstack-01-trixie.ipxe.tpl",
+        "physical_ipxe_script_path",
+        render_values,
+    )
+    _openstack_lab_upload_template(
+        run_id,
+        stage_name,
+        "r630-openstack-01-trixie-preseed.cfg.tpl",
+        "physical_preseed_path",
+        render_values,
+    )
+    guard_enabled = _truthy(render_values.get("enable_pxe_guard")) or _truthy(render_values.get("physical_pxe_guard_enabled"))
+    guard_path = str(render_values.get("physical_ipxe_guard_path") or render_values.get("physical_ipxe_script_path") or "").strip()
+    if guard_enabled and guard_path:
+        guard = (
+            "#!ipxe\n"
+            "# BKC guard: first R630 already entered Debian installer. Boot local disk on accidental PXE retry.\n"
+            "sanboot --no-describe --drive 0x80 || exit\n"
+        )
+        upload_remote_bytes(
+            host=str(render_values.get("target_host") or "").strip(),
+            user="root",
+            remote_path=guard_path,
+            content=guard.encode("utf-8"),
+            mode=0o644,
+            timeout=60,
+        )
+        append_event(run_id, "info", stage_name, f"Installed physical local-disk PXE guard at {guard_path}.")
+        _set_stage(run_id, stage_name, "complete", "First R630 Trixie preseed rendered and local-disk PXE guard installed on ns1.")
+        return
+    _set_stage(run_id, stage_name, "complete", "First R630 Trixie installer iPXE and preseed rendered on ns1.")
+
+
+def _run_openstack_base_boot_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_lab_context(_run_request_inputs(run_id))
+    ipxe_path = str(values.get("physical_ipxe_script_path") or "").strip()
+    preseed_path = str(values.get("physical_preseed_path") or "").strip()
+    http_host = str(values.get("physical_pxe_http_host") or "").strip()
+    preseed_url = str(values.get("physical_preseed_url") or "").strip()
+    if not ipxe_path or not preseed_path or not http_host or not preseed_url:
+        raise PipelineExecutionError("OpenStack PXE validation requires iPXE path, preseed path, HTTP host, and preseed URL.")
+    pxe_expectation = "sanboot --no-describe --drive 0x80" if (
+        _truthy(values.get("enable_pxe_guard")) or _truthy(values.get("physical_pxe_guard_enabled"))
+    ) else "preseed/url="
+    command = (
+        "set -e; "
+        f"test -s {shlex.quote(ipxe_path)}; "
+        f"test -s {shlex.quote(preseed_path)}; "
+        f"curl -fsSI --connect-timeout 5 {shlex.quote('http://' + http_host + '/pxe/debian-trixie.ipxe')} >/tmp/bkc-r630-ipxe.headers; "
+        f"curl -fsSI --connect-timeout 5 {shlex.quote(preseed_url)} >/tmp/bkc-r630-preseed.headers; "
+        f"grep -F {shlex.quote(str(values.get('physical_install_hostname') or 'r630-openstack-01'))} {shlex.quote(preseed_path)} >/dev/null; "
+        f"grep -F {shlex.quote(pxe_expectation)} {shlex.quote(ipxe_path)} >/dev/null; "
+        f"grep -F '/var/lib/bkc/base-provisioning.json' {shlex.quote(preseed_path)} >/dev/null; "
+        f"printf 'ipxe=%s\\npreseed=%s\\n' {shlex.quote(ipxe_path)} {shlex.quote(preseed_path)}; "
+        "cat /tmp/bkc-r630-ipxe.headers /tmp/bkc-r630-preseed.headers"
+    )
+    output = _run_ns1_command(values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "First R630 PXE boot assets are reachable over ns1 HTTP.")
+    append_event(run_id, "info", stage_name, output[-2000:] if output else "openstack pxe assets validated")
+
+
+def _truthy(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enable", "enabled"}
+
+
+def _run_request_inputs(run_id: str) -> dict:
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    payload = extra.get("request_payload") if isinstance(extra.get("request_payload"), dict) else {}
+    extra_inputs = extra.get("inputs") if isinstance(extra.get("inputs"), dict) else {}
+    inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
+    merged = dict(extra_inputs)
+    merged.update(inputs)
+    ignored_payload_keys = {"repo", "workflow", "ref", "commit", "notes", "inputs"}
+    for key, value in payload.items():
+        if key in ignored_payload_keys or key in merged:
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            merged[key] = value
+    for key in (
+        "target_node_id",
+        "enable_power_actions",
+        "enable_one_time_pxe",
+        "enable_disk_wipe",
+        "reset_type",
+    ):
+        if key in payload and key not in merged:
+            merged[key] = payload[key]
+    return merged
+
+
+def _secret_ref_key(secret_ref: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", secret_ref.replace("secret:", "")).strip("_").upper()
+
+
+def _resolve_bmc_credentials(secret_ref: str) -> tuple[str, str]:
+    key = _secret_ref_key(secret_ref)
+    combined = os.environ.get(f"BKC_SECRET_{key}", "").strip()
+    username = os.environ.get(f"BKC_SECRET_{key}_USERNAME", "").strip()
+    password = os.environ.get(f"BKC_SECRET_{key}_PASSWORD", "").strip()
+    if combined:
+        if combined.startswith("{"):
+            try:
+                payload = json.loads(combined)
+                username = str(payload.get("username") or username).strip()
+                password = str(payload.get("password") or password).strip()
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"BMC secret {secret_ref} is not valid JSON.") from exc
+        elif ":" in combined and not password:
+            username, password = combined.split(":", 1)
+
+    secret_dir = Path(os.environ.get("BKC_BMC_SECRET_DIR", "/run/secrets/bkc")).resolve()
+    rel = secret_ref.replace("secret:", "")
+    candidates = [
+        secret_dir / f"{key}.json",
+        secret_dir / f"{key}.txt",
+        secret_dir.joinpath(*rel.split("/")).with_suffix(".json"),
+        secret_dir.joinpath(*rel.split("/")).with_suffix(".txt"),
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8").strip()
+        if path.suffix == ".json" or text.startswith("{"):
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise PipelineExecutionError(f"BMC secret file {path} is not valid JSON.") from exc
+            username = str(payload.get("username") or username).strip()
+            password = str(payload.get("password") or password).strip()
+        elif ":" in text:
+            username, password = text.split(":", 1)
+            username = username.strip()
+            password = password.strip()
+        elif text and not password:
+            password = text
+
+    username = username or "root"
+    if not password:
+        raise PipelineExecutionError(
+            f"BMC credential {secret_ref} is missing. Set BKC_SECRET_{key}_PASSWORD or provide a runtime secret file."
+        )
+    return username, password
+
+
+def _redfish_request(address: str, path: str, username: str, password: str, *, method: str = "GET", payload: dict | None = None, timeout: int = 20) -> tuple[int, str]:
+    url = f"https://{address}{path if path.startswith('/') else '/' + path}"
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(url, data=body, method=method)
+    request.add_header("Accept", "application/json")
+    if body is not None:
+        request.add_header("Content-Type", "application/json")
+    token = b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    request.add_header("Authorization", f"Basic {token}")
+    context = ssl._create_unverified_context()
+    try:
+        context.set_ciphers("DEFAULT:@SECLEVEL=1")
+    except ssl.SSLError:
+        pass
+    try:
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+            return int(response.status), response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise PipelineExecutionError(f"Redfish {method} {path} failed with HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise PipelineExecutionError(f"Redfish {method} {path} failed: {exc}") from exc
+
+
+def _redfish_request_via_ns1(
+    values: dict,
+    address: str,
+    path: str,
+    username: str,
+    password: str,
+    *,
+    method: str = "GET",
+    payload: dict | None = None,
+    timeout: int = 20,
+) -> tuple[int, str]:
+    """Reach the isolated iDRAC network through BKC SSH on ns1."""
+    url = f"https://{address}{path if path.startswith('/') else '/' + path}"
+    parts = [
+        "curl", "-ksS", "--max-time", str(timeout), "-X", method,
+        "-u", f"{username}:{password}", "-H", "Accept: application/json",
+    ]
+    if payload is not None:
+        parts.extend(["-H", "Content-Type: application/json", "--data-binary", json.dumps(payload)])
+    parts.extend(["-w", "\\n__BKC_HTTP_STATUS__:%{http_code}", url])
+    ns1_host = str(values.get("target_host") or values.get("provisioning_ssh_host") or "").strip()
+    if not ns1_host:
+        raise PipelineExecutionError("NS1 SSH host is missing for isolated Redfish transport.")
+    output = run_remote_command(
+        host=ns1_host,
+        user="root",
+        command=" ".join(shlex.quote(part) for part in parts),
+        timeout=timeout + 10,
+    )
+    marker = "\n__BKC_HTTP_STATUS__:"
+    if marker not in output:
+        raise PipelineExecutionError(f"Redfish {method} {path} through ns1 returned no HTTP status.")
+    body, raw_status = output.rsplit(marker, 1)
+    try:
+        status = int(raw_status.strip())
+    except ValueError as exc:
+        raise PipelineExecutionError(f"Redfish {method} {path} through ns1 returned an invalid status.") from exc
+    if status < 200 or status >= 300:
+        raise PipelineExecutionError(f"Redfish {method} {path} through ns1 failed with HTTP {status}: {body[:500]}")
+    return status, body
+
+
+def _run_baremetal_bmc_power_reset(run_id: str, stage_name: str) -> None:
+    _, _, values = _folder_pipeline_context("baremetal-lab-reset", _run_request_inputs(run_id))
+    enabled = _truthy(values.get("enable_power_actions"))
+    target_node_id = str(values.get("target_node_id") or "").strip()
+    if not enabled:
+        _set_stage(run_id, stage_name, "complete", "BMC power reset skipped because enable_power_actions is not true.")
+        return
+    if not target_node_id:
+        raise PipelineExecutionError("target_node_id is required when enable_power_actions=true.")
+
+    hosts = values.get("hosts") if isinstance(values.get("hosts"), list) else []
+    target = next((host for host in hosts if str(host.get("node_id") or "") == target_node_id), None)
+    if not target:
+        raise PipelineExecutionError(f"Target node {target_node_id} is not in the bare metal reset scope.")
+    address = str(target.get("bmc_observed_address") or "").strip()
+    secret_ref = str(target.get("bmc_credential_ref") or "").strip()
+    if not address or not secret_ref:
+        raise PipelineExecutionError("Target BMC address and credential ref are required for power reset.")
+
+    username, password = _resolve_bmc_credentials(secret_ref)
+    status, body = _redfish_request(address, "/redfish/v1/Systems", username, password)
+    systems = json.loads(body or "{}")
+    members = systems.get("Members") if isinstance(systems, dict) else []
+    if not members:
+        raise PipelineExecutionError("Redfish Systems collection did not return any members.")
+    system_path = str(members[0].get("@odata.id") or "").strip()
+    if not system_path:
+        raise PipelineExecutionError("Redfish system member is missing @odata.id.")
+
+    _, system_body = _redfish_request(address, system_path, username, password)
+    system = json.loads(system_body or "{}")
+    if _truthy(values.get("enable_one_time_pxe")):
+        _redfish_request(
+            address,
+            system_path,
+            username,
+            password,
+            method="PATCH",
+            payload={
+                "Boot": {
+                    "BootSourceOverrideEnabled": "Once",
+                    "BootSourceOverrideTarget": "Pxe",
+                }
+            },
+        )
+        append_event(run_id, "info", stage_name, f"One-time PXE boot override requested for {target_node_id}.")
+    actions = system.get("Actions") if isinstance(system, dict) else {}
+    reset_action = actions.get("#ComputerSystem.Reset") if isinstance(actions, dict) else {}
+    reset_target = str(reset_action.get("target") or f"{system_path}/Actions/ComputerSystem.Reset").strip()
+    reset_type = str(values.get("reset_type") or "ForceRestart").strip() or "ForceRestart"
+    _redfish_request(address, reset_target, username, password, method="POST", payload={"ResetType": reset_type})
+
+    _store_run_extra(
+        run_id,
+        {
+            "bmc_power_reset": {
+                "target_node_id": target_node_id,
+                "bmc_address": address,
+                "redfish_system": system_path,
+                "reset_type": reset_type,
+                "one_time_pxe": _truthy(values.get("enable_one_time_pxe")),
+            }
+        },
+    )
+    _set_stage(run_id, stage_name, "complete", f"BMC power reset requested for {target_node_id} using Redfish {reset_type}.")
+
+
+def _vmware_trial_context(run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("baremetal-vmware-trial-prepare", run_inputs)
+
+
+def _vmware_trial_upload_template(
+    run_id: str,
+    stage_name: str,
+    template_name: str,
+    target_key: str,
+    values: dict,
+    *,
+    mode: int = 0o644,
+) -> None:
+    pipeline, _, _ = _vmware_trial_context()
+    template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found: {template_path}")
+    target_path = str(values.get(target_key) or "").strip()
+    if not target_path.startswith("/srv/pxe/"):
+        raise PipelineExecutionError(f"Refusing to write VMware PXE asset outside /srv/pxe: {target_path}")
+    content = _render_pipeline_template(template_path.read_text(encoding="utf-8"), values).encode("utf-8")
+    _run_ns1_command(values, f"mkdir -p {shlex.quote(str(Path(target_path).parent))}", timeout=60)
+    upload_remote_bytes(
+        host=str(values.get("target_host") or "").strip(),
+        user="root",
+        remote_path=target_path,
+        content=content,
+        mode=mode,
+        timeout=60,
+    )
+    output = _run_ns1_command(values, f"test -s {shlex.quote(target_path)} && ls -l {shlex.quote(target_path)}", timeout=60)
+    append_event(run_id, "info", stage_name, output[-1200:] if output else target_path)
+
+
+def _run_vmware_esxi_boot_assets_render(run_id: str, stage_name: str) -> None:
+    _, _, values = _vmware_trial_context(_run_request_inputs(run_id))
+    if not _truthy(values.get("enable_vmware_asset_render")):
+        _set_stage(run_id, stage_name, "complete", "Reviewed ESXi boot asset render intent; enable_vmware_asset_render is false.")
+        append_event(run_id, "info", stage_name, "VMware ESXi boot asset writes remain gated.")
+        return
+
+    render_values = dict(values)
+    if not str(render_values.get("vmware_authorized_key") or "").strip():
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        render_values["vmware_authorized_key"] = read_key_pair(
+            ssh["private_key_path"],
+            ssh["public_key_path"],
+        ).get("public_key", "")
+    if not str(render_values.get("vmware_authorized_key") or "").startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is missing or invalid for VMware firstboot.")
+
+    _vmware_trial_upload_template(
+        run_id,
+        stage_name,
+        "esxi-ks.cfg.tpl",
+        "vmware_ks_path",
+        render_values,
+    )
+    _vmware_trial_upload_template(
+        run_id,
+        stage_name,
+        "bkc-esxi-firstboot.sh.tpl",
+        "vmware_firstboot_path",
+        render_values,
+        mode=0o755,
+    )
+    command = (
+        "set -e; "
+        f"grep -F 'vim-cmd hostsvc/enable_ssh' {shlex.quote(str(render_values.get('vmware_ks_path') or ''))} >/dev/null; "
+        f"grep -F 'system account add --id={shlex.quote(str(render_values.get('vmware_admin_username') or 'admin'))}' {shlex.quote(str(render_values.get('vmware_ks_path') or ''))} >/dev/null; "
+        f"grep -F '/scratch/bkc/firstboot.json' {shlex.quote(str(render_values.get('vmware_ks_path') or ''))} >/dev/null; "
+        f"test -x {shlex.quote(str(render_values.get('vmware_firstboot_path') or ''))}; "
+        "echo vmware-esxi-boot-assets-rendered"
+    )
+    output = _run_ns1_command(render_values, command, timeout=60)
+    _set_stage(run_id, stage_name, "complete", "Experimental ESXi boot.cfg, ks.cfg, and firstboot assets rendered on ns1.")
+    append_event(run_id, "info", stage_name, output[-1200:] if output else "vmware-esxi-boot-assets-rendered")
+
+
+def _run_vmware_esxi_media_stage(run_id: str, stage_name: str) -> None:
+    _, _, values = _vmware_trial_context(_run_request_inputs(run_id))
+    if not _truthy(values.get("enable_vmware_media_stage")):
+        _set_stage(run_id, stage_name, "complete", "Validated ESXi media staging intent; enable_vmware_media_stage is false.")
+        append_event(run_id, "info", stage_name, "VMware ESXi media writes remain gated.")
+        return
+
+    iso = str(values.get("vmware_iso_stage_path") or "").strip()
+    expected = str((values.get("vmware_operator_media") or {}).get("sha256") or "").strip().lower()
+    iso_url = f"http://10.20.0.10/pxe/vmware/esxi-8u3e/{Path(iso).name}"
+    if not iso.startswith("/srv/pxe/") or not expected:
+        raise PipelineExecutionError("ESXi staged ISO path and checksum are required.")
+
+    command = (
+        "set -e; "
+        f"iso={shlex.quote(iso)}; expected={shlex.quote(expected)}; "
+        "test -s \"$iso\"; actual=$(sha256sum \"$iso\" | cut -d' ' -f1); test \"$actual\" = \"$expected\"; "
+        "dhcpd -t -cf /etc/dhcp/dhcpd.conf >/dev/null; "
+        f"curl -fsSI {shlex.quote(iso_url)}; "
+        "echo vmware-esxi-intact-iso-ready"
+    )
+    output = _run_ns1_command(values, command, timeout=900)
+    _set_stage(run_id, stage_name, "complete", "Untouched ESXi ISO checksum and HTTP delivery validated on ns1.")
+    append_event(run_id, "info", stage_name, output[-1600:] if output else "vmware-esxi-intact-iso-ready")
+
+
+def _run_vmware_esxi_iso_handoff(run_id: str, stage_name: str) -> None:
+    inputs = _run_request_inputs(run_id)
+    if not _truthy(inputs.get("enable_destructive_install")):
+        _set_stage(run_id, stage_name, "complete", "Reviewed intact ESXi ISO handoff; destructive gate is disabled.")
+        return
+    pipeline, _, values = _vmware_trial_context(inputs)
+    host = values["physical_hosts"][0]
+    mac = str(host["provisioning_mac"])
+    lease = str(values["installer_lease_address"])
+    iso = str(values["vmware_iso_stage_path"])
+    iso_url = f"http://10.20.0.10/pxe/vmware/esxi-8u3e/{Path(iso).name}"
+    ns1 = str(values["target_host"])
+    baseline = int(run_remote_command(host=ns1, user="root", command="wc -l </var/log/nginx/access.log", timeout=20).strip())
+
+    arm = _repo_pipeline_folder(pipeline) / "scripts/arm-esxi-one-shot-pxe.sh"
+    remote_arm = "/tmp/bkc-arm-esxi-one-shot-pxe.sh"
+    upload_remote_bytes(host=ns1, user="root", remote_path=remote_arm, content=arm.read_bytes(), mode=0o700, timeout=60)
+    armed = run_remote_command(
+        host=ns1,
+        user="root",
+        command=f"{remote_arm} {shlex.quote(mac)} {shlex.quote(lease)} {shlex.quote(iso_url)}",
+        timeout=120,
+    )
+    bmc_address = _video_bmc_pxe_reset(values)
+    append_event(run_id, "warning", stage_name, armed[-1200:] + f"\niDRAC={bmc_address}")
+
+    evidence = ""
+    deadline = time.time() + 1200
+    iso_path = urllib.parse.urlparse(iso_url).path
+    while time.time() < deadline:
+        evidence = run_remote_command(
+            host=ns1,
+            user="root",
+            command=(
+                f"tail -n +{baseline + 1} /var/log/nginx/access.log | "
+                f"grep -F {shlex.quote(lease)} | grep -F {shlex.quote(iso_path)} | tail -1 || true"
+            ),
+            timeout=20,
+        )
+        if evidence and (' 200 ' in evidence or ' 206 ' in evidence):
+            break
+        time.sleep(10)
+    if not evidence:
+        raise PipelineExecutionError("No fresh HTTP read of the intact ESXi ISO was observed.")
+
+    disarm = _repo_pipeline_folder(pipeline) / "scripts/disarm-esxi-one-shot-pxe.sh"
+    remote_disarm = "/tmp/bkc-disarm-esxi-one-shot-pxe.sh"
+    upload_remote_bytes(host=ns1, user="root", remote_path=remote_disarm, content=disarm.read_bytes(), mode=0o700, timeout=60)
+    disarmed = run_remote_command(host=ns1, user="root", command=remote_disarm, timeout=90)
+
+    username, password = _resolve_bmc_credentials(str(host.get("bmc_credential_ref") or ""))
+    _, body = _redfish_request_via_ns1(values, bmc_address, "/redfish/v1/Systems", username, password)
+    members = json.loads(body or "{}").get("Members", [])
+    if not members:
+        raise PipelineExecutionError("Server2 Redfish system disappeared during ESXi ISO handoff.")
+    _redfish_request_via_ns1(
+        values,
+        bmc_address,
+        str(members[0]["@odata.id"]),
+        username,
+        password,
+        method="PATCH",
+        payload={"Boot": {"BootSourceOverrideEnabled": "Once", "BootSourceOverrideTarget": "Hdd"}},
+    )
+    append_event(run_id, "info", stage_name, evidence[-1200:] + "\n" + disarmed[-800:] + "\nserver2_next_boot=Hdd")
+    _set_stage(run_id, stage_name, "complete", "Intact ESXi ISO boot observed; PXE disarmed and operator installer handoff ready.")
+
+
+def _esxi_seed_context(run_id: str) -> tuple[dict, dict]:
+    _, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    return get_run(run_id) or {}, values
+
+
+def _esxi_seed_password(values: dict) -> str:
+    return _secret_ref_literal(values.get("esxi_password_demo"), default="changeme123@44")
+
+
+def _esxi_seed_nodes(values: dict) -> list[dict]:
+    nodes = values.get("swarm_nodes")
+    if not isinstance(nodes, list) or not nodes:
+        raise PipelineExecutionError("ESXi swarm_nodes must define at least one VM.")
+    cleaned: list[dict] = []
+    for raw in nodes:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}", name):
+            raise PipelineExecutionError(f"Unsafe ESXi VM name: {name!r}")
+        cleaned.append(
+            {
+                "name": name,
+                "role": str(raw.get("role") or "worker").strip(),
+                "memory_mb": int(raw.get("memory_mb") or 2048),
+                "num_cpus": int(raw.get("num_cpus") or 2),
+                "disk_gb": int(raw.get("disk_gb") or 32),
+            }
+        )
+    if not cleaned:
+        raise PipelineExecutionError("ESXi swarm_nodes did not contain any valid VM records.")
+    return cleaned
+
+
+def _esxi_inventory(values: dict) -> dict:
+    from services import vsphere
+
+    return vsphere.inventory(
+        host=str(values.get("esxi_management_host") or "10.20.0.114"),
+        username=str(values.get("esxi_username") or "root"),
+        password=_esxi_seed_password(values),
+        verify_ssl=_truthy(values.get("esxi_validate_certs")),
+    )
+
+
+def _video_esxi_api_preflight(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    inventory = _esxi_inventory(values)
+    datastore = str(values.get("esxi_datastore") or "datastore1")
+    network = str(values.get("esxi_network") or "VM Network")
+    if not any(item.get("name") == datastore and item.get("accessible") for item in inventory.get("datastores", [])):
+        raise PipelineExecutionError(f"ESXi datastore is not accessible: {datastore}")
+    if not any(item.get("name") == network for item in inventory.get("networks", [])):
+        raise PipelineExecutionError(f"ESXi network is not present: {network}")
+    _store_run_extra(run_id, {"esxi_inventory_preflight": inventory})
+    append_event(run_id, "info", stage_name, json.dumps(inventory, indent=2, sort_keys=True)[-5000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi API login, datastore, network, and inventory validated.")
+
+
+def _video_esxi_enable_ssh(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    from services import vsphere
+
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    try:
+        result = vsphere.configure_service(
+            host=host,
+            username=user,
+            password=password,
+            service_key="TSM-SSH",
+            running=True,
+            policy="on",
+            verify_ssl=_truthy(values.get("esxi_validate_certs")),
+        )
+    except vsphere.VsphereRestrictedError as exc:
+        try:
+            probe = run_remote_command(host=host, user=user, password=password, command="vim-cmd hostsvc/hostsummary | head -20", timeout=15)
+        except Exception as ssh_exc:  # noqa: BLE001
+            raise PipelineExecutionError(
+                "ESXi API inventory works, but this ESXi license/version blocked enabling SSH over API. "
+                "Enable Host > Manage > Services > TSM-SSH from the ESXi Host Client, then rerun 50B. "
+                f"API detail: {exc}; SSH probe: {ssh_exc}"
+            ) from exc
+        result = {"key": "TSM-SSH", "running": True, "policy": "operator-enabled", "probe": probe[:500]}
+    append_event(run_id, "info", stage_name, json.dumps(result, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "ESXi SSH service is available for BKC population.")
+
+
+def _video_esxi_swarm_shells(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    script = (_repo_pipeline_folder(pipeline) / "scripts" / "create-esxi-swarm-vms.sh").read_text()
+    command = (
+        "set -e; "
+        "cat >/tmp/create-esxi-swarm-vms.sh <<'BKC_ESXI_CREATE'\n"
+        f"{script}\n"
+        "BKC_ESXI_CREATE\n"
+        "chmod +x /tmp/create-esxi-swarm-vms.sh; "
+        "/bin/sh /tmp/create-esxi-swarm-vms.sh"
+    )
+    out = run_remote_command(host=host, user=user, password=password, command=command, timeout=900)
+    _store_run_extra(run_id, {"esxi_swarm_clone": out[-6000:]})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi Docker Swarm VM clones exist with the known-good SATA/vmxnet3 shape.")
+
+
+def _video_esxi_swarm_dhcp(run_id: str, stage_name: str) -> None:
+    pipeline, _, values = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    host = str(values.get("esxi_management_host") or "10.20.0.114")
+    user = str(values.get("esxi_username") or "root")
+    password = _esxi_seed_password(values)
+    nodes = _esxi_seed_nodes(values)
+    macs: dict[str, str] = {}
+    for node in nodes:
+        name = node["name"]
+        command = f"grep '^ethernet0.generatedAddress' /vmfs/volumes/datastore1/{shlex.quote(name)}/{shlex.quote(name)}.vmx || true"
+        out = run_remote_command(host=host, user=user, password=password, command=command, timeout=30)
+        match = re.search(r'"(([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})"', out)
+        if not match:
+            raise PipelineExecutionError(f"Could not discover generated MAC for ESXi VM {name}.")
+        macs[name] = match.group(1).lower()
+    env_map = {
+        "esxi-swarm-mgr-01": "ESXI_SWARM_MGR_01_MAC",
+        "esxi-swarm-mgr-02": "ESXI_SWARM_MGR_02_MAC",
+        "esxi-swarm-worker-01": "ESXI_SWARM_WORKER_01_MAC",
+        "esxi-swarm-worker-02": "ESXI_SWARM_WORKER_02_MAC",
+        "esxi-swarm-worker-03": "ESXI_SWARM_WORKER_03_MAC",
+    }
+    script = (_repo_pipeline_folder(pipeline) / "scripts" / "render-esxi-swarm-dhcp-reservations.sh").read_text()
+    env = " ".join(f"{env_map[name]}={shlex.quote(mac)}" for name, mac in macs.items() if name in env_map)
+    ns1_command = (
+        "set -e; "
+        "cat >/tmp/render-esxi-swarm-dhcp-reservations.sh <<'BKC_ESXI_DHCP'\n"
+        f"{script}\n"
+        "BKC_ESXI_DHCP\n"
+        "chmod +x /tmp/render-esxi-swarm-dhcp-reservations.sh; "
+        f"{env} /tmp/render-esxi-swarm-dhcp-reservations.sh; "
+        "cat /etc/dhcp/dhcpd.d/bkc-esxi-swarm-guests.conf"
+    )
+    out = run_remote_command(host="10.20.0.10", user="root", command=ns1_command, timeout=180)
+    _store_run_extra(run_id, {"esxi_swarm_dhcp_macs": macs})
+    append_event(run_id, "info", stage_name, json.dumps(macs, indent=2, sort_keys=True) + "\n" + out[-3000:])
+    _set_stage(run_id, stage_name, "complete", "ns1 DHCP reservations pinned ESXi Swarm generated MACs to 10.20.0.121-.125.")
+
+
+def _video_esxi_swarm_bootstrap(run_id: str, stage_name: str) -> None:
+    pipeline, _, _ = _folder_pipeline_context("esxi-docker-swarm-seed", _run_request_inputs(run_id))
+    script_path = _repo_pipeline_folder(pipeline) / "scripts" / "bootstrap-esxi-docker-swarm.py"
+    namespace = {"__name__": "__bkc_esxi_swarm_bootstrap__"}
+    import contextlib
+    import io
+
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        exec(compile(script_path.read_text(), str(script_path), "exec"), namespace)
+        namespace["main"]()
+    text = output.getvalue()
+    _store_run_extra(run_id, {"esxi_swarm_bootstrap": text[-6000:]})
+    append_event(run_id, "info", stage_name, text[-6000:])
+    _set_stage(run_id, stage_name, "complete", "ESXi Docker Swarm converged with two managers and three workers.")
+
+
+def _video_esxi_swarm_inventory(run_id: str, stage_name: str) -> None:
+    _, values = _esxi_seed_context(run_id)
+    inventory = _esxi_inventory(values)
+    template_name = str(values.get("esxi_template_name") or "bkc-trixie-base")
+    expected = {node["name"] for node in _esxi_seed_nodes(values)}
+    present = {str(vm.get("name")) for vm in inventory.get("vms", [])}
+    if template_name not in present:
+        raise PipelineExecutionError(f"ESXi inventory is missing imported base VM/template: {template_name}")
+    missing = sorted(expected - present)
+    if missing:
+        append_event(run_id, "warning", stage_name, "ESXi swarm guest clone stage is not complete yet; missing VM(s): " + ", ".join(missing))
+    _store_run_extra(run_id, {"esxi_inventory_after_population": inventory})
+    append_event(run_id, "info", stage_name, json.dumps(inventory.get("vms", []), indent=2, sort_keys=True))
+    detail = f"ESXi inventory contains imported base {template_name}."
+    if not missing:
+        detail += " All target swarm VMs are present."
+    else:
+        detail += f" Clone/bootstrap remains next; {len(missing)} target VM(s) are not present yet."
+    _set_stage(run_id, stage_name, "complete", detail)
+
+
+def _video_esxi_swarm_fragments(run_id: str, stage_name: str) -> None:
+    fragments = {
+        "esxi.edge.tls-passthrough": {
+            "rating": "known-good",
+            "contract": "Use https://swarm1.lab.auzietek.com:8443/ui/ for raw TLS passthrough to the ESXi Host Client; :8087 is only the HTTP reverse proxy path.",
+        },
+        "esxi.seed.first-population": {
+            "rating": "candidate-known-good",
+            "contract": "50B validates ESXi API access, enables TSM-SSH, and registers three named Debian VM shells with thin disks on datastore1.",
+        },
+        "esxi.seed.remaining-gap": {
+            "rating": "planned",
+            "contract": "Next iteration should import or install a real Debian Trixie base, then clone/customize guests and run the Docker Swarm bootstrap.",
+        },
+    }
+    _store_run_extra(run_id, {"esxi_swarm_fragments": fragments})
+
+
+def _micro_blog_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("micro-blog-swarm-compose", _run_request_inputs(run_id))
+
+
+def _micro_blog_remote(run_id: str, command: str, *, timeout: int = 300, host_override: str = "") -> str:
+    _, _, values = _micro_blog_context(run_id)
+    host = str(host_override or values.get("target_manager_host") or "10.20.0.121").strip()
+    user = str(values.get("target_user") or "admin-deploy").strip()
+    password = str(values.get("target_password") or "").strip()
+    if not host or not user:
+        raise PipelineExecutionError("micro-blog target_manager_host and target_user are required.")
+    route_mode = str(values.get("ssh_route_mode") or "auto").strip().lower()
+    if route_mode in {"lab-direct", "direct"}:
+        return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+    if route_mode == "auto":
+        try:
+            return run_remote_command(host=host, user=user, password=password, command=command, timeout=timeout)
+        except Exception as direct_exc:  # noqa: BLE001
+            append_event(run_id, "warning", "micro-blog-ssh-route", f"Direct SSH failed; falling back to ns1 jump: {direct_exc}")
+    if route_mode in {"auto", "ns1-jump", "jump", "proxyjump"}:
+        integrations = load_integrations()
+        ssh = integrations["ssh"]
+        key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+        private_key = str(key_info["private_key_path"])
+        jump = str(values.get("ssh_jump_host") or "root@192.168.1.10").strip()
+        ssh_args = [
+            "ssh",
+            "-i",
+            private_key,
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/tmp/bkc_micro_blog_known_hosts",
+            "-o",
+            f"ProxyCommand=ssh -i {shlex.quote(private_key)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc_micro_blog_jump_known_hosts -W %h:%p {shlex.quote(jump)}",
+            f"{user}@{host}",
+            command,
+        ]
+        try:
+            completed = subprocess.run(
+                ssh_args,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise PipelineExecutionError(f"micro-blog SSH jump execution failed: {exc}") from exc
+        output = (completed.stdout or "").strip()
+        error = (completed.stderr or "").strip()
+        if completed.returncode != 0:
+            raise PipelineExecutionError(error or output or f"micro-blog SSH jump exited {completed.returncode}")
+        return output
+    raise PipelineExecutionError(f"Unsupported micro-blog ssh_route_mode: {route_mode}")
+
+
+def _micro_blog_paths(values: dict) -> dict[str, str]:
+    mountpoint = str(values.get("nfs_mountpoint") or "/mnt/swarm").rstrip("/")
+    source_path = str(values.get("source_path") or f"{mountpoint}/shared/micro-blog/src-candidate").rstrip("/")
+    stage_path = str(values.get("target_stage_path") or "/srv/micro-blog-stack").rstrip("/")
+    content_path = str(values.get("target_content_path") or "/srv/micro-blog/content").rstrip("/")
+    return {
+        "mountpoint": mountpoint,
+        "source_path": source_path,
+        "stage_path": stage_path,
+        "content_path": content_path,
+        "stack_file": f"{stage_path}/micro-blog.stack.yml",
+    }
+
+
+def _micro_blog_ensure_nfs_script(values: dict) -> str:
+    nfs_export = str(values.get("nfs_export") or "10.20.0.10:/srv/nfs/swarm")
+    paths = _micro_blog_paths(values)
+    return f"""
+set -euo pipefail
+if ! command -v mountpoint >/dev/null 2>&1; then
+  sudo apt-get update -y >/dev/null
+  sudo apt-get install -y util-linux >/dev/null
+fi
+if ! command -v mount.nfs >/dev/null 2>&1; then
+  sudo apt-get update -y >/dev/null
+  sudo apt-get install -y nfs-common >/dev/null
+fi
+sudo mkdir -p {shlex.quote(paths["mountpoint"])}
+if ! mountpoint -q {shlex.quote(paths["mountpoint"])}; then
+  sudo mount -t nfs {shlex.quote(nfs_export)} {shlex.quote(paths["mountpoint"])}
+fi
+test -d {shlex.quote(paths["source_path"])}
+test -f {shlex.quote(paths["source_path"] + "/docker-compose.yml")}
+test -f {shlex.quote(paths["source_path"] + "/src/api/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/worker/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/projection/Dockerfile")}
+test -f {shlex.quote(paths["source_path"] + "/src/ui/Dockerfile")}
+"""
+
+
+def _run_micro_blog_source_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    out = _micro_blog_remote(
+        run_id,
+        _micro_blog_ensure_nfs_script(values)
+        + f"\nfind {shlex.quote(_micro_blog_paths(values)['source_path'])} -maxdepth 2 -type f | sort | sed -n '1,80p'\n",
+        timeout=240,
+    )
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "NFS-staged micro-blog source bundle is visible from the target swarm manager.")
+
+
+def _run_micro_blog_registry_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    insecure_registries = values.get("insecure_registry_hosts")
+    if not isinstance(insecure_registries, list) or not insecure_registries:
+        insecure_registries = [registry]
+    target_hosts = values.get("target_node_hosts")
+    if not isinstance(target_hosts, list) or not target_hosts:
+        target_hosts = [str(values.get("target_manager_host") or "10.20.0.121")]
+    registry_json = json.dumps([str(item) for item in insecure_registries if str(item).strip()])
+    for target_host in [str(item).strip() for item in target_hosts if str(item).strip()]:
+        configure = f"""
+set -euo pipefail
+sudo mkdir -p /etc/docker
+if [ -f /etc/docker/daemon.json ] && [ ! -f /etc/docker/daemon.json.bkc-pre-micro-blog ]; then
+  sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.bkc-pre-micro-blog
+fi
+sudo python3 - <<'PY'
+import json
+from pathlib import Path
+p = Path('/etc/docker/daemon.json')
+data = {{}}
+if p.exists() and p.read_text().strip():
+    data = json.loads(p.read_text())
+regs = data.setdefault('insecure-registries', [])
+for reg in {registry_json!r}:
+    if reg not in regs:
+        regs.append(reg)
+p.write_text(json.dumps(data, indent=2, sort_keys=True) + '\\n')
+PY
+sudo systemctl restart docker
+"""
+        _micro_blog_remote(run_id, configure, timeout=180, host_override=target_host)
+    command = f"""
+set -euo pipefail
+curl -fsS --max-time 8 http://{shlex.quote(registry)}/v2/ >/dev/null
+echo registry-ok {shlex.quote(registry)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=60)
+    append_event(run_id, "info", stage_name, out)
+    _set_stage(run_id, stage_name, "complete", f"Lab registry is reachable from target manager: {registry}.")
+
+
+def _run_micro_blog_target_swarm_preflight(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    expected_workers = int(values.get("expected_worker_count") or 3)
+    expected_managers = int(values.get("expected_manager_count") or 2)
+    label = str(values.get("placement_label") or "bkc.workload=app")
+    command = f"""
+set -euo pipefail
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+$docker_cmd info --format 'swarm={{{{.Swarm.LocalNodeState}}}} node={{{{.Swarm.NodeID}}}}'
+$docker_cmd node ls
+managers="$($docker_cmd node ls --filter role=manager --format '{{{{.Hostname}}}}' | wc -l)"
+workers="$($docker_cmd node ls --filter role=worker --format '{{{{.Hostname}}}}' | wc -l)"
+test "$managers" -ge {expected_managers}
+test "$workers" -ge {expected_workers}
+key={shlex.quote(label.split('=', 1)[0])}
+value={shlex.quote(label.split('=', 1)[1] if '=' in label else '')}
+if [ -n "$value" ]; then
+  for n in $($docker_cmd node ls --filter role=worker --format '{{{{.Hostname}}}}'); do
+    current="$($docker_cmd node inspect "$n" --format '{{{{ index .Spec.Labels "'$key'" }}}}' 2>/dev/null || true)"
+    if [ "$current" != "$value" ]; then
+      $docker_cmd node update --label-add "$key=$value" "$n" >/dev/null
+    fi
+  done
+  labeled="$($docker_cmd node ls --format '{{{{.Hostname}}}}' | while read -r n; do $docker_cmd node inspect "$n" --format '{{{{ index .Spec.Labels "'$key'" }}}}' 2>/dev/null; done | grep -Fx "$value" | wc -l)"
+  test "$labeled" -ge {expected_workers}
+  echo labeled-workers=$labeled
+fi
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Target Docker Swarm manager, node count, and placement labels validated.")
+
+
+def _run_micro_blog_build_push(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    tag = str(values.get("image_tag") or "candidate").strip()
+    command = _micro_blog_ensure_nfs_script(values) + f"""
+set -euo pipefail
+cd {shlex.quote(paths["source_path"])}
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+for item in \\
+  blog-api:src/api/Dockerfile \\
+  blog-worker:src/worker/Dockerfile \\
+  blog-projection:src/projection/Dockerfile \\
+  blog-ui:src/ui/Dockerfile
+do
+  svc="${{item%%:*}}"
+  dockerfile="${{item#*:}}"
+  image={shlex.quote(registry)}/micro-blog/${{svc}}:{shlex.quote(tag)}
+  echo "building $image"
+  $docker_cmd build -t "$image" -f "$dockerfile" .
+  echo "pushing $image"
+  $docker_cmd push "$image"
+done
+"""
+    out = _micro_blog_remote(run_id, command, timeout=1500)
+    append_event(run_id, "info", stage_name, out[-8000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog app images built and pushed to the lab registry.")
+
+
+def _micro_blog_stack_yaml(values: dict) -> str:
+    registry = str(values.get("registry_host") or "swarm1.lab.auzietek.com:5001").strip()
+    tag = str(values.get("image_tag") or "candidate").strip()
+    ui_port = int(values.get("publish_ui_port") or 18081)
+    api_port = int(values.get("publish_api_port") or 18080)
+    paths = _micro_blog_paths(values)
+    content_path = paths["content_path"]
+    return f"""networks:
+  app_net:
+    driver: overlay
+    attachable: true
+
+volumes:
+  rabbitmq-data:
+  redis-data:
+  postgres-data:
+
+configs:
+  otel_collector_local:
+    file: ./collector/otel-collector-local.yaml
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    environment:
+      RABBITMQ_DEFAULT_USER: "${{RABBITMQ_DEFAULT_USER:-guest}}"
+      RABBITMQ_DEFAULT_PASS: "${{RABBITMQ_DEFAULT_PASS:-guest}}"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "microblog"
+      POSTGRES_USER: "blog"
+      POSTGRES_PASSWORD: "${{POSTGRES_PASSWORD:-Str0ngP@ssword!}}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [app_net]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    configs:
+      - source: otel_collector_local
+        target: /etc/otel-collector.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+    networks:
+      app_net:
+        aliases: [otel-collector]
+    deploy:
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-api:
+    image: {registry}/micro-blog/blog-api:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      REDIS_URL: "redis://redis:6379/0"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+      ADMIN_EMAIL: "${{ADMIN_EMAIL:-admin@example.invalid}}"
+      CONTENT_IMPORT_ROOT: "/content"
+      CONTENT_PUBLIC_BASE: "/content-files"
+      AUTO_IMPORT_FILESYSTEM_ON_BOOT: "${{AUTO_IMPORT_FILESYSTEM_ON_BOOT:-false}}"
+    volumes:
+      - {content_path}:/content
+    ports:
+      - "{api_port}:8080"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-worker:
+    image: {registry}/micro-blog/blog-worker:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-projection:
+    image: {registry}/micro-blog/blog-projection:{tag}
+    env_file: .env
+    environment:
+      DATABASE_URL: "dbname=microblog user=blog password=${{POSTGRES_PASSWORD:-Str0ngP@ssword!}} host=postgres port=5432"
+      REDIS_URL: "redis://redis:6379/0"
+      RABBITMQ_URL: "amqp://${{RABBITMQ_DEFAULT_USER:-guest}}:${{RABBITMQ_DEFAULT_PASS:-guest}}@rabbitmq:5672/%2F"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+
+  blog-ui:
+    image: {registry}/micro-blog/blog-ui:{tag}
+    env_file: .env
+    environment:
+      BLOG_API_BASE_URL: "http://blog-api:8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://${{OTEL_COLLECTOR_SERVICE:-otel-collector}}:4318"
+      OTEL_ENVIRONMENT: "${{OTEL_ENVIRONMENT:-lab}}"
+      SERVICE_NAMESPACE: "microblog"
+      ADMIN_EMAIL: "${{ADMIN_EMAIL:-admin@example.invalid}}"
+      ADMIN_ACCESS_CODE: "${{ADMIN_ACCESS_CODE:-local-admin}}"
+      FLASK_SECRET_KEY: "${{FLASK_SECRET_KEY:-change-me-before-deploy}}"
+      GOOGLE_CLIENT_ID: "${{GOOGLE_CLIENT_ID:-}}"
+      GOOGLE_CLIENT_SECRET: "${{GOOGLE_CLIENT_SECRET:-}}"
+      DEFAULT_THEME_VARIANT: "${{DEFAULT_THEME_VARIANT:-midnight}}"
+      CONTENT_IMPORT_ROOT: "/content"
+    volumes:
+      - {content_path}:/content:ro
+    ports:
+      - "{ui_port}:8080"
+    networks: [app_net]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: ["node.labels.bkc.workload == app"]
+"""
+
+
+def _run_micro_blog_render_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    stack_yaml = _micro_blog_stack_yaml(values)
+    command = f"""
+set -euo pipefail
+sudo mkdir -p {shlex.quote(paths["stage_path"] + "/collector")} {shlex.quote(paths["content_path"])}
+sudo tee {shlex.quote(paths["stack_file"])} >/dev/null <<'BKC_MICROBLOG_STACK'
+{stack_yaml}
+BKC_MICROBLOG_STACK
+sudo cp {shlex.quote(paths["source_path"] + "/collector/otel-collector-local.yaml")} {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sudo chmod 0644 {shlex.quote(paths["stack_file"])} {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sed -n '1,80p' {shlex.quote(paths["stack_file"])}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Swarm-safe micro-blog stack rendered on target manager.")
+
+
+def _run_micro_blog_stage_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    target_hosts = values.get("target_node_hosts")
+    if not isinstance(target_hosts, list) or not target_hosts:
+        target_hosts = [str(values.get("target_manager_host") or "10.20.0.121")]
+    for target_host in [str(item).strip() for item in target_hosts if str(item).strip()]:
+        _micro_blog_remote(
+            run_id,
+            f"set -euo pipefail; sudo mkdir -p {shlex.quote(paths['content_path'])}; sudo chmod 0755 /srv/micro-blog {shlex.quote(paths['content_path'])}",
+            timeout=60,
+            host_override=target_host,
+        )
+    command = f"""
+set -euo pipefail
+sudo mkdir -p {shlex.quote(paths["stage_path"])} {shlex.quote(paths["content_path"])}
+sudo chown {shlex.quote(str(values.get("target_user") or "admin-deploy"))}:{shlex.quote(str(values.get("target_user") or "admin-deploy"))} {shlex.quote(paths["stage_path"])}
+if [ ! -f {shlex.quote(paths["stage_path"] + "/.env")} ]; then
+  sudo cp {shlex.quote(paths["source_path"] + "/.env.sample")} {shlex.quote(paths["stage_path"] + "/.env")}
+  sudo sed -i 's/^SITE_URL=.*/SITE_URL=http:\\/\\/localhost:{int(values.get("publish_ui_port") or 18081)}/' {shlex.quote(paths["stage_path"] + "/.env")}
+  sudo sed -i 's/^OTEL_ENVIRONMENT=.*/OTEL_ENVIRONMENT=lab/' {shlex.quote(paths["stage_path"] + "/.env")}
+fi
+sudo chown {shlex.quote(str(values.get("target_user") or "admin-deploy"))}:{shlex.quote(str(values.get("target_user") or "admin-deploy"))} {shlex.quote(paths["stage_path"] + "/.env")}
+sudo chmod 0640 {shlex.quote(paths["stage_path"] + "/.env")}
+sudo test -f {shlex.quote(paths["stage_path"] + "/.env")}
+sudo test -f {shlex.quote(paths["stage_path"] + "/collector/otel-collector-local.yaml")}
+sudo test -f {shlex.quote(paths["stack_file"])}
+echo staged={shlex.quote(paths["stage_path"])}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=180)
+    append_event(run_id, "info", stage_name, out)
+    _set_stage(run_id, stage_name, "complete", "Micro-blog stack bundle, .env, collector config, and content path staged.")
+
+
+def _run_micro_blog_deploy_stack(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    paths = _micro_blog_paths(values)
+    stack = str(values.get("stack_name") or "micro-blog")
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(paths["stage_path"])}
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+python3 - <<'PY'
+from pathlib import Path
+import shlex
+lines = []
+for raw in Path('.env').read_text().splitlines():
+    line = raw.strip()
+    if not line or line.startswith('#') or '=' not in line:
+        continue
+    key, value = line.split('=', 1)
+    key = key.strip()
+    if not key:
+        continue
+    lines.append(f"export {{key}}={{shlex.quote(value.strip())}}")
+Path('.env.export').write_text("\\n".join(lines) + "\\n")
+PY
+. ./.env.export
+$docker_cmd stack deploy -c {shlex.quote(paths["stack_file"])} {shlex.quote(stack)}
+$docker_cmd stack services {shlex.quote(stack)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=900)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog stack deploy requested through Docker Swarm.")
+
+
+def _run_micro_blog_validate_rollout(run_id: str, stage_name: str) -> None:
+    _, _, values = _micro_blog_context(run_id)
+    stack = str(values.get("stack_name") or "micro-blog")
+    ui_port = int(values.get("publish_ui_port") or 18081)
+    api_port = int(values.get("publish_api_port") or 18080)
+    command = f"""
+set -euo pipefail
+docker_cmd=docker
+if ! docker info >/dev/null 2>&1; then docker_cmd="sudo docker"; fi
+deadline=$((SECONDS+300))
+while true; do
+  not_ready="$($docker_cmd stack services {shlex.quote(stack)} --format '{{{{.Name}}}} {{{{.Replicas}}}}' | awk -F'[ /]+' '$2 != $3 {{print}}' || true)"
+  if [ -z "$not_ready" ]; then break; fi
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    $docker_cmd stack services {shlex.quote(stack)}
+    $docker_cmd stack ps {shlex.quote(stack)} --no-trunc
+    echo "$not_ready"
+    exit 1
+  fi
+  sleep 5
+done
+curl -fsS http://127.0.0.1:{api_port}/healthz >/dev/null
+curl -fsS http://127.0.0.1:{api_port}/readyz >/dev/null
+curl -fsS http://127.0.0.1:{ui_port}/healthz >/dev/null
+curl -fsS http://127.0.0.1:{ui_port}/ >/dev/null
+$docker_cmd stack services {shlex.quote(stack)}
+"""
+    out = _micro_blog_remote(run_id, command, timeout=360)
+    _store_run_extra(run_id, {"micro_blog_validation": out[-6000:]})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog replicas and HTTP health endpoints validated.")
+
+
+def _run_micro_blog_note(run_id: str, stage_name: str, detail: str, payload: dict | None = None) -> None:
+    if payload:
+        append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", detail)
 
 
 def _run_trixie_template_upload(run_id: str, stage_name: str, template_name: str, target_key: str, mode: int = 0o644) -> None:
@@ -8934,6 +11536,1659 @@ def _run_foobar_service_relationships(run_id: str, stage_name: str) -> None:
     _set_stage(run_id, stage_name, "complete", "FooBar service relationships recorded.")
 
 
+def _openstack_host_context(run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("trixie-openstack-host-prepare", run_inputs)
+
+
+def _openstack_target_hosts(values: dict) -> list[str]:
+    hosts = values.get("target_hosts")
+    if isinstance(hosts, list):
+        normalized = [str(host).strip() for host in hosts if str(host).strip()]
+    else:
+        normalized = [part.strip() for part in str(hosts or "").replace(",", " ").split() if part.strip()]
+    if not normalized:
+        raise PipelineExecutionError("trixie-openstack-host-prepare requires at least one target host.")
+    return normalized
+
+
+def _openstack_ssh_user(values: dict) -> str:
+    login = values.get("target_login") if isinstance(values.get("target_login"), dict) else {}
+    return str(login.get("automation_user") or "root").strip() or "root"
+
+
+def _openstack_run_host_command(values: dict, host: str, command: str, *, timeout: int = 120) -> str:
+    user = _openstack_ssh_user(values)
+    return run_remote_command(host=host, user=user, command=command, timeout=timeout)
+
+
+def _run_openstack_host_firstboot_login(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    login = values.get("target_login") if isinstance(values.get("target_login"), dict) else {}
+    expected_user = str(login.get("user") or "auzieman").strip() or "auzieman"
+    results: dict[str, str] = {}
+    command = (
+        "set -e; "
+        "printf 'hostname='; hostname; "
+        f"id {shlex.quote(expected_user)}; "
+        "systemctl is-active ssh; "
+        "if [ \"$(id -u)\" -eq 0 ]; then echo root-automation-ok; else sudo -n true && echo sudo-nopasswd-ok; fi; "
+        "ip -brief addr"
+    )
+    for host in _openstack_target_hosts(values):
+        results[host] = _openstack_run_host_command(values, host, command, timeout=120)
+    _store_run_extra(run_id, {"openstack_firstboot_login": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack host first-boot login validated through BKC SSH.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-3000:])
+
+
+def _run_openstack_host_base_normalize(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    if not _pipeline_value_truthy(values, "enable_base_normalize"):
+        _set_stage(run_id, stage_name, "complete", "Skipped first-boot baseline normalization because enable_base_normalize is false.")
+        append_event(run_id, "info", stage_name, "OpenStack first-boot baseline normalization skipped by input.")
+        return
+
+    login = values.get("target_login") if isinstance(values.get("target_login"), dict) else {}
+    admin_user = str(login.get("user") or "auzieman").strip() or "auzieman"
+    expected_hostname = str(values.get("expected_hostname") or "r630-openstack-01").strip() or "r630-openstack-01"
+    packages = " ".join(_flatten_package_values(values.get("base_normalize_packages")))
+    if not packages:
+        packages = "sudo facter curl git ca-certificates lldpd net-tools iputils-arping dnsutils tcpdump pciutils usbutils lshw nmap"
+    sudoers_path = f"/etc/sudoers.d/90-bkc-{admin_user}"
+    marker_json = json.dumps(
+        {
+            "admin_user": admin_user,
+            "expected_hostname": expected_hostname,
+            "host_prepare_pipeline": "trixie-openstack-host-prepare",
+            "node_id": "node:physical_machine:r630-openstack-01",
+            "profile": "openstack-base-os",
+        },
+        sort_keys=True,
+    )
+    command = (
+        "set -e; "
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "apt-get update >/dev/null; "
+        f"apt-get install -y --no-install-recommends {packages}; "
+        f"hostnamectl set-hostname {shlex.quote(expected_hostname)}; "
+        f"printf '%s\\n' {shlex.quote(expected_hostname)} > /etc/hostname; "
+        f"cp /etc/hosts /etc/hosts.bkc-before-openstack-normalize; "
+        f"grep -v -F {shlex.quote(expected_hostname)} /etc/hosts.bkc-before-openstack-normalize > /etc/hosts; "
+        f"printf '%s\\n' {shlex.quote('127.0.1.1 ' + expected_hostname)} >> /etc/hosts; "
+        f"id {shlex.quote(admin_user)} >/dev/null; "
+        f"usermod -aG sudo {shlex.quote(admin_user)}; "
+        f"printf '%s\\n' {shlex.quote(admin_user + ' ALL=(ALL) NOPASSWD:ALL')} > {shlex.quote(sudoers_path)}; "
+        f"printf '%s\\n' {shlex.quote('Defaults:' + admin_user + ' !requiretty')} >> {shlex.quote(sudoers_path)}; "
+        f"chmod 440 {shlex.quote(sudoers_path)}; "
+        "install -d -m 0755 /var/lib/bkc; "
+        f"printf '%s\\n' {shlex.quote(marker_json)} > /var/lib/bkc/openstack-firstboot-baseline.json; "
+        "systemctl enable --now ssh >/dev/null; "
+        "systemctl enable --now lldpd >/dev/null 2>&1 || true; "
+        "printf 'hostname='; hostname; "
+        f"sudo -n -u {shlex.quote(admin_user)} sudo -n true; "
+        "command -v ifconfig; command -v nmap; "
+        "ip -brief addr; "
+        "printf '\\n-- lldp --\\n'; timeout 8 lldpctl 2>/dev/null || true"
+    )
+    results: dict[str, str] = {}
+    for host in _openstack_target_hosts(values):
+        results[host] = _openstack_run_host_command(values, host, command, timeout=600)
+    _store_run_extra(run_id, {"openstack_firstboot_normalize": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack host first-boot baseline normalized.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-4000:])
+
+
+def _run_openstack_host_network_sides(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    context = values.get("physical_network_context") if isinstance(values.get("physical_network_context"), dict) else {}
+    results: dict[str, dict] = {}
+    command = "set -e; ip -brief addr; printf '\\n-- routes --\\n'; ip route"
+    for host in _openstack_target_hosts(values):
+        output = _openstack_run_host_command(values, host, command, timeout=120)
+        results[host] = {
+            "observed": output,
+            "current_bootstrap": context.get("current_bootstrap", {}),
+            "planned_management": context.get("planned_management", {}),
+            "planned_services": context.get("planned_services", {}),
+        }
+    _store_run_extra(run_id, {"openstack_network_sides": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack host network sides validated against current bootstrap and planned lab networks.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-4000:])
+
+
+def _openstack_pipeline_file(values: dict, key: str) -> Path:
+    pipeline, _, _ = _openstack_host_context()
+    folder = _repo_pipeline_folder(pipeline)
+    rel_path = str(values.get(key) or "").strip()
+    if not rel_path:
+        raise PipelineExecutionError(f"{key} is required.")
+    path = (folder / rel_path).resolve()
+    if not path.exists() or folder not in path.parents:
+        raise PipelineExecutionError(f"Invalid pipeline file for {key}: {path}")
+    return path
+
+
+def _run_openstack_host_package_prepare(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    if not _pipeline_value_truthy(values, "enable_package_install"):
+        _set_stage(run_id, stage_name, "complete", "Skipped OpenStack package prep because enable_package_install is false.")
+        append_event(run_id, "info", stage_name, "OpenStack package installation remains gated for tonight's first-boot validation.")
+        return
+    script_path = _openstack_pipeline_file(values, "prepare_script")
+    package_values = values.get("openstack_host_packages")
+    packages = " ".join(_flatten_package_values(package_values))
+    environment = {
+        "BKC_OPENSTACK_PACKAGES": packages,
+        "BKC_NEUTRON_MODE": str(values.get("openstack_network_mode") or "ovs"),
+        "BKC_NEUTRON_EXTERNAL_BRIDGE": str(values.get("neutron_external_bridge") or "br-ex"),
+        "BKC_NEUTRON_PHYSNET": str(values.get("neutron_physnet") or "physnet1"),
+        "BKC_ENABLE_NETWORK_CONFIG": "true" if _pipeline_value_truthy(values, "enable_network_config") else "false",
+        "BKC_OPENSTACK_SMOKE_MODE": "true" if _pipeline_value_truthy(values, "smoke_mode") else "false",
+    }
+    env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
+    results: dict[str, str] = {}
+    for host in _openstack_target_hosts(values):
+        remote_path = "/tmp/bkc-prepare-openstack-neutron-host.sh"
+        upload_remote_bytes(
+            host=host,
+            user=_openstack_ssh_user(values),
+            remote_path=remote_path,
+            content=script_path.read_bytes(),
+            mode=0o700,
+            timeout=60,
+        )
+        results[host] = _openstack_run_host_command(
+            values,
+            host,
+            f"set -e; {env_prefix} {remote_path}",
+            timeout=1200,
+        )
+    _store_run_extra(run_id, {"openstack_package_prepare": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack host packages prepared.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-4000:])
+
+
+def _run_openstack_host_neutron_validate(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    if not _pipeline_value_truthy(values, "enable_package_install"):
+        _set_stage(run_id, stage_name, "complete", "Skipped Neutron readiness validation because package prep is gated off.")
+        append_event(run_id, "info", stage_name, "Neutron readiness validation waits for enable_package_install=true.")
+        return
+    script_path = _openstack_pipeline_file(values, "validate_script")
+    environment = {
+        "BKC_NEUTRON_MODE": str(values.get("openstack_network_mode") or "ovs"),
+        "BKC_NEUTRON_EXTERNAL_BRIDGE": str(values.get("neutron_external_bridge") or "br-ex"),
+        "BKC_NEUTRON_PHYSNET": str(values.get("neutron_physnet") or "physnet1"),
+        "BKC_OPENSTACK_SMOKE_MODE": "true" if _pipeline_value_truthy(values, "smoke_mode") else "false",
+    }
+    env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
+    results: dict[str, str] = {}
+    for host in _openstack_target_hosts(values):
+        remote_path = "/tmp/bkc-validate-openstack-neutron-host.sh"
+        upload_remote_bytes(
+            host=host,
+            user=_openstack_ssh_user(values),
+            remote_path=remote_path,
+            content=script_path.read_bytes(),
+            mode=0o700,
+            timeout=60,
+        )
+        results[host] = _openstack_run_host_command(
+            values,
+            host,
+            f"set -e; {env_prefix} {remote_path}",
+            timeout=180,
+        )
+    _store_run_extra(run_id, {"openstack_neutron_validate": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack Neutron host readiness validated.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-4000:])
+
+
+def _run_openstack_host_image_cache(run_id: str, stage_name: str) -> None:
+    _, _, values = _openstack_host_context(_run_request_inputs(run_id))
+    if not _pipeline_value_truthy(values, "enable_image_cache"):
+        _set_stage(run_id, stage_name, "complete", "Skipped OpenStack image cache because enable_image_cache is false.")
+        append_event(run_id, "info", stage_name, "OpenStack image cache remains gated until explicitly enabled.")
+        return
+
+    cache_dir = str(values.get("image_cache_dir") or "/var/lib/bkc/openstack-images").strip()
+    if not cache_dir.startswith("/var/lib/bkc/"):
+        raise PipelineExecutionError(f"Refusing to cache OpenStack images outside /var/lib/bkc: {cache_dir}")
+    assets = values.get("openstack_image_assets")
+    if not isinstance(assets, list) or not assets:
+        raise PipelineExecutionError("openstack_image_assets must contain at least one asset.")
+
+    asset_lines: list[str] = []
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        name = str(asset.get("name") or "").strip()
+        url = str(asset.get("url") or "").strip()
+        filename = str(asset.get("filename") or Path(urllib.parse.urlparse(url).path).name).strip()
+        image_format = str(asset.get("format") or "qcow2").strip()
+        min_bytes = int(asset.get("min_bytes") or 1)
+        if not name or not url or not filename:
+            raise PipelineExecutionError(f"Invalid OpenStack image asset: {asset}")
+        if "/" in filename or filename in {".", ".."}:
+            raise PipelineExecutionError(f"Invalid OpenStack image filename: {filename}")
+        asset_lines.append("\t".join([name, url, filename, image_format, str(min_bytes)]))
+
+    if not asset_lines:
+        raise PipelineExecutionError("No valid OpenStack image assets were provided.")
+
+    asset_table = "\n".join(asset_lines)
+    command = (
+        "set -euo pipefail; "
+        f"cache_dir={shlex.quote(cache_dir)}; "
+        "install -d -m 0755 \"$cache_dir\"; "
+        "manifest=\"$cache_dir/manifest.jsonl\"; : > \"$manifest\"; "
+        "while IFS=$'\\t' read -r name url filename image_format min_bytes; do "
+        "  [ -n \"$name\" ] || continue; "
+        "  dest=\"$cache_dir/$filename\"; tmp=\"$dest.tmp\"; "
+        "  if [ ! -s \"$dest\" ] || [ \"$(stat -c %s \"$dest\")\" -lt \"$min_bytes\" ]; then "
+        "    rm -f \"$tmp\"; "
+        "    curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 -o \"$tmp\" \"$url\"; "
+        "    mv \"$tmp\" \"$dest\"; "
+        "  fi; "
+        "  size=$(stat -c %s \"$dest\"); "
+        "  if [ \"$size\" -lt \"$min_bytes\" ]; then echo \"asset too small: $filename $size < $min_bytes\" >&2; exit 13; fi; "
+        "  sha=$(sha256sum \"$dest\" | awk '{print $1}'); "
+        "  printf '{\"name\":\"%s\",\"filename\":\"%s\",\"format\":\"%s\",\"bytes\":%s,\"sha256\":\"%s\",\"url\":\"%s\"}\\n' "
+        "    \"$name\" \"$filename\" \"$image_format\" \"$size\" \"$sha\" \"$url\" >> \"$manifest\"; "
+        "done <<'BKC_OPENSTACK_IMAGES'\n"
+        f"{asset_table}\n"
+        "BKC_OPENSTACK_IMAGES\n"
+        "ls -lh \"$cache_dir\"; printf '\\n-- manifest --\\n'; cat \"$manifest\""
+    )
+
+    results: dict[str, str] = {}
+    for host in _openstack_target_hosts(values):
+        results[host] = _openstack_run_host_command(values, host, command, timeout=1800)
+    _store_run_extra(run_id, {"openstack_image_cache": results})
+    _set_stage(run_id, stage_name, "complete", "OpenStack QCOW/image assets cached on the prepared host.")
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-5000:])
+
+
+def _openstack_kolla_context(run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("openstack-kolla-single-node-install", run_inputs)
+
+
+def _openstack_kolla_pipeline_file(values: dict, key: str) -> Path:
+    pipeline, _, _ = _openstack_kolla_context()
+    folder = _repo_pipeline_folder(pipeline)
+    rel_path = str(values.get(key) or "").strip()
+    if not rel_path:
+        raise PipelineExecutionError(f"{key} is required.")
+    path = (folder / rel_path).resolve()
+    if not path.exists() or folder not in path.parents:
+        raise PipelineExecutionError(f"Invalid pipeline file for {key}: {path}")
+    return path
+
+
+def _secret_ref_literal(value: object, *, default: str = "") -> str:
+    text = str(value or "").strip()
+    if text.startswith("demo-value:"):
+        return text.split(":", 1)[1]
+    return text or default
+
+
+def _openstack_kolla_operation_mode(run_id: str) -> str:
+    _, _, values = _openstack_kolla_context(_run_request_inputs(run_id))
+    operation_mode = str(values.get("operation_mode") or "review").strip().lower()
+    valid_modes = {"review", "prepare", "precheck", "deploy", "validate"}
+    if operation_mode not in valid_modes:
+        raise PipelineExecutionError(
+            f"Invalid Kolla operation_mode {operation_mode!r}; expected one of {sorted(valid_modes)}."
+        )
+    return operation_mode
+
+
+def _run_openstack_kolla_phase(run_id: str, stage: dict) -> None:
+    stage_name = str(stage["name"])
+    phase = str(stage.get("phase") or "").strip()
+    if not phase:
+        raise PipelineExecutionError(f"{stage_name} is missing a Kolla phase.")
+
+    _, _, values = _openstack_kolla_context(_run_request_inputs(run_id))
+    operation_mode = _openstack_kolla_operation_mode(run_id)
+    operation_modes = {str(item).strip().lower() for item in stage.get("operation_modes", []) if str(item).strip()}
+    if operation_modes and operation_mode not in operation_modes:
+        detail = f"Skipped Kolla phase {phase}; operation_mode is {operation_mode}."
+        _set_stage(run_id, stage_name, "complete", detail)
+        append_event(run_id, "info", stage_name, detail)
+        return
+
+    script_path = _openstack_kolla_pipeline_file(values, "install_script")
+    admin_password = _secret_ref_literal(values.get("keystone_admin_password_ref"), default="changeme123")
+    environment = {
+        "BKC_KOLLA_PHASE": phase,
+        "BKC_KOLLA_WORKSPACE": str(values.get("kolla_workspace") or "/opt/bkc/kolla"),
+        "BKC_KOLLA_VENV": str(values.get("kolla_venv") or "/opt/bkc/kolla-venv"),
+        "BKC_KOLLA_CONFIG_DIR": str(values.get("kolla_config_dir") or "/etc/kolla"),
+        "BKC_EXPECTED_HOSTNAME": str(values.get("expected_hostname") or "r630-openstack-01"),
+        "BKC_KOLLA_SOURCE_REF": str(values.get("kolla_source_ref") or "stable/2026.1"),
+        "BKC_KOLLA_BASE_DISTRO": str(values.get("kolla_base_distro") or "debian"),
+        "BKC_KOLLA_INSTALL_TYPE": str(values.get("kolla_install_type") or "source"),
+        "BKC_OPENSTACK_RELEASE": str(values.get("openstack_release") or "2026.1"),
+        "BKC_KOLLA_USE_TEST_IMAGES": "yes" if _pipeline_value_truthy(values, "use_test_images") else "no",
+        "BKC_KOLLA_PRIMARY_INTERFACE": str(values.get("primary_interface") or "eno1"),
+        "BKC_KOLLA_NETWORK_INTERFACE": str(values.get("network_interface") or "bkc-mgmt0"),
+        "BKC_KOLLA_MANAGEMENT_ADDRESS": str(values.get("management_address") or "10.20.0.31/24"),
+        "BKC_KOLLA_EXTERNAL_INTERFACE": str(values.get("neutron_external_interface") or "eno2"),
+        "BKC_KOLLA_INTERNAL_VIP": str(values.get("kolla_internal_vip_address") or "10.20.0.30"),
+        "BKC_KOLLA_ENABLE_HAPROXY": "yes" if _pipeline_value_truthy(values, "enable_haproxy") else "no",
+        "BKC_KOLLA_ENABLE_CINDER": "yes" if _pipeline_value_truthy(values, "enable_cinder") else "no",
+        "BKC_KOLLA_ENABLE_PROVIDER_NETWORKS": "yes"
+        if _pipeline_value_truthy(values, "enable_neutron_provider_networks")
+        else "no",
+        "BKC_KEYSTONE_ADMIN_PASSWORD": admin_password,
+        "BKC_HORIZON_URL": str(values.get("horizon_url") or "http://192.168.1.242/horizon/"),
+        "BKC_KEYSTONE_URL": str(values.get("keystone_url") or "http://192.168.1.242:5000/v3"),
+    }
+    env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in environment.items())
+    results: dict[str, str] = {}
+    for host in _openstack_target_hosts(values):
+        remote_path = f"/tmp/bkc-kolla-single-node-{phase}.sh"
+        upload_remote_bytes(
+            host=host,
+            user=_openstack_ssh_user(values),
+            remote_path=remote_path,
+            content=script_path.read_bytes(),
+            mode=0o700,
+            timeout=60,
+        )
+        results[host] = _openstack_run_host_command(
+            values,
+            host,
+            f"set -e; {env_prefix} {remote_path}",
+            timeout=int(stage.get("timeout") or 1200),
+        )
+    _store_run_extra(run_id, {f"openstack_kolla_{phase}": results})
+    _set_stage(run_id, stage_name, "complete", str(stage.get("complete") or f"Kolla phase {phase} completed."))
+    append_event(run_id, "info", stage_name, json.dumps(results, sort_keys=True)[-6000:])
+
+
+def _video_context(pipeline_id: str, run_id: str) -> tuple[dict, dict]:
+    pipeline, _, values = _folder_pipeline_context(pipeline_id, _run_request_inputs(run_id))
+    return pipeline, values
+
+
+def _require_video_gates(run_id: str, *names: str) -> dict:
+    inputs = _run_request_inputs(run_id)
+    missing = [name for name in names if not _truthy(inputs.get(name))]
+    if missing:
+        raise PipelineExecutionError("Real filming workflow requires enabled gate(s): " + ", ".join(missing))
+    return inputs
+
+
+def _upload_and_run_pipeline_script(pipeline: dict, values: dict, script_name: str, *, host: str, env: dict | None = None, timeout: int = 600) -> str:
+    script = _repo_pipeline_folder(pipeline) / "scripts" / script_name
+    if not script.is_file():
+        raise PipelineExecutionError(f"Pipeline script is missing: {script}")
+    content = script.read_bytes()
+    readiness = script.parent / "00-bkc-readiness.sh"
+    if readiness.is_file() and script.name != readiness.name:
+        content = readiness.read_bytes() + b"\n" + content
+    remote = f"/tmp/bkc-{re.sub(r'[^A-Za-z0-9_.-]', '-', script_name)}"
+    upload_remote_bytes(host=host, user="root", remote_path=remote, content=content, mode=0o700, timeout=90)
+    exports = " ".join(f"{key}={shlex.quote(str(value))}" for key, value in (env or {}).items())
+    return run_remote_command(host=host, user="root", command=f"set -e; {exports} {shlex.quote(remote)}", timeout=timeout)
+
+
+def _video_bmc_pxe_reset(values: dict) -> str:
+    hosts = values.get("physical_hosts") if isinstance(values.get("physical_hosts"), list) else []
+    if not hosts:
+        raise PipelineExecutionError("Physical host/BMC definition is missing.")
+    host = hosts[0]
+    address = str(host.get("bmc_observed_address") or "").strip()
+    username, password = _resolve_bmc_credentials(str(host.get("bmc_credential_ref") or ""))
+    _, body = _redfish_request_via_ns1(values, address, "/redfish/v1/Systems", username, password)
+    members = json.loads(body or "{}").get("Members", [])
+    if not members:
+        raise PipelineExecutionError(f"No Redfish system found on {address}.")
+    system_path = str(members[0].get("@odata.id") or "")
+    _, body = _redfish_request_via_ns1(values, address, system_path, username, password)
+    system = json.loads(body or "{}")
+    _redfish_request_via_ns1(values, address, system_path, username, password, method="PATCH", payload={"Boot": {"BootSourceOverrideEnabled": "Once", "BootSourceOverrideTarget": "Pxe"}})
+    reset = system.get("Actions", {}).get("#ComputerSystem.Reset", {}).get("target") or f"{system_path}/Actions/ComputerSystem.Reset"
+    def reset_and_verify(reset_type: str, expected_state: str) -> None:
+        try:
+            _redfish_request_via_ns1(
+                values,
+                address,
+                reset,
+                username,
+                password,
+                method="POST",
+                payload={"ResetType": reset_type},
+            )
+        except PipelineExecutionError as exc:
+            # iDRAC8 may close the HTTP connection while applying a reset. The
+            # state transition below is the authoritative acknowledgement.
+            if "returned no HTTP status" not in str(exc):
+                raise
+        deadline = time.time() + 120
+        last_state = ""
+        while time.time() < deadline:
+            try:
+                _, state_body = _redfish_request_via_ns1(
+                    values, address, system_path, username, password, timeout=15
+                )
+                last_state = str(json.loads(state_body or "{}").get("PowerState") or "")
+                if last_state.lower() == expected_state.lower():
+                    return
+            except PipelineExecutionError:
+                pass
+            time.sleep(5)
+        raise PipelineExecutionError(
+            f"iDRAC reset {reset_type} did not reach PowerState={expected_state}; last state was {last_state or 'unavailable'}."
+        )
+
+    # iDRAC 8 can acknowledge ForceRestart without actually leaving the running
+    # OS. A positive off/on transition is slower but gives the PXE-once override
+    # a deterministic cold-boot boundary for filming and unattended installs.
+    if str(system.get("PowerState") or "").lower() == "on":
+        reset_and_verify("ForceOff", "Off")
+    reset_and_verify("On", "On")
+    return address
+
+
+def _video_bmc_ipmi_pxe_reset_via_ns1(values: dict, address: str, username: str, password: str) -> str:
+    """Fallback for older iDRACs whose Redfish HTTPS stack is not responding."""
+    quoted = {
+        "address": shlex.quote(address),
+        "username": shlex.quote(username),
+        "password": shlex.quote(password),
+    }
+    command = (
+        "set -e; "
+        "command -v ipmitool >/dev/null; "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis bootdev pxe options=efiboot; "
+        f"state=$(ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power status || true); "
+        "case \"$state\" in *on*) "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power cycle; "
+        ";; *) "
+        f"ipmitool -I lanplus -H {quoted['address']} -U {quoted['username']} -P {quoted['password']} chassis power on; "
+        ";; esac; "
+        "printf 'ipmi_pxe_reset=%s\\n' \"$state\""
+    )
+    return _run_ns1_command(values, command, timeout=60)
+
+
+def _video_openstack_pxe(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_destructive_install")
+    _run_openstack_base_boot_render(run_id, stage_name)
+    _run_openstack_base_boot_validate(run_id, stage_name)
+    _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    broad = str(values.get("dhcp_broad_fragment_path") or "/etc/dhcp/dhcpd.d/bkc-provisioning.conf")
+    output = _run_ns1_command(
+        values,
+        f"test -f {shlex.quote(broad)}; ! grep -Eq '^[[:space:]]*(filename|next-server|option[[:space:]]+bootfile-name)[[:space:]]' {shlex.quote(broad)}; "
+        f"! grep -Eq '^[[:space:]]*(filename|next-server|option[[:space:]]+bootfile-name)[[:space:]]' {shlex.quote(str(values['dhcp_fragment_path']))}; "
+        f"dhcpd -t -cf {shlex.quote(str(values['dhcp_main_path']))}; echo broad-pxe-default=disarmed",
+        timeout=60,
+    )
+    append_event(run_id, "info", stage_name, output[-800:])
+
+
+def _video_openstack_boot(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_destructive_install")
+    _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    bmc_definition = values["physical_hosts"][0]
+    bmc_address = str(bmc_definition["bmc_observed_address"])
+    bmc_user, bmc_password = _resolve_bmc_credentials(str(bmc_definition["bmc_credential_ref"]))
+    try:
+        _, bios_body = _redfish_request_via_ns1(
+            values,
+            bmc_address,
+            "/redfish/v1/Systems/System.Embedded.1/Bios",
+            bmc_user,
+            bmc_password,
+        )
+        bios = json.loads(bios_body or "{}")
+        actual_boot_mode = str((bios.get("Attributes") or {}).get("BootMode") or "").strip()
+        required_boot_mode = str(values.get("required_boot_mode") or "Uefi").strip()
+        if actual_boot_mode.lower() != required_boot_mode.lower():
+            raise PipelineExecutionError(
+                f"Server1 firmware drift: BootMode is {actual_boot_mode or 'unknown'}, "
+                f"but pipeline 10 requires {required_boot_mode}. Correct iDRAC BIOS settings before arming PXE."
+            )
+        append_event(run_id, "info", stage_name, f"server1_firmware_boot_mode={actual_boot_mode}")
+    except PipelineExecutionError as exc:
+        append_event(
+            run_id,
+            "warning",
+            stage_name,
+            f"Server1 Redfish BIOS guard unavailable; continuing with IPMI PXE fallback after DHCP validation: {exc}",
+        )
+    mac = str(values["physical_hosts"][0]["provisioning_mac"])
+    lease, http_host = str(values["installer_lease_address"]), str(values["physical_pxe_http_host"])
+    fragment, main = str(values["dhcp_fragment_path"]), str(values["dhcp_main_path"])
+    content = f'''# BKC Server1 one-shot Debian lane. Exact LOM only.
+option architecture-type code 93 = unsigned integer 16;
+host r630-openstack-01-pxe {{
+  hardware ethernet {mac};
+  fixed-address {lease};
+  next-server {http_host};
+  if exists user-class and option user-class = "iPXE" {{
+    filename "http://{http_host}/pxe/debian-trixie.ipxe";
+  }} elsif option architecture-type = 00:07 {{
+    filename "ipxe-snponly-x86_64.efi";
+    option bootfile-name "ipxe-snponly-x86_64.efi";
+  }} elsif option architecture-type = 00:09 {{
+    filename "ipxe-snponly-x86_64.efi";
+    option bootfile-name "ipxe-snponly-x86_64.efi";
+  }} else {{
+    filename "undionly.kpxe";
+    option bootfile-name "undionly.kpxe";
+  }}
+}}
+'''
+    upload_remote_bytes(host=str(values["target_host"]), user="root", remote_path=fragment, content=content.encode(), mode=0o644, timeout=60)
+    include_line = f'include "{fragment}";'
+    command = f"set -e; grep -Fqx {shlex.quote(include_line)} {shlex.quote(main)} || printf '%s\\n' {shlex.quote(include_line)} >> {shlex.quote(main)}; dhcpd -t -cf {shlex.quote(main)}; systemctl restart dhcpd"
+    _run_ns1_command(values, command, timeout=60)
+    baseline_text = _run_ns1_command(values, "wc -l </var/log/nginx/access.log", timeout=20)
+    try:
+        baseline = int(baseline_text.strip())
+    except ValueError as exc:
+        raise PipelineExecutionError(f"Could not record Server1 Nginx log baseline: {baseline_text}") from exc
+    _store_run_extra(run_id, {"openstack_nginx_log_baseline": baseline})
+
+    try:
+        try:
+            bmc = _video_bmc_pxe_reset(values)
+        except PipelineExecutionError as exc:
+            append_event(run_id, "warning", stage_name, f"Server1 Redfish PXE reset unavailable; using IPMI fallback: {exc}")
+            bmc = _video_bmc_ipmi_pxe_reset_via_ns1(values, bmc_address, bmc_user, bmc_password)
+    except Exception:
+        # Arming DHCP precedes the Redfish reset.  If iDRAC is unavailable,
+        # restore the exact-MAC fragment to lease-only so a later manual boot
+        # cannot accidentally enter an unobserved destructive install.
+        lease_only = (
+            "# BKC Server1 persistent lease-only identity. No PXE boot options.\n"
+            "host r630-openstack-01-lease {\n"
+            f"  hardware ethernet {mac};\n"
+            f"  fixed-address {lease};\n"
+            "}\n"
+        )
+        upload_remote_bytes(
+            host=str(values["target_host"]),
+            user="root",
+            remote_path=fragment,
+            content=lease_only.encode(),
+            mode=0o644,
+            timeout=60,
+        )
+        _run_ns1_command(
+            values,
+            f"dhcpd -t -cf {shlex.quote(main)}; systemctl restart dhcpd",
+            timeout=60,
+        )
+        raise
+    append_event(run_id, "warning", stage_name, f"Server1 one-shot PXE cold boot requested through iDRAC {bmc}; MAC {mac}.")
+    _set_stage(run_id, stage_name, "complete", "Server1 booted directly into unattended Debian Installer; Partman owns the declared disk replacement.")
+
+
+def _wait_ssh(host: str, *, timeout: int, command: str = "true") -> str:
+    deadline, last = time.time() + timeout, ""
+    while time.time() < deadline:
+        try:
+            return run_remote_command(host=host, user="root", command=command, timeout=20)
+        except Exception as exc:  # noqa: BLE001
+            last = str(exc)
+            time.sleep(15)
+    raise PipelineExecutionError(f"Timed out waiting for root SSH on {host}: {last}")
+
+
+def _video_openstack_firstboot(run_id: str, stage_name: str) -> None:
+    _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    host = str(values["installer_lease_address"])
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    baseline = int(extra.get("openstack_nginx_log_baseline") or 0)
+    if baseline < 1:
+        raise PipelineExecutionError("Server1 Nginx log baseline is missing; refusing stale installer evidence.")
+    preseed_path = urllib.parse.urlparse(str(values["physical_preseed_url"])).path
+    deadline, evidence = time.time() + 720, ""
+    while time.time() < deadline:
+        evidence = _run_ns1_command(
+            values,
+            f"tail -n +{baseline + 1} /var/log/nginx/access.log | "
+            f"grep -F {shlex.quote(host)} | grep -F {shlex.quote(preseed_path)} | tail -1 || true",
+            timeout=20,
+        )
+        if evidence and (" 200 " in evidence or '\" 200 ' in evidence):
+            break
+        time.sleep(10)
+    if not evidence:
+        raise PipelineExecutionError("Fresh Server1 Debian preseed handoff was not observed in the NS1 HTTP log.")
+    fragment = str(values["dhcp_fragment_path"])
+    mac = str(values["physical_hosts"][0]["provisioning_mac"])
+    lease = str(values["installer_lease_address"])
+    lease_only = (
+        "# BKC Server1 persistent lease-only identity. No PXE boot options.\n"
+        "host r630-openstack-01-lease {\n"
+        f"  hardware ethernet {mac};\n"
+        f"  fixed-address {lease};\n"
+        "}\n"
+    )
+    upload_remote_bytes(
+        host=str(values["target_host"]),
+        user="root",
+        remote_path=fragment,
+        content=lease_only.encode(),
+        mode=0o644,
+        timeout=60,
+    )
+    _run_ns1_command(
+        values,
+        f"! grep -Eq '^[[:space:]]*(filename|next-server|option[[:space:]]+bootfile-name)[[:space:]]' {shlex.quote(fragment)}; "
+        f"dhcpd -t -cf {shlex.quote(str(values['dhcp_main_path']))}; systemctl restart dhcpd",
+        timeout=60,
+    )
+    # The R630 keeps its legacy NIC ahead of "Hard drive C:" in the permanent
+    # boot list.  A consumed one-shot PXE override therefore is not enough:
+    # explicitly hand the installer's reboot to disk after removing PXE from
+    # DHCP.  Future provisioning runs still work because _video_bmc_pxe_reset
+    # applies a fresh one-shot PXE override.
+    bmc = values["physical_hosts"][0]
+    address = str(bmc.get("bmc_observed_address") or "").strip()
+    username, password = _resolve_bmc_credentials(str(bmc.get("bmc_credential_ref") or ""))
+    disk_handoff = "next boot pinned to Hdd"
+    try:
+        _, systems_body = _redfish_request_via_ns1(values, address, "/redfish/v1/Systems", username, password)
+        members = json.loads(systems_body or "{}").get("Members", [])
+        if not members:
+            raise PipelineExecutionError(f"No Redfish system found while setting Server1 disk boot at {address}.")
+        system_path = str(members[0].get("@odata.id") or "")
+        _redfish_request_via_ns1(
+            values,
+            address,
+            system_path,
+            username,
+            password,
+            method="PATCH",
+            payload={"Boot": {"BootSourceOverrideEnabled": "Once", "BootSourceOverrideTarget": "Hdd"}},
+        )
+    except Exception as exc:  # DHCP is already safe; disk fallback can proceed without iDRAC.
+        disk_handoff = f"iDRAC disk override unavailable ({exc}); lease-only DHCP permits firmware disk fallback"
+        append_event(run_id, "warning", stage_name, disk_handoff)
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        f"Fresh preseed handoff observed; Server1 PXE disarmed, lease-only {lease} retained, and {disk_handoff}: {evidence[-1000:]}",
+    )
+    output = _wait_ssh(host, timeout=3300, command="hostname; test -s /var/lib/bkc/base-provisioning.json; cat /var/lib/bkc/base-provisioning.json")
+    append_event(run_id, "info", stage_name, output[-1800:])
+    _set_stage(run_id, stage_name, "complete", f"Trixie first boot enrolled over BKC SSH at {host}; Server1 PXE disarmed.")
+
+
+def _video_openstack_one_shot(run_id: str, stage_name: str) -> None:
+    """Own the complete destructive Server1 base-OS transaction as one stage."""
+    _require_video_gates(run_id, "enable_destructive_install")
+    _video_openstack_pxe(run_id, stage_name)
+    _set_stage(run_id, stage_name, "active", "PXE assets validated; cold-booting Server1 into the unattended installer.")
+    _video_openstack_boot(run_id, stage_name)
+    _set_stage(run_id, stage_name, "active", "Server1 entered one-shot PXE; waiting for destructive Trixie install and SSH first boot.")
+    _video_openstack_firstboot(run_id, stage_name)
+
+
+def _video_openstack_install(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_openstack_install")
+    _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    host = str(values["installer_lease_address"])
+    public_address = str(values.get("openstack_public_address") or host)
+    management_address = str(values.get("openstack_management_address") or host)
+    management_cidr = str(values.get("openstack_management_cidr") or f"{management_address}/24")
+    internal_vip = str(values.get("openstack_internal_vip") or management_address)
+    management_gateway = str(values.get("openstack_management_gateway") or values.get("proxmox_gateway") or "10.20.0.9")
+    native = pipeline_by_id("native-openstack-all-in-one")
+    if not native:
+        raise PipelineExecutionError("Native OpenStack pipeline is missing.")
+    env = {
+        "BKC_OPENSTACK_PUBLIC_ADDRESS": public_address,
+        "BKC_OPENSTACK_MANAGEMENT_ADDRESS": management_address,
+        "BKC_OPENSTACK_MANAGEMENT_CIDR": management_cidr,
+        "BKC_OPENSTACK_INTERNAL_VIP": internal_vip,
+        "BKC_OPENSTACK_MANAGEMENT_GATEWAY": management_gateway,
+        "BKC_OPENSTACK_NOVNC_BASE_URL": str(values.get("openstack_novnc_base_url") or "http://swarm1.lab.auzietek.com:8089/vnc_auto.html"),
+        "BKC_OPENSTACK_LAB_PASSWORD": str(values.get("target_install_password") or "changeme123"),
+    }
+    for name in ("01-foundation-keystone-horizon.sh", "02-glance-placement.sh", "03-nova.sh", "04-neutron-ovs.sh"):
+        output = _upload_and_run_pipeline_script(native, {}, name, host=host, env=env, timeout=2400)
+        append_event(run_id, "info", stage_name, f"{name}: {output[-1600:]}")
+    _set_stage(run_id, stage_name, "complete", "All four native OpenStack service phases completed.")
+
+
+def _video_openstack_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_context("baremetal-openstack-lab-prepare", run_id)
+    host = str(values["installer_lease_address"])
+    public_address = str(values.get("openstack_public_address") or host)
+    management_address = str(values.get("openstack_management_address") or host)
+    command = (
+        ". /root/admin-openrc; "
+        "openstack token issue -f value -c id; "
+        "openstack compute service list; "
+        "openstack network agent list; "
+        f"curl -fsS -o /dev/null {shlex.quote(f'http://{public_address}/horizon/')}; "
+        f"curl -fsS -o /dev/null {shlex.quote(f'http://{management_address}:5000/v3')}"
+    )
+    output = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, output[-3000:])
+    _set_stage(run_id, stage_name, "complete", "Keystone, Horizon, Nova, Glance, and Neutron responded successfully.")
+
+
+def _proxmox_env(values: dict) -> dict:
+    return {"BKC_PROXMOX_MAC": values["provisioning_mac"], "BKC_PROXMOX_LEASE": values["installer_lease_address"], "BKC_PROXMOX_HTTP_HOST": values["provisioning_host"], "BKC_PROXMOX_ISO_PATH": values["installer_iso_path"], "BKC_PROXMOX_ISO_URL": values["installer_iso_url"], "BKC_PROXMOX_ISO_SHA256": values["installer_iso_sha256"], "BKC_PROXMOX_IPXE_PATH": values["ipxe_script_path"], "BKC_PROXMOX_DHCP_FRAGMENT": values["dhcp_fragment_path"], "BKC_PROXMOX_DHCP_MAIN": values["dhcp_main_path"]}
+
+
+def _video_proxmox_media(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_pxe_arm", "enable_destructive_install")
+    _, values = _video_context("baremetal-proxmox-trial-prepare", run_id)
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is missing; refusing a Proxmox install that cannot be validated.")
+    iso = str(values["installer_iso_path"])
+    iso_url = str(values["installer_iso_url"])
+    pxe_dir = str(Path(iso).parent / "pxeboot")
+    fragment = str(values["dhcp_fragment_path"])
+    broad = str(
+        values.get("dhcp_broad_fragment_path")
+        or "/etc/dhcp/dhcpd.d/bkc-provisioning.conf"
+    )
+    main = str(values["dhcp_main_path"])
+    answer_checks = {
+        f'fqdn = "{values["proxmox_hostname"]}"',
+        'root-password = "changem123"',
+        f'cidr = "{values["proxmox_management_address"]}/24"',
+        f'dns = "{values["proxmox_dns"]}"',
+        f'gateway = "{values["proxmox_gateway"]}"',
+        'disk-list = ["sda"]',
+        f'filter.ID_NET_NAME_MAC = "*{str(values["provisioning_mac"]).replace(":", "")}"',
+    }
+    grep_checks = " ".join(
+        f"grep -Fqx {shlex.quote(item)} \"$mnt/answer.toml\";" for item in sorted(answer_checks)
+    )
+    command = (
+        "set -e; "
+        f"printf '%s  %s\\n' {shlex.quote(str(values['installer_iso_sha256']))} {shlex.quote(iso)} | sha256sum -c -; "
+        f"test -s {shlex.quote(pxe_dir + '/linux26')}; test -s {shlex.quote(pxe_dir + '/initrd')}; "
+        f"test ! -s {shlex.quote(fragment)}; "
+        f"! grep -Eq '^[[:space:]]*(filename|next-server|option[[:space:]]+bootfile-name)[[:space:]]' {shlex.quote(broad)}; "
+        f"dhcpd -t -cf {shlex.quote(main)}; "
+        "mnt=$(mktemp -d); cleanup() { mountpoint -q \"$mnt\" && umount \"$mnt\" || true; rmdir \"$mnt\" 2>/dev/null || true; }; trap cleanup EXIT; "
+        f"mount -o loop,ro {shlex.quote(iso)} \"$mnt\"; test -e \"$mnt/auto-installer-capable\"; test -s \"$mnt/answer.toml\"; "
+        f"{grep_checks} grep -Fq {shlex.quote(public_key)} \"$mnt/answer.toml\"; "
+        f"curl -fsSI {shlex.quote(iso_url)}; "
+        f"for asset in linux26 initrd; do expected=$(stat -c %s {shlex.quote(pxe_dir)}/$asset); "
+        f"actual=$(curl -fsSI {shlex.quote('http://' + str(values['provisioning_host']) + '/pxe/proxmox/9.2-1/pxeboot')}/$asset | "
+        "awk 'BEGIN { IGNORECASE=1 } /^Content-Length:/ { gsub(\"\\r\", \"\", $2); print $2 }' | tail -1); "
+        "test \"$actual\" = \"$expected\"; done; "
+        "echo bkc-proxmox-preflight=ready"
+    )
+    out = run_remote_command(host=str(values["provisioning_ssh_host"]), user="root", command=command, timeout=300)
+    hosts = values.get("physical_hosts") if isinstance(values.get("physical_hosts"), list) else []
+    if not hosts:
+        raise PipelineExecutionError("Server2 BMC definition is missing.")
+    bmc = hosts[0]
+    address = str(bmc.get("bmc_observed_address") or "").strip()
+    username, password = _resolve_bmc_credentials(str(bmc.get("bmc_credential_ref") or ""))
+    status, body = _redfish_request_via_ns1(values, address, "/redfish/v1/Systems", username, password)
+    if status < 200 or status >= 300 or not json.loads(body or "{}").get("Members"):
+        raise PipelineExecutionError(f"Server2 iDRAC Redfish preflight failed at {address}.")
+    append_event(run_id, "info", stage_name, out[-2000:])
+    _set_stage(run_id, stage_name, "complete", "Proxmox ISO/answer intent, current BKC SSH key, PXE payloads, disarmed DHCP, and Server2 iDRAC validated.")
+
+
+def _video_proxmox_boot(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_pxe_arm", "enable_destructive_install")
+    pipeline, values = _video_context("baremetal-proxmox-trial-prepare", run_id)
+    ns1 = str(values["provisioning_ssh_host"])
+    baseline_text = run_remote_command(
+        host=ns1,
+        user="root",
+        command="wc -l </var/log/nginx/access.log",
+        timeout=20,
+    )
+    try:
+        baseline = int(baseline_text.strip())
+    except ValueError as exc:
+        raise PipelineExecutionError(f"Could not record NS1 Nginx log baseline: {baseline_text}") from exc
+    _store_run_extra(run_id, {"proxmox_nginx_log_baseline": baseline})
+    out = _upload_and_run_pipeline_script(pipeline, values, "arm-proxmox-one-shot-pxe.sh", host=str(values["provisioning_ssh_host"]), env=_proxmox_env(values), timeout=300)
+    bmc = _video_bmc_pxe_reset(values)
+    append_event(run_id, "warning", stage_name, out[-1600:] + f"\niDRAC={bmc}")
+    _set_stage(run_id, stage_name, "complete", "Server2 PXE armed and one-time PXE reboot requested.")
+
+
+def _video_proxmox_handoff(run_id: str, stage_name: str) -> None:
+    pipeline, values = _video_context("baremetal-proxmox-trial-prepare", run_id)
+    ns1 = str(values["provisioning_ssh_host"])
+    initrd = "/pxe/proxmox/9.2-1/pxeboot/initrd"
+    installer_lease = str(values["installer_lease_address"])
+    run = get_run(run_id) or {}
+    extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
+    baseline = int(extra.get("proxmox_nginx_log_baseline") or 0)
+    if baseline < 1:
+        raise PipelineExecutionError("Proxmox Nginx log baseline is missing; refusing to use stale PXE evidence.")
+    deadline, evidence = time.time() + 1500, ""
+    while time.time() < deadline:
+        evidence = run_remote_command(
+            host=ns1,
+            user="root",
+            command=(
+                f"tail -n +{baseline + 1} /var/log/nginx/access.log | "
+                f"grep -F {shlex.quote(installer_lease)} | "
+                f"grep -F {shlex.quote(initrd)} | tail -1 || true"
+            ),
+            timeout=20,
+        )
+        if evidence and (" 200 " in evidence or '" 200 ' in evidence):
+            break
+        time.sleep(10)
+    if not evidence:
+        raise PipelineExecutionError("Proxmox installer initrd handoff was not observed in the HTTP access log.")
+    out = _upload_and_run_pipeline_script(pipeline, values, "disarm-proxmox-one-shot-pxe.sh", host=ns1, env=_proxmox_env(values), timeout=90)
+    hosts = values.get("physical_hosts") if isinstance(values.get("physical_hosts"), list) else []
+    if not hosts:
+        raise PipelineExecutionError("Server2 BMC definition is missing during PXE handoff.")
+    bmc = hosts[0]
+    address = str(bmc.get("bmc_observed_address") or "").strip()
+    username, password = _resolve_bmc_credentials(str(bmc.get("bmc_credential_ref") or ""))
+    _, body = _redfish_request_via_ns1(values, address, "/redfish/v1/Systems", username, password)
+    members = json.loads(body or "{}").get("Members", [])
+    if not members:
+        raise PipelineExecutionError(f"No Redfish system found while setting Server2 disk boot at {address}.")
+    system_path = str(members[0].get("@odata.id") or "")
+    _redfish_request_via_ns1(
+        values,
+        address,
+        system_path,
+        username,
+        password,
+        method="PATCH",
+        payload={"Boot": {"BootSourceOverrideEnabled": "Once", "BootSourceOverrideTarget": "Hdd"}},
+    )
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        evidence[-1200:] + "\n" + out[-800:] + "\nserver2_next_boot=Hdd",
+    )
+    _set_stage(
+        run_id,
+        stage_name,
+        "complete",
+        "Installer payload was delivered, DHCP PXE was disarmed, and Server2 next boot was pinned to disk.",
+    )
+
+
+def _video_proxmox_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_context("baremetal-proxmox-trial-prepare", run_id)
+    host = str(values["proxmox_management_address"])
+    root_user = str(values.get("proxmox_root_user") or "root@pam")
+    root_password = str(values.get("proxmox_root_password") or "changeme123")
+    command = (
+        "set -e; "
+        f"printf '%s\\n' {shlex.quote('root:' + root_password)} | chpasswd; "
+        "hostname; pveversion; test -c /dev/kvm; pvesm status; "
+        "curl -kfsS -o /dev/null https://127.0.0.1:8006/; "
+        "response=$(curl -kfsS --data-urlencode "
+        f"username={shlex.quote(root_user)} --data-urlencode password={shlex.quote(root_password)} "
+        "https://127.0.0.1:8006/api2/json/access/ticket); "
+        "printf '%s' \"$response\" | grep -q ticket; echo proxmox_root_pam_login=valid"
+    )
+    out = _wait_ssh(host, timeout=3300, command=command)
+    append_event(run_id, "info", stage_name, out[-2500:])
+    _set_stage(run_id, stage_name, "complete", f"Proxmox disk boot, SSH, root@pam login, API, storage, and KVM validated at {host}.")
+
+
+def _video_local_ai_context(run_id: str) -> tuple[dict, dict]:
+    return _video_context("openstack-local-ai-openwebui-preflight", run_id)
+
+
+def _video_local_ai_capacity(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    command = f'''
+set -euo pipefail
+printf 'host='; hostname -f || hostname
+printf 'kernel='; uname -r
+printf 'uptime='; uptime -p
+printf 'disk_root='; df -h / | tail -1
+printf 'mem='; free -h | awk '/Mem:/ {{print $2" total "$7" available"}}'
+printf 'cpu_count='; nproc
+printf 'virt_flags='; (grep -m1 -oE 'vmx|svm' /proc/cpuinfo || true) | head -1
+printf 'docker='; command -v docker || true
+printf 'podman='; command -v podman || true
+printf 'ollama='; command -v ollama || true
+printf 'egress_debian='; curl -fsSI --max-time 8 https://deb.debian.org/debian/ >/dev/null && echo ok || echo fail
+printf 'egress_ollama='; curl -fsSI --max-time 8 https://ollama.com/ >/dev/null && echo ok || echo fail
+. {openrc}
+printf 'openstack_token_bytes='; openstack token issue -f value -c id >/tmp/bkc-local-ai-token && wc -c </tmp/bkc-local-ai-token
+printf 'hypervisors\\n'; openstack hypervisor list -f value || true
+printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
+printf 'flavors\\n'; openstack flavor list -f value -c Name -c RAM -c VCPUs -c Disk || true
+printf 'images\\n'; openstack image list -f value -c Name -c Status || true
+printf 'networks\\n'; openstack network list -f value -c Name -c Subnets || true
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    if "egress_debian=ok" not in out or "egress_ollama=ok" not in out:
+        raise PipelineExecutionError("Server1 local-AI preflight needs Debian and Ollama egress before install stages are enabled.")
+    if "debian-13-genericcloud active" not in out:
+        raise PipelineExecutionError("OpenStack Debian 13 generic cloud image is missing or inactive.")
+    if "lab-internal" not in out:
+        raise PipelineExecutionError("OpenStack lab-internal network is missing.")
+    _store_run_extra(run_id, {"local_ai_capacity": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "Server1/OpenStack capacity, egress, Debian image, and lab-internal network are ready for local-AI preflight.")
+
+
+def _video_local_ai_vm(run_id: str, stage_name: str) -> None:
+    inputs = _require_video_gates(run_id, "enable_openstack_ai_vm")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    flavor = values.get("ai_flavor") if isinstance(values.get("ai_flavor"), dict) else {}
+    secgroup = values.get("ai_security_group") if isinstance(values.get("ai_security_group"), dict) else {}
+    server = values.get("ai_server") if isinstance(values.get("ai_server"), dict) else {}
+    flavor_name = str(flavor.get("name") or "bkc.ai.small")
+    image_name = str(values.get("ai_image") or "debian-13-genericcloud")
+    network_name = str(values.get("ai_network") or "lab-internal")
+    key_name = str(values.get("ai_keypair") or "bkc-demo-key")
+    server_name = str(server.get("name") or "bkc-local-ai-01")
+    admin_user = str(server.get("user") or "admin-deploy")
+    console_password = str(server.get("console_password") or "changeme123")
+    ssh_password_auth = _truthy(server.get("ssh_password_auth", True))
+    replace_server = _truthy(inputs.get("enable_replace_ai_vm"))
+    secgroup_name = str(secgroup.get("name") or "bkc-local-ai-allow")
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack cloud-init/keypair injection.")
+
+    secgroup_commands = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "10.20.0.0/24").strip()
+        if proto == "icmp":
+            secgroup_commands.append(f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+        elif proto == "tcp":
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(f"openstack security group rule create --proto tcp --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+
+    cloud_init = f"""#cloud-config
+users:
+  - name: {admin_user}
+    groups: sudo
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: {console_password}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {public_key}
+chpasswd:
+  expire: false
+ssh_pwauth: {str(ssh_password_auth).lower()}
+disable_root: true
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent || true
+  - mkdir -p /var/lib/bkc
+  - echo local-ai-firstboot > /var/lib/bkc/local-ai-firstboot.txt
+"""
+    encoded = b64encode(cloud_init.encode()).decode()
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack image show {shlex.quote(image_name)} >/dev/null
+openstack network show {shlex.quote(network_name)} >/dev/null
+openstack flavor show {shlex.quote(flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 8192)} --disk {int(flavor.get("disk_gb") or 40)} --vcpus {int(flavor.get("vcpus") or 4)} {shlex.quote(flavor_name)}
+key_tmp=$(mktemp)
+printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
+openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
+rm -f "$key_tmp"
+{chr(10).join(secgroup_commands)}
+user_data=$(mktemp)
+printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
+if [ {shlex.quote("1" if replace_server else "0")} = "1" ] && openstack server show {shlex.quote(server_name)} >/dev/null 2>&1; then
+  openstack server delete {shlex.quote(server_name)}
+  deadline=$((SECONDS+300))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    openstack server show {shlex.quote(server_name)} >/dev/null 2>&1 || break
+    sleep 5
+  done
+fi
+if ! openstack server show {shlex.quote(server_name)} >/dev/null 2>&1; then
+  openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(flavor_name)} --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" {shlex.quote(server_name)} >/dev/null
+fi
+rm -f "$user_data"
+deadline=$((SECONDS+900))
+status=""
+while [ "$SECONDS" -lt "$deadline" ]; do
+  status=$(openstack server show {shlex.quote(server_name)} -f value -c status 2>/dev/null || true)
+  [ "$status" = "ACTIVE" ] && break
+  sleep 10
+done
+[ "$status" = "ACTIVE" ]
+openstack server show {shlex.quote(server_name)} -f json
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1200)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    _store_run_extra(run_id, {"local_ai_vm": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenStack AI VM {server_name} is ACTIVE with flavor {flavor_name} on {network_name}.")
+
+
+def _video_local_ai_ollama(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_baremetal_ollama")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ollama = values.get("ollama") if isinstance(values.get("ollama"), dict) else {}
+    bind = str(ollama.get("bind") or "127.0.0.1:11434")
+    model_values = ollama.get("models") if isinstance(ollama.get("models"), list) else []
+    models = [str(item).strip() for item in model_values if str(item).strip()]
+    legacy_model = str(ollama.get("model") or "").strip()
+    if legacy_model and legacy_model not in models:
+        models.insert(0, legacy_model)
+    model_storage = str(ollama.get("model_storage") or "/var/lib/ollama")
+    model_pull = ""
+    if models:
+        model_pull = "\n".join(
+            f"ollama list | awk '{{print $1}}' | grep -Fx {shlex.quote(model)} >/dev/null || ollama pull {shlex.quote(model)}"
+            for model in models
+        )
+    command = f'''
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl
+if ! command -v ollama >/dev/null 2>&1; then
+  curl -fsSL https://ollama.com/install.sh | sh
+fi
+install -d -o ollama -g ollama -m 0755 {shlex.quote(model_storage)}
+install -d -m 0755 /etc/systemd/system/ollama.service.d
+cat >/etc/systemd/system/ollama.service.d/bkc.conf <<'EOF'
+[Service]
+Environment="OLLAMA_HOST={bind}"
+Environment="OLLAMA_MODELS={model_storage}"
+EOF
+systemctl daemon-reload
+systemctl reset-failed ollama >/dev/null 2>&1 || true
+systemctl enable --now ollama
+systemctl restart ollama
+deadline=$((SECONDS+180))
+until curl -fsS http://{bind}/api/tags >/dev/null; do
+  [ "$SECONDS" -lt "$deadline" ] || exit 1
+  sleep 3
+done
+{model_pull}
+ollama --version
+curl -fsS http://{bind}/api/tags
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1800)
+    append_event(run_id, "info", stage_name, out[-5000:])
+    _store_run_extra(run_id, {"local_ai_ollama": out[-5000:]})
+    model_detail = f" with models {', '.join(models)}" if models else ""
+    _set_stage(run_id, stage_name, "complete", f"Ollama is running on Server1 at {bind}{model_detail}.")
+
+
+def _video_local_ai_openwebui(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_openwebui_container")
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openwebui = values.get("openwebui") if isinstance(values.get("openwebui"), dict) else {}
+    image = str(openwebui.get("image") or "ghcr.io/open-webui/open-webui:main")
+    listen = str(openwebui.get("listen") or "0.0.0.0:8080")
+    public_url = str(openwebui.get("public_url") or "http://swarm1.lab.auzietek.com:8088").rstrip("/")
+    ollama_base_url = str(openwebui.get("ollama_base_url") or "http://127.0.0.1:11434")
+    listen_port = int(listen.rsplit(":", 1)[-1])
+    command = f'''
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y ca-certificates curl podman
+install -d -m 0755 /var/lib/open-webui
+podman rm -f bkc-openwebui >/dev/null 2>&1 || true
+podman pull {shlex.quote(image)}
+podman run -d --name bkc-openwebui --replace --restart=always \\
+  --network host \\
+  -e PORT={listen_port} \\
+  -e WEBUI_URL={shlex.quote(public_url)} \\
+  -e CORS_ALLOW_ORIGIN={shlex.quote(public_url)} \\
+  -e FORWARDED_ALLOW_IPS='*' \\
+  -e OLLAMA_BASE_URL={shlex.quote(ollama_base_url)} \\
+  -v /var/lib/open-webui:/app/backend/data:Z \\
+  {shlex.quote(image)}
+deadline=$((SECONDS+300))
+until curl -fsS http://127.0.0.1:{listen_port}/ >/dev/null; do
+  [ "$SECONDS" -lt "$deadline" ] || {{ podman logs --tail 80 bkc-openwebui || true; exit 1; }}
+  sleep 5
+done
+podman ps --filter name=bkc-openwebui --format '{{{{.Names}}}} {{{{.Status}}}} {{{{.Ports}}}}'
+curl -fsSI http://127.0.0.1:{listen_port}/ | sed -n '1,8p'
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1800)
+    append_event(run_id, "info", stage_name, out[-5000:])
+    _store_run_extra(run_id, {"local_ai_openwebui": out[-5000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenWebUI container is running on Server1 port {listen_port}.")
+
+
+def _video_local_ai_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ollama = values.get("ollama") if isinstance(values.get("ollama"), dict) else {}
+    openwebui = values.get("openwebui") if isinstance(values.get("openwebui"), dict) else {}
+    bind = str(ollama.get("bind") or "127.0.0.1:11434")
+    listen = str(openwebui.get("listen") or "0.0.0.0:8080")
+    listen_port = int(listen.rsplit(":", 1)[-1])
+    command = f'''
+set -euo pipefail
+systemctl is-active --quiet ollama
+curl -fsS http://{bind}/api/tags
+podman inspect bkc-openwebui --format '{{{{.State.Status}}}}'
+curl -fsSI http://127.0.0.1:{listen_port}/ | sed -n '1,8p'
+ss -ltnp | grep -E '(:11434|:{listen_port})'
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    _store_run_extra(run_id, {"local_ai_validate": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "Ollama API, OpenWebUI HTTP, container state, and listening sockets validated on Server1.")
+
+
+def _video_local_ai_fragments(run_id: str, stage_name: str) -> None:
+    _, values = _video_local_ai_context(run_id)
+    fragments = {
+        "ollama.native.ensure": {
+            "rating": "candidate",
+            "target": "server1 bare metal or bkc-local-ai-01 VM",
+            "guard": "requires explicit enable_baremetal_ollama or VM SSH validation",
+            "validation": "ollama --version; curl /api/tags; model digest recorded",
+        },
+        "openwebui.container.ensure": {
+            "rating": "candidate",
+            "image": (values.get("openwebui") or {}).get("image") if isinstance(values.get("openwebui"), dict) else "",
+            "guard": "container install disabled until Ollama health is proven",
+            "validation": "HTTP 200 on OpenWebUI and Ollama base URL configured",
+        },
+        "cytoscape.layout.request": {
+            "rating": "planned",
+            "guard": "model output is proposal-only; validator owns accepted graph positions",
+            "validation": "known IDs only, complete node coverage, finite bounded coordinates",
+        },
+    }
+    append_event(run_id, "info", stage_name, json.dumps(fragments, indent=2, sort_keys=True))
+    _store_run_extra(run_id, {"local_ai_fragments": fragments})
+    _set_stage(run_id, stage_name, "complete", "Local-AI and graph-layout candidate fragments recorded for 40 VIDEO promotion review.")
+
+
+def _video_openstack_swarm_context(run_id: str) -> tuple[dict, dict]:
+    return _video_context("openstack-docker-swarm-seed", run_id)
+
+
+def _video_openstack_swarm_preflight(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    image_name = shlex.quote(str(values.get("base_image") or "debian-13-genericcloud"))
+    network_name = shlex.quote(str(values.get("network") or "lab-internal"))
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack swarm cloud-init/keypair injection.")
+    fedora = values.get("fedora_image") if isinstance(values.get("fedora_image"), dict) else {}
+    fedora_note = "disabled"
+    if _truthy(values.get("enable_fedora_image_import", False)):
+        fedora_note = str(fedora.get("name") or "fedora-cloud-candidate")
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack token issue -f value -c id >/tmp/bkc-openstack-swarm-token
+printf 'token_bytes='; wc -c </tmp/bkc-openstack-swarm-token
+    openstack image show {image_name} -f value -c status
+    openstack network show {network_name} -f value -c name
+    openstack hypervisor list -f value || true
+    printf 'swarm_target=%s managers / %s workers\\n' \
+      {sum(1 for node in (values.get("nodes") if isinstance(values.get("nodes"), list) else []) if isinstance(node, dict) and str(node.get("role") or "").strip().lower() == "manager")} \
+      {sum(1 for node in (values.get("nodes") if isinstance(values.get("nodes"), list) else []) if isinstance(node, dict) and str(node.get("role") or "").strip().lower() != "manager")}
+    printf 'servers\\n'; openstack server list -f value -c Name -c Status -c Networks || true
+    printf 'fedora_import=%s\\n' {shlex.quote(fedora_note)}
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    if "active" not in out.lower():
+        raise PipelineExecutionError("OpenStack swarm preflight did not prove an active base image.")
+    _store_run_extra(run_id, {"openstack_swarm_preflight": out[-4000:]})
+    _set_stage(run_id, stage_name, "complete", "OpenStack API, Debian base image, lab network, and BKC SSH key are ready for the three-node swarm.")
+
+
+def _video_openstack_swarm_vms(run_id: str, stage_name: str) -> None:
+    inputs = _require_video_gates(run_id, "enable_openstack_swarm_vms")
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    flavor = values.get("flavor") if isinstance(values.get("flavor"), dict) else {}
+    manager_flavor = values.get("manager_flavor") if isinstance(values.get("manager_flavor"), dict) else {}
+    secgroup = values.get("security_group") if isinstance(values.get("security_group"), dict) else {}
+    nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
+    manager_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() == "manager")
+    worker_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() != "manager")
+    if manager_count < 1 or worker_count < 1:
+        raise PipelineExecutionError("OpenStack swarm seed requires at least one manager and one worker definition.")
+    flavor_name = str(flavor.get("name") or "bkc.swarm.small")
+    manager_flavor_name = str(manager_flavor.get("name") or flavor_name)
+    image_name = str(values.get("base_image") or "debian-13-genericcloud")
+    network_name = str(values.get("network") or "lab-internal")
+    key_name = str(values.get("keypair") or "bkc-demo-key")
+    admin_user = str(values.get("admin_user") or "admin-deploy")
+    console_password = str(values.get("console_password") or "changeme123")
+    secgroup_name = str(secgroup.get("name") or "bkc-openstack-swarm-allow")
+    replace_vms = _truthy(inputs.get("enable_replace_swarm_vms"))
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    if not public_key.startswith("ssh-"):
+        raise PipelineExecutionError("BKC SSH public key is unavailable for OpenStack swarm cloud-init/keypair injection.")
+    secgroup_commands = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup.get("rules", []):
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "172.24.10.0/24").strip()
+        if proto == "icmp":
+            secgroup_commands.append(f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+        elif proto in {"tcp", "udp"}:
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(f"openstack security group rule create --proto {proto} --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true")
+    cloud_init = f"""#cloud-config
+users:
+  - name: {admin_user}
+    groups: sudo
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: {console_password}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - {public_key}
+chpasswd:
+  expire: false
+ssh_pwauth: true
+disable_root: true
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - openssh-server
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable --now qemu-guest-agent || true
+  - mkdir -p /var/lib/bkc
+  - echo openstack-docker-swarm-base > /var/lib/bkc/role.txt
+"""
+    encoded = b64encode(cloud_init.encode()).decode()
+    node_names = " ".join(shlex.quote(str(node.get("name") or "")) for node in nodes if isinstance(node, dict))
+    command = f'''
+set -euo pipefail
+. {openrc}
+openstack image show {shlex.quote(image_name)} >/dev/null
+openstack network show {shlex.quote(network_name)} >/dev/null
+openstack flavor show {shlex.quote(flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 2048)} --disk {int(flavor.get("disk_gb") or 20)} --vcpus {int(flavor.get("vcpus") or 2)} {shlex.quote(flavor_name)}
+openstack flavor show {shlex.quote(manager_flavor_name)} >/dev/null 2>&1 || openstack flavor create --ram {int(manager_flavor.get("ram_mb") or flavor.get("ram_mb") or 4096)} --disk {int(manager_flavor.get("disk_gb") or flavor.get("disk_gb") or 30)} --vcpus {int(manager_flavor.get("vcpus") or flavor.get("vcpus") or 2)} {shlex.quote(manager_flavor_name)}
+key_tmp=$(mktemp)
+printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
+openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
+rm -f "$key_tmp"
+{chr(10).join(secgroup_commands)}
+user_data=$(mktemp)
+printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
+for name in {node_names}; do
+  [ -n "$name" ] || continue
+  node_flavor={shlex.quote(flavor_name)}
+  case "$name" in
+    *mgr*|*manager*) node_flavor={shlex.quote(manager_flavor_name)} ;;
+  esac
+  if [ {shlex.quote("1" if replace_vms else "0")} = "1" ] && openstack server show "$name" >/dev/null 2>&1; then
+    openstack server delete "$name"
+    deadline=$((SECONDS+300))
+    while [ "$SECONDS" -lt "$deadline" ]; do openstack server show "$name" >/dev/null 2>&1 || break; sleep 5; done
+  fi
+  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor "$node_flavor" --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
+done
+rm -f "$user_data"
+deadline=$((SECONDS+1200))
+while [ "$SECONDS" -lt "$deadline" ]; do
+  pending=0
+  for name in {node_names}; do
+    status=$(openstack server show "$name" -f value -c status 2>/dev/null || echo MISSING)
+    [ "$status" = ACTIVE ] || pending=1
+  done
+  [ "$pending" = 0 ] && break
+  sleep 10
+done
+openstack server list --name '^bkc-swarm-' -f table
+'''
+    out = run_remote_command(host=host, user="root", command=command, timeout=1500)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _store_run_extra(run_id, {"openstack_swarm_vms": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", f"OpenStack swarm VMs are ACTIVE on {network_name}: {manager_count} manager(s), {worker_count} worker(s).")
+
+
+def _openstack_swarm_remote_script(values: dict, *, remote_key_path: str, validate_only: bool = False) -> str:
+    nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
+    admin_user = str(values.get("admin_user") or "admin-deploy")
+    openrc = shlex.quote(str(values.get("admin_openrc") or "/root/admin-openrc"))
+    docker_static_url = str(values.get("docker_static_url") or "https://download.docker.com/linux/static/stable/x86_64/docker-28.3.3.tgz")
+    docker_archive_name = Path(urllib.parse.urlparse(docker_static_url).path).name or "docker.tgz"
+    node_names = " ".join(shlex.quote(str(node.get("name") or "")) for node in nodes if isinstance(node, dict))
+    bootstrap = "true" if validate_only else r'''
+docker_archive=/var/lib/bkc/openstack-swarm/__DOCKER_ARCHIVE_NAME__
+install -d -m 0755 /var/lib/bkc/openstack-swarm
+if ! getent hosts download.docker.com >/dev/null 2>&1; then
+  printf '%s\n' 'nameserver 10.20.0.10' 'nameserver 1.1.1.1' >/etc/resolv.conf
+fi
+test -s "$docker_archive" || curl -fL --retry 3 -o "$docker_archive" __DOCKER_STATIC_URL__
+test -s "$docker_archive"
+install_docker() {
+  ip="$1"
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" 'mkdir -p /tmp/bkc-docker'
+  ip netns exec "$tenant_netns" scp -i "$remote_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no "$docker_archive" "$admin_user@$ip:/tmp/bkc-docker/docker.tgz"
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" 'set -euo pipefail
+    sudo tar -C /usr/local/bin -xzf /tmp/bkc-docker/docker.tgz --strip-components=1
+    sudo groupadd -f docker
+    sudo usermod -aG docker "$USER" || true
+    sudo install -d -m 0755 /etc/docker /var/lib/docker
+    sudo tee /etc/systemd/system/docker.service >/dev/null <<'"'"'EOF'"'"'
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+After=network-online.target firewalld.service containerd.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/dockerd --host=unix:///var/run/docker.sock
+ExecReload=/bin/kill -s HUP $MAINPID
+TimeoutStartSec=0
+RestartSec=2
+Restart=always
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+Delegate=yes
+KillMode=process
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now docker
+    sudo docker info >/dev/null
+    sudo docker version
+  '
+}
+for ip in "${ips[@]}"; do install_docker "$ip"; done
+manager="${ips[0]}"
+"${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$manager" "sudo docker swarm leave --force >/dev/null 2>&1 || true; sudo docker swarm init --advertise-addr $manager >/dev/null"
+token=$("${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$manager" 'sudo docker swarm join-token -q worker')
+for ip in "${ips[@]:1}"; do
+  "${ssh_cmd[@]}" "${ssh_opts[@]}" "$admin_user@$ip" "sudo docker swarm leave --force >/dev/null 2>&1 || true; sudo docker swarm join --token $token $manager:2377 >/dev/null"
+done
+'''.replace("__DOCKER_ARCHIVE_NAME__", shlex.quote(docker_archive_name)).replace("__DOCKER_STATIC_URL__", shlex.quote(docker_static_url))
+    return f'''
+set -euo pipefail
+. {openrc}
+admin_user={shlex.quote(admin_user)}
+remote_key={shlex.quote(remote_key_path)}
+test -s "$remote_key"
+chmod 0600 "$remote_key"
+tenant_netns=""
+for candidate_ns in $(ip netns list | awk '{{print $1}}'); do
+  if ip netns exec "$candidate_ns" ip -4 addr show | grep -q '172\\.24\\.10\\.'; then
+    tenant_netns="$candidate_ns"
+    break
+  fi
+done
+[ -n "$tenant_netns" ] || {{ echo "missing_tenant_netns=172.24.10.0/24"; exit 1; }}
+ssh_cmd=(ip netns exec "$tenant_netns" ssh)
+ssh_opts=(-i "$remote_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/root/.ssh/known_hosts)
+printf 'tenant_netns=%s\\n' "$tenant_netns"
+names=({node_names})
+ips=()
+for name in "${{names[@]}}"; do
+  ip=$(openstack server show "$name" -f json | python3 -c 'import json,re,sys; data=json.load(sys.stdin); nets=str(data.get("addresses","")); m=re.search(r"\\b(?:172\\.24\\.10|10\\.20\\.0)\\.\\d+\\b", nets); print(m.group(0) if m else "")')
+  [ -n "$ip" ] || {{ echo "missing_ip=$name"; exit 1; }}
+  ips+=("$ip")
+done
+for ip in "${{ips[@]}}"; do
+  deadline=$((SECONDS+900))
+  while true; do
+    ssh_probe=$("${{ssh_cmd[@]}}" "${{ssh_opts[@]}}" -o ConnectTimeout=8 "$admin_user@$ip" 'cloud-init status --wait >/dev/null 2>&1 || true; hostname; true' 2>&1) && break
+    printf 'ssh_probe_failed=%s %s\\n' "$ip" "$ssh_probe"
+    if printf '%s\\n' "$ssh_probe" | grep -qi 'Permission denied'; then
+      exit 1
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || {{ echo "ssh_timeout=$ip"; exit 1; }}
+    sleep 10
+  done
+done
+{bootstrap}
+manager="${{ips[0]}}"
+"${{ssh_cmd[@]}}" "${{ssh_opts[@]}}" "$admin_user@$manager" 'sudo docker node ls'
+printf 'openstack_swarm_ips=%s\\n' "${{ips[*]}}"
+'''
+
+
+def _video_openstack_swarm_bootstrap(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_bootstrap_swarm")
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key_path = str(key_info["private_key_path"])
+    if not private_key_path or not Path(private_key_path).exists():
+        raise PipelineExecutionError("BKC SSH private key is missing; cannot bootstrap OpenStack swarm from Server1.")
+    remote_key_path = f"/var/tmp/bkc-openstack-swarm-{run_id[:8]}"
+    upload_remote_file(host=host, user="root", remote_path=remote_key_path, local_path=private_key_path, mode=0o600, timeout=60)
+    out = run_remote_command(host=host, user="root", command=_openstack_swarm_remote_script(values, remote_key_path=remote_key_path), timeout=2400)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _store_run_extra(run_id, {"openstack_swarm_bootstrap": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", "Docker is installed and the three OpenStack VMs have formed a swarm.")
+
+
+def _video_openstack_swarm_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    ssh = load_integrations()["ssh"]
+    key_info = read_key_pair(ssh["private_key_path"], ssh["public_key_path"])
+    private_key_path = str(key_info["private_key_path"])
+    if not private_key_path or not Path(private_key_path).exists():
+        raise PipelineExecutionError("BKC SSH private key is missing; cannot validate OpenStack swarm from Server1.")
+    remote_key_path = f"/var/tmp/bkc-openstack-swarm-{run_id[:8]}"
+    upload_remote_file(host=host, user="root", remote_path=remote_key_path, local_path=private_key_path, mode=0o600, timeout=60)
+    out = run_remote_command(host=host, user="root", command=_openstack_swarm_remote_script(values, remote_key_path=remote_key_path, validate_only=True), timeout=900)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    if out.count(" Ready ") < 3 and out.count(" Ready") < 3:
+        raise PipelineExecutionError("Docker swarm validation did not report three Ready nodes.")
+    _store_run_extra(run_id, {"openstack_swarm_validate": out[-6000:]})
+    _set_stage(run_id, stage_name, "complete", "OpenStack-hosted Docker Swarm reports three Ready nodes.")
+
+
+def _video_openstack_swarm_fragments(run_id: str, stage_name: str) -> None:
+    _, values = _video_openstack_swarm_context(run_id)
+    fragments = {
+        "openstack.swarm.debian-base": {
+            "rating": "candidate-known-good",
+            "image": values.get("base_image") or "debian-13-genericcloud",
+            "contract": "Debian cloud-init VM must be created with config-drive enabled and must reach SSH before Docker bootstrap starts.",
+        },
+        "openstack.swarm.security-group": {
+            "rating": "candidate",
+            "contract": "Allow SSH from management and Docker Swarm ports 2377/tcp, 7946/tcp+udp, 4789/udp inside tenant CIDR.",
+        },
+        "openstack.swarm.bootstrap": {
+            "rating": "candidate",
+            "contract": "Stage the official Docker static archive from Server1, install dockerd with systemd on each VM, swarm init on node1, join node2/node3, validate docker node ls.",
+        },
+        "fedora.cloud-image": {
+            "rating": "planned",
+            "contract": "Keep optional until an official Fedora cloud image URL is selected and cached.",
+        },
+    }
+    append_event(run_id, "info", stage_name, json.dumps(fragments, indent=2, sort_keys=True))
+    _store_run_extra(run_id, {"openstack_swarm_fragments": fragments})
+    _set_stage(run_id, stage_name, "complete", "OpenStack Docker Swarm candidate fragments recorded for future reuse and anti-regression context.")
+
+
+def _video_seed_openstack(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_openstack_seed", "enable_smoke_instance")
+    _, values = _video_context("openstack-lab-seed-and-validate", run_id)
+    host = str(values.get("openstack_host") or "10.20.0.240")
+    project = str(values.get("seed_project") or "bkc-demo")
+    user = str(values.get("seed_user") or "bkc-demo-admin")
+    password = _secret_ref_literal(values.get("seed_user_password_ref"), default="changeme123")
+    flavor = values.get("demo_flavor") if isinstance(values.get("demo_flavor"), dict) else {}
+    image = values.get("demo_image") if isinstance(values.get("demo_image"), dict) else {}
+    keypair = values.get("demo_keypair") if isinstance(values.get("demo_keypair"), dict) else {}
+    security_group = values.get("demo_security_group") if isinstance(values.get("demo_security_group"), dict) else {}
+    network = values.get("self_service_network") if isinstance(values.get("self_service_network"), dict) else {}
+    smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
+    image_name = str(image.get("name") or smoke.get("image") or "cirros-bkc-smoke")
+    image_url = str(image.get("url") or "https://download.cirros-cloud.net/0.6.3/cirros-0.6.3-x86_64-disk.img")
+    image_filename = Path(urllib.parse.urlparse(image_url).path).name or f"{image_name}.qcow2"
+    ssh = load_integrations()["ssh"]
+    public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
+    key_name = str(keypair.get("name") or smoke.get("key_name") or "bkc-demo-key")
+    secgroup_name = str(security_group.get("name") or "bkc-demo-allow-ssh-icmp")
+    secgroup_rules = security_group.get("rules") if isinstance(security_group.get("rules"), list) else []
+    secgroup_commands: list[str] = [
+        f"openstack security group show {shlex.quote(secgroup_name)} >/dev/null 2>&1 || openstack security group create {shlex.quote(secgroup_name)} >/dev/null"
+    ]
+    for rule in secgroup_rules:
+        if not isinstance(rule, dict):
+            continue
+        proto = str(rule.get("protocol") or "").strip()
+        remote = str(rule.get("remote_ip_prefix") or "0.0.0.0/0").strip()
+        if proto == "icmp":
+            secgroup_commands.append(
+                f"openstack security group rule create --proto icmp --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true"
+            )
+        elif proto == "tcp":
+            port = int(rule.get("dst_port") or 22)
+            secgroup_commands.append(
+                f"openstack security group rule create --proto tcp --dst-port {port} --remote-ip {shlex.quote(remote)} {shlex.quote(secgroup_name)} >/dev/null 2>&1 || true"
+            )
+    keypair_command = "true"
+    if public_key.startswith("ssh-"):
+        keypair_command = (
+            f"openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || "
+            "{ "
+            f"key_tmp=$(mktemp); printf '%s\\n' {shlex.quote(public_key)} > \"$key_tmp\"; "
+            f"openstack keypair create --public-key \"$key_tmp\" {shlex.quote(key_name)} >/dev/null; "
+            "rm -f \"$key_tmp\"; "
+            "}"
+        )
+    server_key_arg = f"--key-name {shlex.quote(key_name)}" if public_key.startswith("ssh-") else ""
+    script = f'''set -euo pipefail
+. /root/admin-openrc
+install -d -m 0755 /var/lib/bkc/openstack-images
+image_file=/var/lib/bkc/openstack-images/{shlex.quote(image_filename)}
+test -s "$image_file" || curl -fL --retry 3 -o "$image_file" {shlex.quote(image_url)}
+openstack project show {shlex.quote(project)} >/dev/null 2>&1 || openstack project create --domain {shlex.quote(str(values.get("seed_domain") or "Default"))} {shlex.quote(project)}
+openstack user show {shlex.quote(user)} >/dev/null 2>&1 || openstack user create --domain {shlex.quote(str(values.get("seed_domain") or "Default"))} --password {shlex.quote(password)} {shlex.quote(user)}
+openstack role add --project {shlex.quote(project)} --user {shlex.quote(user)} member || true
+openstack flavor show {shlex.quote(str(flavor.get("name") or "bkc.nano"))} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 512)} --disk {int(flavor.get("disk_gb") or 1)} --vcpus {int(flavor.get("vcpus") or 1)} {shlex.quote(str(flavor.get("name") or "bkc.nano"))}
+openstack network show {shlex.quote(str(network.get("name") or "tenant-demo-net"))} >/dev/null 2>&1 || openstack network create {shlex.quote(str(network.get("name") or "tenant-demo-net"))}
+openstack subnet show {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))} >/dev/null 2>&1 || openstack subnet create --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} --subnet-range {shlex.quote(str(network.get("cidr") or "172.16.10.0/24"))} {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))}
+{keypair_command}
+{chr(10).join(secgroup_commands)}
+openstack image show {shlex.quote(image_name)} >/dev/null 2>&1 || openstack image create --disk-format {shlex.quote(str(image.get("disk_format") or "qcow2"))} --container-format {shlex.quote(str(image.get("container_format") or "bare"))} --public --file "$image_file" {shlex.quote(image_name)}
+openstack server show {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))} >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor {shlex.quote(str(flavor.get("name") or "bkc.nano"))} --network {shlex.quote(str(smoke.get("network") or network.get("name") or "lab-internal"))} {server_key_arg} --security-group {shlex.quote(secgroup_name)} {shlex.quote(str(smoke.get("name") or "bkc-openstack-smoke-01"))}
+openstack server list
+'''
+    out = run_remote_command(host=host, user="root", command=script, timeout=1200)
+    append_event(run_id, "info", stage_name, out[-3000:])
+    _set_stage(run_id, stage_name, "complete", "Real OpenStack identity, network, image, flavor, and smoke server resources are present.")
+
+
+def _video_seed_proxmox(run_id: str, stage_name: str) -> None:
+    _require_video_gates(run_id, "enable_proxmox_seed")
+    _, values = _video_context("openstack-lab-seed-and-validate", run_id)
+    source, target = str(values["proxmox_source_host"]), str(values["proxmox_target_host"])
+    if "proxmox_source_password" in values:
+        source_password = str(values.get("proxmox_source_password") or "").strip()
+    else:
+        source_password = str(load_proxmox_config().get("password") or "").strip()
+    target_password = str(values.get("proxmox_target_password") or "changeme123").strip()
+    pub = run_remote_command(host=source, user="root", password=source_password, command="set -e; test -s /root/.ssh/bkc-migrate || ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/bkc-migrate; cat /root/.ssh/bkc-migrate.pub", timeout=30).strip()
+    run_remote_command(host=target, user="root", password=target_password, command=f"mkdir -p /root/.ssh; touch /root/.ssh/authorized_keys; grep -Fqx {shlex.quote(pub)} /root/.ssh/authorized_keys || printf '%s\\n' {shlex.quote(pub)} >> /root/.ssh/authorized_keys", timeout=30)
+    source_vmid = int(values["proxmox_source_vmid"])
+    target_q = shlex.quote(target)
+    migrate = (
+        "set -euo pipefail; "
+        f"target={target_q}; "
+        "ssh_opts='-i /root/.ssh/bkc-migrate -o StrictHostKeyChecking=no'; "
+        "if ssh $ssh_opts root@$target \"qm config 201 2>/dev/null | grep -Eq '^(scsi|virtio|sata|ide)[0-9]:'\"; then "
+        "  echo vm201=already-restored; "
+        "else "
+        "  ssh $ssh_opts root@$target 'qm unlock 201 >/dev/null 2>&1 || true; qm destroy 201 --purge >/dev/null 2>&1 || true'; "
+        f"  vzdump {source_vmid} --mode stop --compress 0 --stdout | ssh $ssh_opts root@$target 'qmrestore - 201 --storage local-lvm'; "
+        "fi"
+    )
+    out = run_remote_command(host=source, user="root", password=source_password, command=migrate, timeout=3300)
+    configure = "set -e; qm set 201 --name ns1-trixie-base --memory 2048 --cores 2 --delete net1 >/dev/null 2>&1 || true; qm set 201 --net0 virtio,bridge=vmbr0; qm status 202 >/dev/null 2>&1 || qm clone 201 202 --name swarm1-trixie-base --full --storage local-lvm; qm set 202 --memory 4096 --cores 2 --net0 virtio,bridge=vmbr0; qm start 201 || true; qm start 202 || true; qm list"
+    out += "\n" + run_remote_command(host=target, user="root", password=target_password, command=configure, timeout=1200)
+    append_event(run_id, "info", stage_name, out[-3500:])
+    _set_stage(run_id, stage_name, "complete", "Proxmox VM132 migrated to VM201 and cloned to VM202 with vmbr0 networking.")
+
+
+def _video_seed_validate(run_id: str, stage_name: str) -> None:
+    _, values = _video_context("openstack-lab-seed-and-validate", run_id)
+    prox_host = str(values["proxmox_target_host"])
+    prox_password = str(values.get("proxmox_target_password") or "changeme123")
+    prox_user = str(values.get("proxmox_root_user") or "root@pam")
+    prox_api = str(values.get("proxmox_management_url") or f"https://{prox_host}:8006/").rstrip("/")
+    if not prox_api.endswith("/api2/json"):
+        prox_api = prox_api.rstrip("/") + "/api2/json"
+    prox = run_remote_command(host=prox_host, user="root", password=prox_password, command="test -c /dev/kvm; qm status 201 | grep -F running; qm status 202 | grep -F running; curl -kfsS -o /dev/null https://127.0.0.1:8006/; qm list", timeout=120)
+    integrations = load_integrations()
+    integrations["proxmox"].update({
+        "api_url": prox_api,
+        "username": prox_user,
+        "password": prox_password,
+        "token_name": "",
+        "token_value": "",
+        "verify_ssl": False,
+    })
+    save_integrations(integrations)
+    inventory = summarize_inventory(ProxmoxClient(load_proxmox_config()))
+    save_proxmox_snapshot(inventory)
+    rules = load_rules()
+    sync_result = sync_inventory_to_rules(rules, inventory)
+    save_rules(rules)
+    cloud_host = str(values.get("openstack_host") or "10.20.0.240")
+    smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
+    smoke_name = str(smoke.get("name") or "bkc-openstack-smoke-01")
+    cloud = run_remote_command(host=cloud_host, user="root", command=f". /root/admin-openrc; openstack token issue -f value -c id; openstack server show {shlex.quote(smoke_name)} -f value -c status", timeout=120)
+    urls = values.get("edge_validation_urls") if isinstance(values.get("edge_validation_urls"), list) else []
+    edge = "\n".join(f"{url}={urllib.request.urlopen(url, timeout=15).status}" for url in urls)
+    append_event(run_id, "info", stage_name, (cloud + "\n" + prox + "\n" + edge + f"\nproxmox_inventory_sync={sync_result}")[-4000:])
+    _set_stage(run_id, stage_name, "complete", "Both hypervisors, seeded guests, OpenStack API, BKC Proxmox inventory, and edge dashboards validated.")
+
+
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
     config = WORKFLOW_DEFINITIONS[workflow]
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
@@ -8952,6 +13207,18 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
         if skip_completed_stages and stage_name in completed_stage_names:
             append_event(run_id, "info", stage_name, "Skipping previously completed stage for review-phase resume.")
             continue
+        if workflow == "openstack-kolla-single-node-install":
+            operation_modes = {
+                str(item).strip().lower()
+                for item in stage.get("operation_modes", [])
+                if str(item).strip()
+            }
+            operation_mode = _openstack_kolla_operation_mode(run_id)
+            if operation_modes and operation_mode not in operation_modes:
+                detail = f"Skipped stage; operation_mode is {operation_mode}."
+                _set_stage(run_id, stage_name, "complete", detail)
+                append_event(run_id, "info", stage_name, detail)
+                continue
         kind = str(stage.get("kind", "remote-command"))
         _set_stage(run_id, stage_name, "active", str(stage.get("active", f"Running {stage_name}.")))
 
@@ -8968,6 +13235,240 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "folder-pipeline-review":
             _run_folder_pipeline_review_stage(run_id, stage)
+            continue
+
+        video_runners = {
+            "video-openstack-one-shot": _video_openstack_one_shot,
+            "video-openstack-pxe": _video_openstack_pxe,
+            "video-openstack-boot": _video_openstack_boot,
+            "video-openstack-firstboot": _video_openstack_firstboot,
+            "video-openstack-install": _video_openstack_install,
+            "video-openstack-validate": _video_openstack_validate,
+            "video-proxmox-media": _video_proxmox_media,
+            "video-proxmox-boot": _video_proxmox_boot,
+            "video-proxmox-handoff": _video_proxmox_handoff,
+            "video-proxmox-validate": _video_proxmox_validate,
+            "video-seed-openstack": _video_seed_openstack,
+            "video-seed-proxmox": _video_seed_proxmox,
+            "video-seed-validate": _video_seed_validate,
+            "video-local-ai-capacity": _video_local_ai_capacity,
+            "video-local-ai-vm": _video_local_ai_vm,
+            "video-local-ai-ollama": _video_local_ai_ollama,
+            "video-local-ai-openwebui": _video_local_ai_openwebui,
+            "video-local-ai-validate": _video_local_ai_validate,
+            "video-local-ai-fragments": _video_local_ai_fragments,
+            "video-openstack-swarm-preflight": _video_openstack_swarm_preflight,
+            "video-openstack-swarm-vms": _video_openstack_swarm_vms,
+            "video-openstack-swarm-bootstrap": _video_openstack_swarm_bootstrap,
+            "video-openstack-swarm-validate": _video_openstack_swarm_validate,
+            "video-openstack-swarm-fragments": _video_openstack_swarm_fragments,
+        }
+        if kind in video_runners:
+            video_runners[kind](run_id, stage_name)
+            continue
+
+        if kind == "bmc-discovery-neighbors":
+            _run_bmc_discovery_neighbors(run_id, stage_name)
+            continue
+
+        if kind == "bmc-discovery-redfish":
+            _run_bmc_discovery_redfish(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-validate":
+            _run_ns1_lan_mac_validate(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-ensure-include":
+            _run_ns1_lan_mac_ensure_include(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-render-fragment":
+            _run_ns1_lan_mac_render_fragment(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-render-defaults":
+            _run_ns1_lan_mac_render_defaults(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-validate-config":
+            _run_ns1_lan_mac_validate_config(run_id, stage_name)
+            continue
+
+        if kind == "ns1-lan-mac-pxe-restart":
+            _run_ns1_lan_mac_restart(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-firstboot-login":
+            _run_openstack_host_firstboot_login(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-base-normalize":
+            _run_openstack_host_base_normalize(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-network-sides":
+            _run_openstack_host_network_sides(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-package-prepare":
+            _run_openstack_host_package_prepare(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-neutron-validate":
+            _run_openstack_host_neutron_validate(run_id, stage_name)
+            continue
+
+        if kind == "openstack-host-image-cache":
+            _run_openstack_host_image_cache(run_id, stage_name)
+            continue
+
+        if kind == "openstack-kolla-phase":
+            _run_openstack_kolla_phase(run_id, stage)
+            continue
+
+        if kind == "openstack-base-boot-render":
+            _run_openstack_base_boot_render(run_id, stage_name)
+            continue
+
+        if kind == "openstack-base-boot-validate":
+            _run_openstack_base_boot_validate(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-preflight":
+            _run_openstack_bkc_compose_preflight(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-runtime":
+            _run_openstack_bkc_compose_runtime(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-render":
+            _run_openstack_bkc_compose_render(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-up":
+            _run_openstack_bkc_compose_up(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-validate":
+            _run_openstack_bkc_compose_validate(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-compose-edge-pointer":
+            _run_openstack_bkc_edge_pointer(run_id, stage_name)
+            continue
+
+        if kind == "baremetal-bmc-power-reset":
+            _run_baremetal_bmc_power_reset(run_id, stage_name)
+            continue
+
+        if kind == "vmware-esxi-boot-assets-render":
+            _run_vmware_esxi_boot_assets_render(run_id, stage_name)
+            continue
+
+        if kind == "vmware-esxi-media-stage":
+            _run_vmware_esxi_media_stage(run_id, stage_name)
+            continue
+
+        if kind == "vmware-esxi-iso-handoff":
+            _run_vmware_esxi_iso_handoff(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-api-preflight":
+            _video_esxi_api_preflight(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-enable-ssh":
+            _video_esxi_enable_ssh(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-shells":
+            _video_esxi_swarm_shells(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-dhcp":
+            _video_esxi_swarm_dhcp(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-bootstrap":
+            _video_esxi_swarm_bootstrap(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-inventory":
+            _video_esxi_swarm_inventory(run_id, stage_name)
+            continue
+
+        if kind == "video-esxi-swarm-fragments":
+            _video_esxi_swarm_fragments(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-source-preflight":
+            _run_micro_blog_source_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-registry-preflight":
+            _run_micro_blog_registry_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-target-swarm-preflight":
+            _run_micro_blog_target_swarm_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-build-push":
+            _run_micro_blog_build_push(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-render-stack":
+            _run_micro_blog_render_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-stage-stack":
+            _run_micro_blog_stage_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-deploy-stack":
+            _run_micro_blog_deploy_stack(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-validate-rollout":
+            _run_micro_blog_validate_rollout(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-lab-journal-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Lab journal seeding is optional for this canary; markdown source is staged separately before import/bootstrap.",
+                {"optional": True, "content_path": "/srv/micro-blog/content", "import_mode": "filesystem-sync"},
+            )
+            continue
+
+        if kind == "micro-blog-telemetry-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Telemetry backhaul is optional for this canary; the deployed OTEL collector exposes :9464 metrics and accepts OTLP on :4317/:4318.",
+                {"optional": True, "preferred_mode": "main-lab-scrape-or-forward"},
+            )
+            continue
+
+        if kind == "micro-blog-edge-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Edge pointer recorded; add or update lab-edge once the internal health URL is validated.",
+                {"edge_port": 8091, "target_port": 18081, "label": "Micro Blog — ESXi Swarm"},
+            )
+            continue
+
+        if kind == "micro-blog-fragment-note":
+            _run_micro_blog_note(
+                run_id,
+                stage_name,
+                "Known-good fragment: micro-blog is the small Docker Swarm canary; rx-demo remains the heavier observability workload.",
+                {"rating": "candidate-known-good", "tool_choice": "hammer-before-wrench"},
+            )
             continue
 
         if kind == "trixie-pxe-prereqs":
@@ -9883,7 +14384,7 @@ def execute_pipeline_run(run_id: str) -> dict:
     if not config:
         raise PipelineExecutionError(f"No executor implemented for workflow '{workflow}'.")
 
-    settings = _remote_settings()
+    settings = {} if config.get("settings_optional") else _remote_settings()
     action_mode = str(run.get("extra", {}).get("action_mode", "deploy")).strip().lower() or "deploy"
 
     try:
@@ -9897,9 +14398,29 @@ def execute_pipeline_run(run_id: str) -> dict:
             _run_workflow_undeploy(run_id, workflow, settings)
         else:
             _run_workflow_deploy(run_id, workflow, settings)
-    except PipelineExecutionError:
+    except PipelineExecutionError as exc:
+        failed_run = get_run(run_id) or {}
+        active_stage = next(
+            (
+                str(stage.get("name") or "")
+                for stage in failed_run.get("stages", [])
+                if str(stage.get("status") or "").lower() == "active"
+            ),
+            "",
+        )
+        mark_run_failed(run_id, str(exc), active_stage)
         raise
     except Exception as exc:  # noqa: BLE001
+        failed_run = get_run(run_id) or {}
+        active_stage = next(
+            (
+                str(stage.get("name") or "")
+                for stage in failed_run.get("stages", [])
+                if str(stage.get("status") or "").lower() == "active"
+            ),
+            "",
+        )
+        mark_run_failed(run_id, str(exc), active_stage)
         raise PipelineExecutionError(str(exc)) from exc
 
     completed = get_run(run_id)

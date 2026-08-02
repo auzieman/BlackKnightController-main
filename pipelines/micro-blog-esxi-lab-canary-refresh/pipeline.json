@@ -1,0 +1,139 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "micro-blog-esxi-lab-canary-refresh",
+  "name": "MICROBLOG OPS 20 — Refresh ESXi Lab Canary From Repo Commit",
+  "status": "candidate",
+  "workflow": "micro-blog-esxi-lab-canary-refresh",
+  "resource_class": "standard",
+  "owner": "micro-blog",
+  "repo": "BlackKnightController",
+  "summary": "Refresh the existing ESXi Docker Swarm micro-blog lab canary from a pinned repo commit by building a fresh UI image, pushing it through the lab registry path, updating the Swarm service, syncing content, validating proof strings, and writing a receipt.",
+  "tags": [
+    "micro-blog",
+    "esxi",
+    "docker-swarm",
+    "lab-canary",
+    "content-preview",
+    "fresh-container",
+    "known-good-fragment",
+    "video-ready"
+  ],
+  "targets": {
+    "source_repo": "repo:micro-blog",
+    "target_swarm": "node:cluster:docker-swarm-on-esxi",
+    "target_manager": "node:vm:esxi-swarm-mgr-01",
+    "target_service": "service:micro-blog_blog-ui",
+    "image_registry": "service:demo-swarm-image-registry",
+    "edge": "service:lab-edge",
+    "backchannel": "repo:bkc-channel"
+  },
+  "inputs": {
+    "source_path": {
+      "required": true,
+      "default": "/home/auzieman/Projects/micro-blog"
+    },
+    "source_branch": {
+      "required": true,
+      "default": "review/astra-public-polish-20260731"
+    },
+    "source_commit": {
+      "required": true,
+      "default": "c8bdb4b"
+    },
+    "image_tag_prefix": {
+      "required": true,
+      "default": "astra-polish"
+    },
+    "edge_url": {
+      "required": true,
+      "default": "http://swarm1.lab.auzietek.com:8091"
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-lab-bringup-health",
+      "action": "lab.bringup.health_gate",
+      "transport": "bkc-ssh+http+docker-cli",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "preflight-esxi-swarm-shape",
+      "action": "docker.swarm.preflight",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "preflight-source-commit",
+      "action": "repo.git.commit_gate",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 90
+    },
+    {
+      "id": "run-micro-blog-tests",
+      "action": "repo.tests.run",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "build-ui-image-from-source",
+      "action": "docker.image.build",
+      "transport": "docker-cli",
+      "risk": "medium",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "push-ui-image-through-lab-registry",
+      "action": "docker.image.save_load_push_bridge",
+      "transport": "docker-cli+ssh+registry",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "sync-content-to-esxi-nodes",
+      "action": "micro_blog.content.sync_to_nodes",
+      "transport": "tar+ssh",
+      "risk": "medium",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "update-esxi-swarm-ui-service",
+      "action": "docker.service.update_image",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "medium",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "run-filesystem-sync",
+      "action": "micro_blog.content.filesystem_sync",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "validate-canonical-slugs-and-proof-strings",
+      "action": "http.content.proof_strings",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "run-public-image-smoke",
+      "action": "micro_blog.images.smoke_public",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "record-lab-canary-refresh-receipt",
+      "action": "backchannel.receipt.write",
+      "transport": "git",
+      "risk": "low",
+      "timeout_seconds": 120
+    }
+  ],
+  "notes": "This is the video-safe refresh path after the ESXi swarm is already up. It replaces the running service with a new image from a pinned repo commit. It does not patch files inside running containers and does not deploy to production."
+}

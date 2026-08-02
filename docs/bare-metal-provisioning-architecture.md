@@ -27,6 +27,10 @@ Bare metal provisioning starts with these node types:
 - `bmc`: IPMI, Redfish, or vendor management controller endpoint.
 - `network_interface`: NIC identity, MAC address, switch port, VLAN, observed
   DHCP lease, and boot capability.
+- `network_switch`: managed switch identity, model, management endpoint,
+  firmware, read-only observation transport, VLAN intent, and port inventory.
+- `switch_port`: physical port identity, expected role, observed MACs,
+  LLDP/CDP neighbor evidence, VLAN membership, and attached node relationship.
 - `provisioning_profile`: desired installer, boot image, kickstart/preseed,
   unattend file, rescue image, post-install enrollment steps, and validation
   gates.
@@ -47,6 +51,9 @@ from names:
 physical_machine -> controlled_by -> bmc
 physical_machine -> has_interface -> network_interface
 network_interface -> attached_to -> network_switch
+network_switch -> has_port -> switch_port
+switch_port -> observes_mac -> network_interface
+switch_port -> uses_vlan -> network
 network_interface -> uses -> network
 service:dhcpd -> provides_dhcp -> network
 service:pxe -> serves_pxe -> network
@@ -114,6 +121,8 @@ Infrastructure validation:
 - Image checksums match declared values.
 - BMC/IPMI/Redfish endpoint is reachable.
 - Switch/VLAN/network path is plausible.
+- Switch port evidence links the expected physical port to the expected NIC MAC
+  address before destructive PXE install starts.
 
 Installation validation:
 
@@ -166,6 +175,32 @@ The small office reference architecture remains the proving ground:
 The long-term target is that every component can be reproduced from bare metal
 with declarative configuration, validation gates, and observable events.
 
+## Physical Hardware Tracks
+
+The first real hardware arrival should split into two visible tracks while
+sharing the same lower provisioning lifecycle:
+
+- OpenStack lab: PXE install a base OS, enroll with BKC SSH, validate hardware
+  baseline facts, then hand off to an OpenStack installer provider.
+- VMware evaluation: use operator-supplied VMware evaluation media, render an
+  ESXi-style unattended install intent, validate the management endpoint after
+  first boot, and optionally register the host with a trial vCenter.
+
+Both tracks must start from the same physical-first graph:
+
+```text
+physical_machine
+  -> controlled_by -> bmc
+  -> has_interface -> provisioning_nic
+  -> uses -> provisioning_profile
+  -> booted_from -> image_asset
+  -> produces -> validation_evidence
+```
+
+Repository examples must stay sanitized. Serial numbers, MAC addresses, BMC
+addresses, image checksums, license keys, and secrets should be supplied through
+local dictionaries or runtime inventory before a destructive install can run.
+
 ## First Implementation Slice
 
 The next practical slice should avoid trying to install every OS at once:
@@ -182,3 +217,14 @@ The first folder-backed example is
 `pipelines/baremetal-r630-pxe-validation/`. It is intentionally
 evidence-oriented and should not power on, reboot, or install hardware until
 the BMC and boot provider actions are implemented.
+
+The first delivery-day track recipes are
+`pipelines/baremetal-openstack-lab-prepare/` and
+`pipelines/baremetal-vmware-trial-prepare/`. They extend the same validation
+model into OpenStack and VMware evaluation planning without committing
+operator-specific media or credentials.
+
+The first managed-switch discovery recipe is
+`pipelines/n3048-switch-discovery-prepare/`. It prepares read-only discovery for
+the Dell PowerConnect N3048 so PXE events can be tied back to physical switch
+ports, observed MACs, and declared node intent.

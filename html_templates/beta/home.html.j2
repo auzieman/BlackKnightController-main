@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>BKC Resource Workbench</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='beta/beta.css') }}">
     <script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
@@ -51,6 +52,12 @@
             <div class="top-actions">
                 <span class="tenant-pill">{{ bkc_tenant_slug }}</span>
                 <button class="action-pill action-button" type="button" id="beta-command-button">Command</button>
+                <select class="action-pill action-button" id="beta-ai-model" aria-label="AI layout model">
+                    <option value="llama3.2:3b">llama3.2 fast text</option>
+                    <option value="granite3.2-vision">granite3.2 vision</option>
+                    <option value="hemanth/diagramgenerator">diagram generator</option>
+                    <option value="qwen2.5-coder:1.5b">qwen coder tiny</option>
+                </select>
                 <a class="action-pill" href="{{ url_for('pipelines.pipelines') }}">Open current pipelines</a>
             </div>
         </header>
@@ -104,6 +111,9 @@
                         <button id="beta-scope-one">Block</button>
                         <button id="beta-scope-two">Street</button>
                         <button id="beta-scope-all">City</button>
+                        <button id="beta-focus-graph">Focus graph</button>
+                        <button id="beta-ai-arrange">Ollama preview</button>
+                        <button id="beta-export-drawio">Draw.io</button>
                     </div>
                 </div>
                 <div class="cy-wrap">
@@ -119,7 +129,10 @@
                         </div>
                     </div>
                 </div>
-                <div class="ask-strip">Ask BKC target: “Show the path from edge/NAT ownership to OpenWebUI and the OpenStack APIs.”</div>
+                <div class="graph-ready-tray" id="beta-export-status" aria-live="polite">
+                    <span class="ready-dot"></span>
+                    <span>Ready tray: exports, AI layouts, and graph artifacts will appear here.</span>
+                </div>
             </article>
 
             <aside class="glass-panel inspector">

@@ -1,0 +1,6 @@
+#!ipxe
+# Boot the supported BKC unattended Proxmox VE ISO embedded in initrd.
+dhcp
+kernel http://10.20.0.10/pxe/proxmox/9.2-1/pxeboot/linux26 ro ramdisk_size=16777216 rw splash=verbose proxmox-start-auto-installer console=tty0 console=ttyS1,115200n8
+initrd http://10.20.0.10/pxe/proxmox/9.2-1/pxeboot/initrd
+boot

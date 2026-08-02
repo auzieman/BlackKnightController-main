@@ -1,0 +1,192 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "ns1-lan-mac-pxe-prepare",
+  "name": "ns1 LAN MAC PXE Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Prepare a guarded LAN-side PXE/DHCP fragment on ns1 for one permitted physical server MAC while denying unknown clients.",
+  "tags": [
+    "bkc",
+    "ns1",
+    "dhcp",
+    "pxe",
+    "mac-allow",
+    "bare-metal",
+    "draft"
+  ],
+  "targets": {
+    "controller": "node:vm:ns1",
+    "network": "node:network:home-lan",
+    "physical_machine": "node:physical_machine:r630-first"
+  },
+  "inputs": {
+    "target_host": {
+      "required": true,
+      "default": "ns1.lab.auzietek.com"
+    },
+    "allowed_mac": {
+      "required": true,
+      "default": "80:18:44:de:fd:38"
+    },
+    "enable_lan_pxe_service": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "home-lan-mac-only",
+      "kind": "network.dhcp.boundary",
+      "with": {
+        "interface": "${dictionary.lan_interface}",
+        "subnet": "${dictionary.lan_subnet}",
+        "mode": "mac-only",
+        "allow_unknown_clients": false,
+        "allow_general_range": false,
+        "authoritative": false
+      }
+    },
+    {
+      "id": "service-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_lan_pxe_service": "${inputs.enable_lan_pxe_service}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "resolve-ns1-node",
+      "action": "node.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "node_id": "${dictionary.target_node_id}",
+        "fallback_host": "${inputs.target_host}"
+      },
+      "produces": [
+        "fact:target_node"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "validate-lan-interface",
+      "action": "ssh.network.discover",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "commands": [
+          "ip -br addr show ${dictionary.lan_interface}",
+          "ip route get ${dictionary.lan_router}"
+        ]
+      },
+      "produces": [
+        "fact:lan_interface"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "ensure-dhcp-include",
+      "action": "ssh.file.ensure_line",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "with": {
+        "target": "${inputs.target_host}",
+        "path": "${dictionary.dhcp_config_path}",
+        "line": "${dictionary.dhcp_include_line}",
+        "backup": true
+      },
+      "produces": [
+        "fact:dhcp_main_config_includes_bkc_lan_fragment"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "render-lan-mac-pxe-fragment",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "template": "templates/dhcpd-lan-mac-pxe.conf.tpl",
+        "target_path": "${dictionary.dhcp_fragment_path}"
+      },
+      "produces": [
+        "artifact:dhcp-lan-mac-pxe-fragment"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "render-lan-dhcp-defaults",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "template": "templates/isc-dhcp-server-lan.defaults.tpl",
+        "target_path": "${dictionary.dhcp_defaults_path}"
+      },
+      "produces": [
+        "artifact:isc-dhcp-server-lan-defaults"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "validate-dhcp-config",
+      "action": "ssh.command.check",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "with": {
+        "target": "${inputs.target_host}",
+        "command": "dhcpd -t -cf ${dictionary.dhcp_config_path}"
+      },
+      "produces": [
+        "fact:dhcp_config_valid"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "restart-dhcp-if-enabled",
+      "action": "ssh.service.restart",
+      "transport": "bkc-ssh",
+      "risk": "high",
+      "with": {
+        "target": "${inputs.target_host}",
+        "service": "${dictionary.dhcp_service_name}",
+        "enabled": "${inputs.enable_lan_pxe_service}"
+      },
+      "produces": [
+        "event:lan_mac_pxe.enabled"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "record-pxe-mac-relationship",
+      "action": "node.relationships.record",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "relationships": [
+          {
+            "source_id": "${dictionary.allowed_pxe_host.node_id}",
+            "type": "has_interface",
+            "target_id": "node:network_interface:r630-first-pxe-nic",
+            "confidence": "operator-declared"
+          },
+          {
+            "source_id": "node:network_interface:r630-first-pxe-nic",
+            "type": "uses",
+            "target_id": "node:network:home-lan",
+            "confidence": "temporary-pxe-bootstrap"
+          }
+        ]
+      },
+      "produces": [
+        "relationship:r630-first-pxe-mac"
+      ],
+      "timeout_seconds": 15
+    }
+  ],
+  "notes": "Temporary LAN-side MAC-only PXE bring-up. Remove or disable this once the isolated provisioning network is cabled and VLANs are settled."
+}

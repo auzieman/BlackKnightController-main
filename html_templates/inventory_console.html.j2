@@ -11,6 +11,7 @@
         </div>
         <div class="tab-strip">
             <a class="tab-link{% if tab == 'inventory' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='inventory') }}">Resources</a>
+            <a class="tab-link{% if tab == 'cmdb' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='cmdb') }}">CMDB Review</a>
             <a class="tab-link{% if tab == 'launch' %} active{% endif %}" href="{{ url_for('inventory_console.inventory_console', tab='launch') }}">Launch</a>
         </div>
     </section>
@@ -33,11 +34,18 @@
                 <div class="section-header compact-header">
                     <div>
                         <p class="eyebrow">Inventory tree</p>
-                        <h3>{{ resource_graph.resources|length }} resources</h3>
+                        <h3>{{ visible_resource_count if search else resource_graph.resources|length }} resources{% if search %} matching{% endif %}</h3>
                     </div>
                 </div>
+                <form method="get" class="resource-filter">
+                    <input type="hidden" name="tab" value="{{ tab }}">
+                    <input type="hidden" name="group" value="{{ selected_group }}">
+                    <input type="hidden" name="sort" value="{{ sort_key }}">
+                    <input type="search" name="q" value="{{ search }}" placeholder="IONOS, pve1, 10.20, Docker, BKC…">
+                    <button class="button secondary" type="submit">Search</button>
+                </form>
                 <div class="resource-tree">
-                    {% for tree_group in resource_graph.tree %}
+                    {% for tree_group in visible_resource_tree %}
                         <details class="tree-group" open>
                             <summary>
                                 <span><span class="resource-icon">{{ tree_group.meta.short }}</span> {{ tree_group.meta.label }}</span>
@@ -204,6 +212,109 @@
                         </table>
                     </section>
                 </section>
+            </section>
+        </section>
+    {% elif tab == 'cmdb' %}
+        <section class="resource-metrics inventory-resource-metrics">
+            <article class="resource-metric">
+                <span class="resource-icon">CI</span>
+                <strong>{{ cmdb_summary.resources_reviewed }}</strong>
+                <span>reviewed</span>
+            </article>
+            <article class="resource-metric">
+                <span class="resource-icon">DU</span>
+                <strong>{{ cmdb_summary.duplicate_candidates }}</strong>
+                <span>duplicates</span>
+            </article>
+            <article class="resource-metric">
+                <span class="resource-icon">ST</span>
+                <strong>{{ cmdb_summary.stale_candidates }}</strong>
+                <span>stale</span>
+            </article>
+            <article class="resource-metric">
+                <span class="resource-icon">OW</span>
+                <strong>{{ cmdb_summary.missing_owner }}</strong>
+                <span>missing owner</span>
+            </article>
+            <article class="resource-metric">
+                <span class="resource-icon">PA</span>
+                <strong>{{ cmdb_summary.missing_parent }}</strong>
+                <span>missing parent</span>
+            </article>
+        </section>
+
+        <section class="form-shell cmdb-review-shell">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Read-only normalization review</p>
+                    <h3>Inventory → ITSM / CMDB candidates</h3>
+                    <p>Lifecycle, health, source, ownership, and parentage are shown separately. This view does not mutate inventory or external CMDB systems.</p>
+                </div>
+                <div class="topbar-badges">
+                    <span class="status-pill">analysis only</span>
+                    <a class="button secondary" href="{{ url_for('resource_graph.resource_graph') }}">Open graph</a>
+                </div>
+            </div>
+            <form method="get" class="filter-bar cmdb-filter-bar">
+                <input type="hidden" name="tab" value="cmdb">
+                <label>
+                    Search
+                    <input type="text" name="q" value="{{ search }}" placeholder="ionos, stale, missing owner, openstack…">
+                </label>
+                <div class="filter-actions">
+                    <button class="button" type="submit">Apply</button>
+                    <a class="button secondary" href="{{ url_for('inventory_console.inventory_console', tab='cmdb') }}">Reset</a>
+                </div>
+            </form>
+            <section class="table-card embedded-table cmdb-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>CI candidate</th>
+                            <th>Type / subtype</th>
+                            <th>Lifecycle</th>
+                            <th>Health</th>
+                            <th>Source</th>
+                            <th>Owner</th>
+                            <th>Parent</th>
+                            <th>Findings</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in cmdb_rows %}
+                            <tr>
+                                <td>
+                                    <strong>{{ row.name }}</strong>
+                                    <small>{{ row.id }}</small>
+                                </td>
+                                <td>{{ row.type }}{% if row.subtype %}<br><small>{{ row.subtype }}</small>{% endif %}</td>
+                                <td><span class="status-pill lifecycle-{{ row.lifecycle }}">{{ row.lifecycle }}</span></td>
+                                <td><span class="status-pill health-{{ row.health }}">{{ row.health }}</span></td>
+                                <td>{{ row.source_system }}</td>
+                                <td>{{ row.owner }}</td>
+                                <td>{{ row.parent }}</td>
+                                <td>
+                                    <div class="cmdb-finding-list">
+                                        {% for finding in row.findings %}
+                                            <span>{{ finding }}</span>
+                                        {% else %}
+                                            <span class="quiet">clean enough</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td class="launch-links">
+                                    <a href="{{ url_for('resource_graph.resource_graph', resource=row.id) }}">Inspect</a>
+                                    <a href="{{ url_for('inventory_console.inventory_console', tab='cmdb', q=row.name) }}">Similar</a>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="9">No CMDB review rows matched this filter.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </section>
         </section>
     {% else %}

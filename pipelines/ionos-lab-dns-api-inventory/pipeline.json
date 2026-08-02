@@ -1,0 +1,84 @@
+{
+  "id": "ionos-lab-dns-api-inventory",
+  "name": "REMOTE DNS CANDIDATE — IONOS Lab DNS API Inventory",
+  "repo": "BlackKnightController",
+  "workflow": "ionos-lab-dns-api-inventory",
+  "resource_class": "small",
+  "status": "candidate",
+  "tags": ["ionos", "dns", "lab.auzietek.com", "remote-site", "secrets", "candidate", "fragments"],
+  "summary": "Read-only first pass for IONOS DNS API control, scoped to lab.auzietek.com before any public-site or SSL cutover work.",
+  "targets": {
+    "provider": "provider:ionos",
+    "zone_scope": "zone-scope:lab.auzietek.com",
+    "parent_zone": "zone:auzietek.com",
+    "secret": "secret:ionos/dns/api",
+    "lab_edge": "node:vm:swarm1"
+  },
+  "inputs": {
+    "tenant_slug": {"required": false, "default": "lab"},
+    "dns_api_secret_ref": {"required": false, "default": "secret:ionos/dns/api"},
+    "zone_scope": {"required": false, "default": "lab.auzietek.com"},
+    "enable_dns_writes": {"required": false, "default": false},
+    "enable_ssl_steps": {"required": false, "default": false}
+  },
+  "stages": [
+    {
+      "id": "resolve-ionos-dns-secret",
+      "action": "secret.resolve.reference",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "list-ionos-zones",
+      "action": "ionos.dns.zones.list",
+      "transport": "https-api",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "snapshot-lab-dns-records",
+      "action": "ionos.dns.records.snapshot",
+      "transport": "https-api",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "compare-lab-edge-record-map",
+      "action": "dns.records.compare_desired",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "propose-lab-dns-changeset",
+      "action": "dns.records.propose_changeset",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "apply-lab-dns-changeset-gated",
+      "action": "ionos.dns.records.apply_gated",
+      "transport": "https-api",
+      "risk": "medium",
+      "timeout_seconds": 300,
+      "enabled_by": "enable_dns_writes"
+    },
+    {
+      "id": "validate-lab-dns-resolution",
+      "action": "dns.records.validate_public_resolution",
+      "transport": "dns",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "record-ionos-dns-fragments",
+      "action": "fragments.remote_dns.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Safe route is lab.auzietek.com. Public auzietek.com cutover and SSL automation belong to later gated pipelines after this lane proves inventory, diff, rollback, and DNS validation behavior."
+}

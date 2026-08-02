@@ -1,0 +1,115 @@
+{
+  "tenant_slug": "lab",
+  "cloud_name": "bkc-lab",
+  "clouds_yaml_ref": "secret:openstack/bkc-lab/clouds.yaml",
+  "openstack_host": "10.20.0.240",
+  "horizon_url": "http://10.20.0.240/horizon/",
+  "keystone_url": "http://10.20.0.240:5000/v3",
+  "edge_horizon_url": "http://swarm1.lab.auzietek.com:8082/",
+  "admin_project": "admin",
+  "seed_domain": "Default",
+  "seed_project": "bkc-demo",
+  "seed_user": "bkc-demo-admin",
+  "seed_user_password_ref": "secret:openstack/bkc-demo-admin/password",
+  "seed_roles": [
+    "member",
+    "reader"
+  ],
+  "provider_network": {
+    "name": "provider-lab",
+    "type": "flat",
+    "physical_network": "physnet1",
+    "external": true,
+    "shared": true,
+    "subnet_name": "provider-lab-subnet",
+    "cidr": "192.168.1.0/24",
+    "gateway": "192.168.1.1",
+    "allocation_pool_start": "192.168.1.210",
+    "allocation_pool_end": "192.168.1.229",
+    "dns_nameservers": [
+      "192.168.1.10",
+      "1.1.1.1"
+    ]
+  },
+  "self_service_network": {
+    "name": "lab-internal",
+    "subnet_name": "lab-internal-v4",
+    "cidr": "172.24.10.0/24",
+    "gateway": "172.24.10.1",
+    "router_name": "tenant-demo-router"
+  },
+  "demo_flavor": {
+    "name": "bkc.nano",
+    "ram_mb": 512,
+    "disk_gb": 1,
+    "vcpus": 1
+  },
+  "demo_image": {
+    "name": "cirros-bkc-smoke",
+    "url": "https://download.cirros-cloud.net/0.6.3/cirros-0.6.3-x86_64-disk.img",
+    "disk_format": "qcow2",
+    "container_format": "bare",
+    "visibility": "public"
+  },
+  "demo_keypair": {
+    "name": "bkc-demo-key",
+    "public_key_ref": "secret:ssh/bkc/public_key"
+  },
+  "demo_security_group": {
+    "name": "bkc-demo-allow-ssh-icmp",
+    "rules": [
+      {
+        "protocol": "icmp",
+        "remote_ip_prefix": "192.168.1.0/24"
+      },
+      {
+        "protocol": "tcp",
+        "dst_port": 22,
+        "remote_ip_prefix": "192.168.1.0/24"
+      }
+    ]
+  },
+  "smoke_instance": {
+    "name": "bkc-openstack-smoke-01",
+    "image": "cirros-bkc-smoke",
+    "flavor": "bkc.nano",
+    "network": "lab-internal",
+    "key_name": "bkc-demo-key"
+  },
+  "proxmox_management_url": "https://10.20.0.41:8006/",
+  "proxmox_node": "r630-proxmox-01",
+  "proxmox_source_host": "192.168.1.9",
+  "proxmox_source_password": "",
+  "proxmox_source_node": "pve",
+  "proxmox_source_vmid": 132,
+  "proxmox_source_name": "trixie-smoke-132",
+  "proxmox_target_host": "10.20.0.41",
+  "proxmox_target_password": "changeme123",
+  "proxmox_target_storage": "local-lvm",
+  "proxmox_target_bridge": "vmbr0",
+  "proxmox_base_guests": [
+    {
+      "vmid": 201,
+      "name": "ns1-trixie-base",
+      "role": "future-ns1-base",
+      "memory_mb": 2048,
+      "vcpus": 2
+    },
+    {
+      "vmid": 202,
+      "name": "swarm1-trixie-base",
+      "role": "future-swarm1-base",
+      "memory_mb": 4096,
+      "vcpus": 2
+    }
+  ],
+  "edge_validation_urls": [
+    "http://swarm1.lab.auzietek.com:8081/",
+    "http://swarm1.lab.auzietek.com:8082/",
+    "http://swarm1.lab.auzietek.com:8085/d/bfppoy5unfpxcf/blackknightcontroller-activity?orgId=1&refresh=30s"
+  ],
+  "enable_openstack_seed": false,
+  "enable_smoke_instance": false,
+  "enable_proxmox_seed": false,
+  "enable_destroy_seed": false
+}

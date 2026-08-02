@@ -1,0 +1,143 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "vmware-k3s-lab-prepare",
+  "name": "VMware k3s Lab Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Compose VMware capacity with the existing k3s deployment lane so BKC can reuse Kubernetes deployment logic inside the ESXi lab instead of forking it.",
+  "tags": [
+    "bkc",
+    "vmware",
+    "esxi",
+    "k3s",
+    "kubernetes",
+    "reuse",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "source_platform": "platform:vmware",
+    "k3s_cluster": "node:cluster:k3s-on-vmware-lab"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_vm_create": {
+      "required": false,
+      "default": false
+    },
+    "enable_k3s_invoke": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "requires-vmware-host-prep",
+      "kind": "pipeline.dependency",
+      "with": {
+        "pipeline_id": "${dictionary.requires_pipeline}",
+        "required_events": [
+          "vmware_host.baseline_validated"
+        ]
+      }
+    },
+    {
+      "id": "vm-create-and-k3s-invoke-disabled-by-default",
+      "kind": "manual.approval",
+      "with": {
+        "enable_vm_create": "${inputs.enable_vm_create}",
+        "enable_k3s_invoke": "${inputs.enable_k3s_invoke}",
+        "requires_explicit_true": true
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-vmware-k3s-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:vmware_k3s.intent_loaded",
+        "fact:k3s_nodes"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "resolve-vmware-capacity",
+      "action": "node.capacity.resolve",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "platform": "${dictionary.source_platform}",
+        "cluster": "${dictionary.vmware_cluster_node_id}",
+        "networks": [
+          "${dictionary.management_network_node_id}",
+          "${dictionary.services_network_node_id}"
+        ]
+      },
+      "produces": [
+        "fact:vmware_capacity",
+        "relationship:hosts"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "plan-k3s-vm-nodes",
+      "action": "node.vm.plan",
+      "transport": "internal",
+      "risk": "medium",
+      "with": {
+        "nodes": "${dictionary.k3s_nodes}",
+        "platform": "${dictionary.source_platform}",
+        "enabled": "${inputs.enable_vm_create}"
+      },
+      "produces": [
+        "node:vm:k3s",
+        "relationship:member_of"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "bind-reused-k3s-pipeline",
+      "action": "pipeline.dictionary.bind.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "pipeline_id": "${dictionary.reused_pipeline}",
+        "bindings": "${dictionary.reuse_bindings}",
+        "target_nodes": "${dictionary.k3s_nodes}"
+      },
+      "produces": [
+        "artifact:k3s-reuse-bindings",
+        "relationship:uses_pipeline"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "invoke-existing-k3s-lane",
+      "action": "pipeline.invoke.plan",
+      "transport": "internal",
+      "risk": "high",
+      "with": {
+        "pipeline_id": "${dictionary.reused_pipeline}",
+        "enabled": "${inputs.enable_k3s_invoke}",
+        "bindings": "${dictionary.reuse_bindings}"
+      },
+      "produces": [
+        "event:vmware_k3s.invoke_planned",
+        "relationship:delegates_to"
+      ],
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Draft composition lane. It should reuse the k3s deployment pipeline by binding VMware-backed target nodes and dictionary values instead of copying Kubernetes deployment stages."
+}

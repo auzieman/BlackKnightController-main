@@ -1,0 +1,26 @@
+{
+  "id": "openstack-lab-seed-and-validate",
+  "name": "30 VIDEO — Seed Both Systems + Validate",
+  "repo": "BlackKnightController",
+  "workflow": "lab-dual-platform-seed-validate",
+  "resource_class": "slow",
+  "status": "proven",
+  "tags": ["30-video", "proven", "openstack", "proxmox", "seed", "validate"],
+  "proof": {
+    "run_id": "6f1853bd-2160-410a-baa6-271a1e4ae2e0",
+    "result": "OpenStack smoke server ACTIVE on lab-internal, Proxmox VM201/VM202 running on Server2, edge Horizon/Proxmox/Grafana URLs validated",
+    "completed_at": "2026-07-24T14:12:13+00:00"
+  },
+  "inputs": {
+    "tenant_slug": {"required": true, "default": "lab"},
+    "enable_openstack_seed": {"required": false, "default": true},
+    "enable_smoke_instance": {"required": false, "default": true},
+    "enable_proxmox_seed": {"required": false, "default": true},
+    "enable_destroy_seed": {"required": false, "default": false}
+  },
+  "stages": [
+    {"id": "seed-openstack-resources", "action": "openstack.resources.seed", "transport": "bkc-ssh+openstack-api", "risk": "medium", "timeout_seconds": 1800},
+    {"id": "seed-proxmox-base-guests", "action": "proxmox.vm132.migrate_clone", "transport": "bkc-ssh+proxmox", "risk": "medium", "timeout_seconds": 3600},
+    {"id": "validate-both-platforms", "action": "lab.dual_platform.validate", "transport": "bkc-ssh+http", "risk": "low", "timeout_seconds": 600}
+  ]
+}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, request, url_for
 from services.automation_runs import load_runs
 from services.integration_store import (
     load_ansible_snapshot,
@@ -115,6 +115,20 @@ def _integration_cards() -> list[dict]:
 def _fabric_cards() -> list[dict]:
     return [
         {
+            "id": "edge:internet-cloud",
+            "label": "Internet / Cloud",
+            "kind": "internet",
+            "state": "external",
+            "primary": "public routing",
+            "secondary": "outside of lab control",
+            "accent": "sky",
+            "actions": ["dns", "tls", "vpn"],
+            "facts": {
+                "role": "external network layer between the home edge and hosted remote sites",
+                "note": "keeps Spectrum separate from IONOS/public VPS hosting",
+            },
+        },
+        {
             "id": "edge:spectrum",
             "label": "Spectrum Router",
             "kind": "unmanaged-wan",
@@ -126,6 +140,51 @@ def _fabric_cards() -> list[dict]:
             "facts": {
                 "ownership": "uncontrolled upstream",
                 "role": "outside network gravity / internet edge",
+            },
+        },
+        {
+            "id": "site:ionos",
+            "label": "IONOS Remote Site",
+            "kind": "remote-site",
+            "state": "managed",
+            "primary": "auzietek.com / beta / Kanboard",
+            "secondary": "public VPS pair",
+            "accent": "indigo",
+            "actions": ["ssh", "dns api", "cert rotation"],
+            "facts": {
+                "provider": "IONOS",
+                "site": "auzietek-public",
+                "role": "remote public hosting and future VPN endpoint",
+            },
+        },
+        {
+            "id": "host:ionos-auzietek-01",
+            "label": "ionos-auzietek-01",
+            "kind": "vps",
+            "state": "running",
+            "primary": "74.208.45.165",
+            "secondary": "public edge / Drupal / beta / Kanboard",
+            "accent": "indigo",
+            "actions": ["ssh", "nginx", "docker"],
+            "facts": {
+                "ip": "74.208.45.165",
+                "role": "current public front door and Docker swarm manager",
+                "services": "Drupal, beta micro-blog, Kanboard, Grafana, Gogs archive route",
+            },
+        },
+        {
+            "id": "host:ionos-auzietek-02",
+            "label": "ionos-auzietek-02",
+            "kind": "vps",
+            "state": "warning",
+            "primary": "74.208.45.164",
+            "secondary": "worker / disk pressure",
+            "accent": "amber",
+            "actions": ["ssh", "inventory", "cleanup"],
+            "facts": {
+                "ip": "74.208.45.164",
+                "role": "secondary IONOS VPS / old worker",
+                "note": "candidate for consolidation after beta migration and backups",
             },
         },
         {
@@ -354,7 +413,11 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
         nodes.append({"data": {k: v for k, v in data.items() if k != "parent"}})
 
     fabric_node_map = {
+        "edge:internet-cloud": {"label": "Internet\nCloud", "type": "cloud", "status": "external"},
         "edge:spectrum": {"label": "Spectrum", "type": "isp", "status": "unmanaged"},
+        "site:ionos": {"label": "IONOS\nRemote Site", "type": "remote-site", "status": "running"},
+        "host:ionos-auzietek-01": {"label": "IONOS 01\n74.208.45.165", "type": "host", "status": "running"},
+        "host:ionos-auzietek-02": {"label": "IONOS 02\n74.208.45.164", "type": "host", "status": "warning"},
         "edge:ipfire": {"label": "IPFire", "type": "firewall", "status": "candidate"},
         "fabric:n2024": {"label": "N2024", "type": "switch", "status": "running"},
         "control:ipmi": {"label": "iDRAC", "type": "bmc", "status": "running"},
@@ -369,13 +432,17 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
             continue
         kept_ids.add(node_id)
         positions = {
-            "edge:spectrum": {"x": 80, "y": 220},
-            "edge:ipfire": {"x": 230, "y": 220},
-            "fabric:n2024": {"x": 400, "y": 220},
-            "control:ipmi": {"x": 590, "y": 120},
-            "core:ns1": {"x": 590, "y": 320},
-            "platform:openstack": {"x": 820, "y": 120},
-            "platform:hypervisors": {"x": 820, "y": 320},
+            "edge:internet-cloud": {"x": 55, "y": 118},
+            "edge:spectrum": {"x": 70, "y": 300},
+            "edge:ipfire": {"x": 250, "y": 300},
+            "fabric:n2024": {"x": 465, "y": 300},
+            "control:ipmi": {"x": 690, "y": 120},
+            "core:ns1": {"x": 690, "y": 300},
+            "platform:openstack": {"x": 930, "y": 175},
+            "platform:hypervisors": {"x": 930, "y": 425},
+            "site:ionos": {"x": 255, "y": 70},
+            "host:ionos-auzietek-01": {"x": 505, "y": 35},
+            "host:ionos-auzietek-02": {"x": 505, "y": 115},
         }
         node = {"data": {"id": node_id, **data}}
         if node_id in positions:
@@ -391,6 +458,10 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
             nodes.append(node)
 
     edge_specs = [
+        ("edge:internet-cloud", "edge:spectrum", "wan"),
+        ("edge:internet-cloud", "site:ionos", "public_route"),
+        ("site:ionos", "host:ionos-auzietek-01", "hosts"),
+        ("site:ionos", "host:ionos-auzietek-02", "hosts"),
         ("edge:spectrum", "edge:ipfire", "wan"),
         ("edge:ipfire", "core:ns1", "protects"),
         ("edge:ipfire", "fabric:n2024", "connected_to"),
@@ -471,3 +542,7 @@ def render_company_mind_resource_graph():
         fabric_cards_json=json.dumps(fabric_cards, sort_keys=True),
     )
 
+
+@beta_ui_blueprint.get("/beta")
+def beta_home():
+    return redirect(url_for("resource_graph.resource_graph", **request.args))

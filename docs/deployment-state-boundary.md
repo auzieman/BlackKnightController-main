@@ -11,6 +11,20 @@ host-local runtime state. Deployments must preserve this boundary.
 - Stack definition: `/srv/stacks/blackknightcontroller/docker-stack.yml`
 - Image used by the lab stack: `blackknightcontroller:swarm-lab`
 
+Treat the workstation repository, the deployed lab/site tree, and mounted
+runtime state as three separate truth surfaces:
+
+- `BlackKnightController`: product source and reviewable branch history.
+- `BlackKnightController_lab` or the Swarm site tree: lab-local deployment
+  wrapper, stack files, and build context for the running site.
+- NFS/runtime mounts: operator-edited dictionaries, generated fragments,
+  pipeline folders, keys, and run state.
+
+Do not use a destructive mirror sync into the site tree unless that directory is
+explicitly disposable. Stack wrapper files such as `build-compose.yml` and
+`docker-stack.yml` are host-local deployment assets, not generated source
+checkout artifacts.
+
 Source synchronization may update application code, templates, tests, and
 sample configuration. It must exclude `.git`, virtual environments, caches,
 screenshots, local databases, tenant data, keys, and runtime dictionaries.
@@ -41,6 +55,10 @@ live outside the default dictionaries path.
 Executor code remains versioned source. Changing stage handlers, transports,
 credentials behavior, or API routes still requires the normal BKC deployment
 procedure and a clean validation run.
+
+Before rebuilding, compare a short source hash from the repo/site tree with the
+running container for any changed core file. This catches stale-image and
+wrong-build-context failures before a pipeline run appears to “forget” a fix.
 
 The local developer checkout may contain a private `keys/` directory for
 direct testing. That directory is not the authority for the Swarm deployment;

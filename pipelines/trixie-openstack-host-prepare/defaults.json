@@ -1,0 +1,132 @@
+{
+  "tenant_slug": "lab",
+  "target_hosts": [
+    "10.20.0.240"
+  ],
+  "target_host_labels": {
+    "10.20.0.240": "r630-openstack-01"
+  },
+  "target_login": {
+    "user": "auzieman",
+    "password_ref": "demo-value:changeme123",
+    "automation_user": "root",
+    "transport": "bkc-ssh"
+  },
+  "expected_hostname": "r630-openstack-01",
+  "base_normalize_packages": [
+    "sudo",
+    "facter",
+    "curl",
+    "git",
+    "ca-certificates",
+    "lldpd",
+    "smartmontools",
+    "mdadm",
+    "net-tools",
+    "iputils-arping",
+    "dnsutils",
+    "tcpdump",
+    "pciutils",
+    "usbutils",
+    "lshw",
+    "nmap"
+  ],
+  "enable_base_normalize": true,
+  "physical_network_context": {
+    "current_bootstrap": {
+      "network": "lab-control",
+      "cidr": "10.20.0.0/24",
+      "address": "10.20.0.240",
+      "role": "PXE, installer fetch, BKC SSH validation, OpenStack host prep, and private lab control"
+    },
+    "edge_access": {
+      "network": "lab-edge",
+      "cidr": "192.168.1.0/24",
+      "address": "via 192.168.1.9 / 192.168.1.10 edge routing or reverse proxy",
+      "role": "Expose Horizon/API through the lab edge instead of depending on a direct host LAN address"
+    },
+    "future_storage": {
+      "network": "lab-storage",
+      "cidr": "deferred",
+      "address": "deferred",
+      "role": "Deferred until multi-node OpenStack, Ceph, NFS, or iSCSI is in scope"
+    }
+  },
+  "validation_targets": [
+    {
+      "id": "openstack-web",
+      "label": "OpenStack Web/API Validation",
+      "type": "openstack-horizon-or-api",
+      "expected_url": "http://10.20.0.240/horizon/",
+      "current_state": "planned-after-openstack-installer",
+      "success_criteria": [
+        "host reachable through BKC SSH",
+        "OpenStack host packages prepared",
+        "Horizon or selected OpenStack API endpoint responds",
+        "validation evidence recorded in BKC"
+      ]
+    }
+  ],
+  "smoke_target_hosts": [
+    "foobar-crm-01"
+  ],
+  "smoke_source": "existing foo.bar SuiteCRM Trixie VM or clone",
+  "smoke_mode": false,
+  "enable_package_install": false,
+  "enable_network_config": false,
+  "enable_image_cache": false,
+  "image_cache_dir": "/var/lib/bkc/openstack-images",
+  "openstack_image_assets": [
+    {
+      "name": "cirros-0.6.3-x86_64",
+      "url": "https://download.cirros-cloud.net/0.6.3/cirros-0.6.3-x86_64-disk.img",
+      "filename": "cirros-0.6.3-x86_64-disk.img",
+      "format": "qcow2",
+      "min_bytes": 10000000
+    },
+    {
+      "name": "debian-13-genericcloud-amd64",
+      "url": "https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2",
+      "filename": "debian-13-genericcloud-amd64.qcow2",
+      "format": "qcow2",
+      "min_bytes": 100000000
+    }
+  ],
+  "target_transport": "bkc-ssh",
+  "base_os_distribution": "debian",
+  "base_os_version": "trixie",
+  "openstack_network_mode": "ovs",
+  "neutron_external_bridge": "br-ex",
+  "neutron_physnet": "physnet1",
+  "neutron_tunnel_types": [
+    "vxlan"
+  ],
+  "openstack_host_packages": [
+    "crudini",
+    "curl",
+    "jq",
+    "iproute2",
+    "conntrack",
+    "ipset",
+    "ebtables",
+    "bridge-utils",
+    "vlan",
+    "openvswitch-switch",
+    "neutron-common",
+    "neutron-openvswitch-agent",
+    "python3-openstackclient",
+    "python3-neutronclient"
+  ],
+  "kernel_modules": [
+    "br_netfilter",
+    "openvswitch",
+    "8021q"
+  ],
+  "sysctl_settings": {
+    "net.bridge.bridge-nf-call-iptables": "1",
+    "net.bridge.bridge-nf-call-ip6tables": "1",
+    "net.ipv4.ip_forward": "1"
+  },
+  "prepare_script": "scripts/prepare-openstack-neutron-host.sh",
+  "validate_script": "checks/validate-openstack-neutron-host.sh"
+}

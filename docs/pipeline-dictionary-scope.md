@@ -118,6 +118,27 @@ Runtime override example:
 The same pipeline recipe can then run against another lab by changing the scoped
 dictionary instead of copying or rewriting the pipeline.
 
+## Composed Pipelines
+
+Higher-level recipes should call lower-level recipes by intent rather than
+copying their stages. This matters for the hardware migration path:
+
+```text
+baremetal-vmware-trial-prepare
+  -> produces ESXi host facts
+  -> records platform:vmware capacity
+
+vmware-k3s-lab-prepare
+  -> consumes platform:vmware capacity
+  -> reuses rx-demo/k3s deployment dictionary values
+  -> creates or selects k3s VM nodes
+  -> invokes the existing k3s deployment lane
+```
+
+The composed recipe owns target selection and variable binding. The reused
+recipe owns the actual k3s deployment logic. That keeps BKC from forking a
+nearly identical Kubernetes lane for Proxmox, VMware, OpenStack, or bare metal.
+
 ## Pipeline Values As Nodes
 
 As the Node model matures, pipeline dictionaries should refer to nodes rather

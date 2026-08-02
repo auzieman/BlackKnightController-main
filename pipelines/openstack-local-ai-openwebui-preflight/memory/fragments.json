@@ -1,0 +1,21 @@
+{
+  "fragments": [
+    {
+      "id": "ollama.server1.model-trio",
+      "rating": "candidate-known-good",
+      "source": "run:887b14d2-c118-4539-9cea-2c269cf07e39",
+      "contract": "Server1 Ollama runs on 127.0.0.1:11434 and exposes llama3.2:3b, qwen2.5-coder:1.5b, and nomic-embed-text for the local-AI/OpenWebUI demo.",
+      "do_not_regress": [
+        "Keep OpenWebUI on host networking when Ollama binds to Server1 loopback.",
+        "Validate /api/tags after model pulls and record model digests.",
+        "Treat large model additions as explicit choices because Server1 is CPU-only until a newer GPU is installed."
+      ]
+    },
+    {
+      "id": "openwebui.server1.host-network",
+      "rating": "known-good",
+      "source": "run:887b14d2-c118-4539-9cea-2c269cf07e39",
+      "contract": "Run bkc-openwebui with Podman host networking, PORT=8080, WEBUI_URL/CORS_ALLOW_ORIGIN set to the edge URL, and OLLAMA_BASE_URL=http://127.0.0.1:11434."
+    }
+  ]
+}

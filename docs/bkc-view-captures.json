@@ -1,0 +1,103 @@
+{
+  "base_url": "http://swarm1.lab.auzietek.com:5000",
+  "output_dir": "docs/images/generated",
+  "viewport": {
+    "width": 1920,
+    "height": 1200
+  },
+  "views": [
+    {
+      "name": "bkc-beta-resources",
+      "path": "/resources",
+      "width": 1920,
+      "height": 1200,
+      "wait_for": "#cy, .resource-cytoscape-canvas, .graph-canvas, main",
+      "description": "Living resource graph / infrastructure mind view"
+    },
+    {
+      "name": "bkc-beta-topology-graph",
+      "path": "/resources",
+      "width": 1920,
+      "height": 1400,
+      "wait_for": "#beta-cy",
+      "capture_selector": ".graph-panel",
+      "actions": [
+        {
+          "kind": "click",
+          "selector": "[data-view-mode='topology']",
+          "settle_ms": 2500
+        },
+        {
+          "kind": "click",
+          "selector": "#beta-scope-all",
+          "settle_ms": 1600
+        }
+      ],
+      "description": "Cropped graph panel after topology/city focus"
+    },
+    {
+      "name": "bkc-beta-edge-graph",
+      "path": "/resources",
+      "width": 1920,
+      "height": 1400,
+      "wait_for": "#beta-cy",
+      "capture_selector": ".graph-panel",
+      "actions": [
+        {
+          "kind": "click",
+          "selector": "[data-view-mode='edge']",
+          "settle_ms": 3000
+        }
+      ],
+      "description": "Cropped graph panel focused on firewall, switch, DNS/DHCP/PXE, and edge ownership"
+    },
+    {
+      "name": "bkc-beta-pipeline-graph",
+      "path": "/resources",
+      "width": 1920,
+      "height": 1500,
+      "wait_for": "#beta-cy",
+      "capture_selector": ".graph-panel",
+      "actions": [
+        {
+          "kind": "click",
+          "selector": "[data-view-mode='pipelines']",
+          "settle_ms": 3500
+        }
+      ],
+      "description": "Cropped graph panel focused on pipeline-to-infrastructure story paths"
+    },
+    {
+      "name": "bkc-pipelines",
+      "path": "/pipelines",
+      "width": 1920,
+      "height": 1200,
+      "wait_for": "main, body",
+      "description": "Pipeline catalog and run control view"
+    },
+    {
+      "name": "bkc-inventory",
+      "path": "/inventory",
+      "width": 1920,
+      "height": 1200,
+      "wait_for": "main, body",
+      "description": "Inventory console and resource-linked host view"
+    },
+    {
+      "name": "bkc-integrations",
+      "path": "/integrations",
+      "width": 1920,
+      "height": 1200,
+      "wait_for": "main, body",
+      "description": "API and platform integration configuration view"
+    },
+    {
+      "name": "bkc-pipeline-detail-edit",
+      "path": "/pipelines/microblog-publish/edit",
+      "width": 1920,
+      "height": 1400,
+      "wait_for": "main, body",
+      "description": "Pipeline lane edit/detail page showing JSON and stage-definition readability polish"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "pipeline_id": "lab-auzietek-dns-cert-prepare",
+  "ns1_host": "192.168.1.10",
+  "zone_scope": "lab.auzietek.com",
+  "dns_api_secret_ref": "secret:ionos/dns/api",
+  "dns_map_file": "ops/lab-certs/lab-auzietek-map.json",
+  "cert_name": "lab.auzietek.com",
+  "certificate_names": [
+    "lab.auzietek.com",
+    "*.lab.auzietek.com"
+  ],
+  "letsencrypt_email": "admin@auzietek.com",
+  "enable_dns_apply": false,
+  "enable_cert_request": false,
+  "enable_cert_spool": false,
+  "cert_source": {
+    "fullchain": "/etc/letsencrypt/live/lab.auzietek.com/fullchain.pem",
+    "privkey": "/etc/letsencrypt/live/lab.auzietek.com/privkey.pem"
+  }
+}

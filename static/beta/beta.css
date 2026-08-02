@@ -41,6 +41,51 @@ a:hover {
     min-height: 100vh;
 }
 
+.beta-shell.graph-focus {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.beta-shell.graph-focus .beta-rail,
+.beta-shell.graph-focus .beta-side,
+.beta-shell.graph-focus .metric-grid,
+.beta-shell.graph-focus .fabric-ribbon,
+.beta-shell.graph-focus .inspector,
+.beta-shell.graph-focus .detail-grid,
+.beta-shell.graph-focus .action-drawer,
+.beta-shell.graph-focus .lower-grid {
+    display: none;
+}
+
+.beta-shell.graph-focus .beta-main {
+    padding: 10px;
+}
+
+.beta-shell.graph-focus .beta-top {
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    border: 1px solid rgba(148, 163, 184, .18);
+    border-radius: 18px;
+    background: rgba(8, 14, 26, .74);
+}
+
+.beta-shell.graph-focus .beta-top p,
+.beta-shell.graph-focus .beta-top .eyebrow {
+    display: none;
+}
+
+.beta-shell.graph-focus .workspace-grid {
+    display: block;
+}
+
+.beta-shell.graph-focus .graph-panel {
+    min-height: calc(100vh - 86px);
+}
+
+.beta-shell.graph-focus .beta-cy {
+    height: calc(100vh - 205px);
+    min-height: 720px;
+}
+
 .beta-rail,
 .beta-side,
 .glass-panel {
@@ -542,13 +587,51 @@ a:hover {
     cursor: pointer;
 }
 
-.ask-strip {
+.ask-strip,
+.graph-ready-tray {
     margin-top: 12px;
-    padding: 10px;
+    padding: 10px 12px;
     border: 1px solid #276a66;
-    border-radius: 10px;
-    background: #0c2828;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(12, 40, 40, .92), rgba(5, 14, 26, .92));
     color: #c7fff7;
+}
+
+.graph-ready-tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 12px 32px rgba(0,0,0,.18);
+}
+
+.graph-ready-tray a {
+    color: #d9f99d;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.graph-ready-tray a:hover {
+    text-decoration: underline;
+}
+
+.ready-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: #7dd3fc;
+    box-shadow: 0 0 12px rgba(125, 211, 252, .72);
+}
+
+.graph-ready-tray.ready .ready-dot {
+    background: #86efac;
+    box-shadow: 0 0 14px rgba(134, 239, 172, .8);
+}
+
+.graph-ready-tray.failed .ready-dot {
+    background: #fb7185;
+    box-shadow: 0 0 14px rgba(251, 113, 133, .7);
 }
 
 .fact-list {

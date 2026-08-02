@@ -1,0 +1,109 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "rx-demo-esxi-swarm-compose",
+  "name": "RX CANDIDATE — Deploy rx-demo Compose to ESXi Swarm",
+  "status": "candidate",
+  "workflow": "rx-demo-esxi-swarm-compose",
+  "resource_class": "slow",
+  "owner": "rx-demo",
+  "repo": "BlackKnightController",
+  "summary": "Reuse the rx-demo Docker Compose path against the ESXi-backed Docker Swarm after validating the target fabric, node labels, image distribution, and edge access.",
+  "tags": [
+    "rx-demo",
+    "docker-compose",
+    "docker-swarm",
+    "esxi",
+    "performance",
+    "candidate"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "source_repo": "repo:rx-demo",
+    "target_swarm": "node:cluster:docker-swarm-on-esxi",
+    "target_manager": "node:vm:esxi-swarm-mgr-01",
+    "target_workers": "node_group:esxi-swarm-workers",
+    "edge": "service:lab-edge"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "rx_demo_source_path": {
+      "required": true,
+      "default": "/mnt/swarm/shared/rx-demo"
+    },
+    "compose_file": {
+      "required": true,
+      "default": "docker-compose.yml"
+    },
+    "stack_name": {
+      "required": true,
+      "default": "rx-demo"
+    },
+    "target_manager_host": {
+      "required": true,
+      "default": "10.20.0.121"
+    },
+    "target_user": {
+      "required": true,
+      "default": "admin-deploy"
+    },
+    "placement_label": {
+      "required": false,
+      "default": "bkc.workload=app"
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-esxi-swarm-target",
+      "action": "docker.swarm.preflight",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "preflight-rx-demo-compose-source",
+      "action": "rx_demo.compose.source.validate",
+      "transport": "bkc-ssh+filesystem",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "prepare-rx-demo-images",
+      "action": "rx_demo.images.prepare",
+      "transport": "docker-cli+registry",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "render-rx-demo-swarm-stack",
+      "action": "rx_demo.compose.render_stack",
+      "transport": "template",
+      "risk": "medium",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "deploy-rx-demo-to-esxi-swarm",
+      "action": "docker.stack.deploy",
+      "transport": "bkc-ssh+docker-cli",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "validate-rx-demo-compose-rollout",
+      "action": "rx_demo.compose.validate",
+      "transport": "http+docker-cli",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "record-rx-demo-esxi-performance-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "This lane deliberately mirrors the OpenStack swarm preflight/deploy/validate rhythm. It assumes rx-demo source and Compose files are supplied by an external checkout/NFS mount; this repository does not currently contain the rx-demo app checkout."
+}

@@ -1,0 +1,29 @@
+{
+  "tenant_slug": "lab",
+  "target_node_id": "node:vm:ns1",
+  "target_host": "ns1.lab.auzietek.com",
+  "dhcp_service_name": "isc-dhcp-server",
+  "dhcp_config_path": "/etc/dhcp/dhcpd.conf",
+  "dhcp_include_dir": "/etc/dhcp/dhcpd.d",
+  "dhcp_fragment_path": "/etc/dhcp/dhcpd.d/bkc-lan-mac-pxe.conf",
+  "dhcp_include_line": "include \"/etc/dhcp/dhcpd.d/bkc-lan-mac-pxe.conf\";",
+  "dhcp_defaults_path": "/etc/default/isc-dhcp-server",
+  "lan_interface": "ens18",
+  "lan_subnet": "192.168.1.0",
+  "lan_netmask": "255.255.255.0",
+  "lan_router": "192.168.1.1",
+  "lan_dns_servers": "192.168.1.1",
+  "pxe_server_ip": "192.168.1.10",
+  "allowed_pxe_host": {
+    "name": "r630-first-pxe",
+    "node_id": "node:physical_machine:r630-first",
+    "mac": "80:18:44:de:fd:38",
+    "fixed_address": "192.168.1.242",
+    "profile": "debian-trixie"
+  },
+  "ipxe_bios_filename": "undionly.kpxe",
+  "ipxe_uefi_filename": "ipxe-snponly-x86_64.efi",
+  "debian_ipxe_url": "http://192.168.1.10/pxe/debian-trixie.ipxe",
+  "enable_lan_pxe_service": false,
+  "allow_home_lan_dhcp": false
+}

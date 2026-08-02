@@ -1,0 +1,29 @@
+{
+  "tenant_slug": "lab",
+  "environment": "lab",
+  "promotion_class": "dev-to-lab",
+  "portainer_url": "https://127.0.0.1:9443",
+  "portainer_endpoint_id": 6,
+  "portainer_endpoint_name": "OpenStack Docker Swarm",
+  "portainer_user": "admin",
+  "portainer_password_ref": "runtime-env:PORTAINER_PASSWORD",
+  "stack_name": "bkc-alt",
+  "services": [
+    "bkc-alt_bkc",
+    "bkc-alt_worker"
+  ],
+  "image": "192.168.1.15:5001/blackknightcontroller/bkc:pipeline-drawio-fontbind-20260802101739",
+  "expected_digest": "sha256:9c672d3ce63cebd50223fc144205a0d8ada2030622dc983e7f3496c06d56c536",
+  "edge_url": "https://bkc.lab.auzietek.com/",
+  "expected_routes": {
+    "/beta": 404,
+    "/resources": 302,
+    "/resource": 302,
+    "/resources/legacy": 302
+  },
+  "notes": [
+    "Portainer endpoint 6 is reached from the edge host through the OpenStack Portainer agent tunnel.",
+    "Use this pipeline for canonical bkc.lab.auzietek.com promotions.",
+    "The edge BKC at 192.168.1.15:5000 is utility/fallback and may intentionally lag."
+  ]
+}

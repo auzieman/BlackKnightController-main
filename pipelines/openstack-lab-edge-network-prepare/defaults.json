@@ -1,0 +1,91 @@
+{
+  "tenant_slug": "lab",
+  "dns_zone": "lab.morgans.home.arpa",
+  "avoid_dns_suffixes": [
+    ".local"
+  ],
+  "home_lan": {
+    "node_id": "node:network:home-lan",
+    "cidr": "192.168.1.0/24",
+    "dhcp_owner": "home-router"
+  },
+  "route_anchor": {
+    "node_id": "node:vm:ns1",
+    "home_lan_address": "192.168.1.10",
+    "role": "dns-router-pxe"
+  },
+  "lab_networks": [
+    {
+      "node_id": "node:network:lab-provisioning",
+      "name": "lab-provisioning",
+      "cidr": "10.1.0.0/24",
+      "role": "pxe-installer"
+    },
+    {
+      "node_id": "node:network:lab-management",
+      "name": "lab-management",
+      "cidr": "10.1.1.0/24",
+      "role": "host-management"
+    },
+    {
+      "node_id": "node:network:lab-services",
+      "name": "lab-services",
+      "cidr": "10.1.2.0/24",
+      "role": "platform-services"
+    },
+    {
+      "node_id": "node:network:lab-tenant-provider",
+      "name": "lab-tenant-provider",
+      "cidr": "10.1.3.0/24",
+      "role": "tenant-provider-experiment"
+    }
+  ],
+  "workstation_route": {
+    "route_cidr": "10.1.0.0/16",
+    "next_hop": "192.168.1.10",
+    "dns_server": "192.168.1.10",
+    "split_dns_zone": "lab.morgans.home.arpa"
+  },
+  "edge_nodes": [
+    {
+      "node_id": "node:vm:bastion-01",
+      "name": "bastion-01",
+      "role": "ssh-bastion",
+      "home_lan_address": "192.168.1.51",
+      "management_address": "10.1.1.10"
+    },
+    {
+      "node_id": "node:vm:nginx-edge-01",
+      "name": "nginx-edge-01",
+      "role": "reverse-proxy",
+      "home_lan_address": "192.168.1.52",
+      "service_address": "10.1.2.10"
+    }
+  ],
+  "service_migration_targets": [
+    {
+      "service": "bkc",
+      "target_network": "lab-services",
+      "dns_name": "bkc.lab.morgans.home.arpa",
+      "exposure": "nginx-edge"
+    },
+    {
+      "service": "grafana",
+      "target_network": "lab-services",
+      "dns_name": "grafana.lab.morgans.home.arpa",
+      "exposure": "nginx-edge"
+    },
+    {
+      "service": "registry-cache",
+      "target_network": "lab-services",
+      "dns_name": "registry.lab.morgans.home.arpa",
+      "exposure": "internal"
+    },
+    {
+      "service": "horizon",
+      "target_network": "lab-services",
+      "dns_name": "horizon.lab.morgans.home.arpa",
+      "exposure": "nginx-edge"
+    }
+  ]
+}

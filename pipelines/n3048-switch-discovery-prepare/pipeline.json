@@ -1,0 +1,215 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "n3048-switch-discovery-prepare",
+  "name": "N3048 Switch Discovery Prepare",
+  "status": "draft",
+  "owner": "bkc",
+  "repo": "BlackKnightController",
+  "summary": "Prepare read-only discovery for the Dell PowerConnect N3048 so switch ports, VLAN intent, LLDP/MAC observations, and PXE evidence can be linked to physical nodes.",
+  "tags": [
+    "bkc",
+    "switch",
+    "dell",
+    "n3048",
+    "pxe",
+    "discovery",
+    "network",
+    "bare-metal",
+    "draft"
+  ],
+  "targets": {
+    "tenant": "tenant:lab",
+    "switch": "node:switch:n3048-lab",
+    "management_network": "node:network:lab-management",
+    "provisioning_network": "node:network:lab-provisioning"
+  },
+  "inputs": {
+    "tenant_slug": {
+      "required": true,
+      "default": "lab"
+    },
+    "enable_read_only_poll": {
+      "required": false,
+      "default": false
+    },
+    "enable_config_mutation": {
+      "required": false,
+      "default": false
+    }
+  },
+  "gates": [
+    {
+      "id": "read-only-first",
+      "kind": "manual.approval",
+      "with": {
+        "read_only": "${dictionary.read_only}",
+        "enable_read_only_poll": "${inputs.enable_read_only_poll}",
+        "enable_config_mutation": "${inputs.enable_config_mutation}",
+        "config_mutation_allowed": false
+      }
+    },
+    {
+      "id": "management-address-required",
+      "kind": "node.identity.required",
+      "with": {
+        "node_id": "${dictionary.switch_node_id}",
+        "required_facts": [
+          "management_address",
+          "credential_ref"
+        ]
+      }
+    }
+  ],
+  "stages": [
+    {
+      "id": "load-switch-intent",
+      "action": "recipe.intent.load",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "tenant_slug": "${inputs.tenant_slug}",
+        "defaults": "defaults.json"
+      },
+      "produces": [
+        "event:switch.intent_loaded",
+        "fact:switch_port_intent"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "register-switch-node",
+      "action": "node.network_switch.register.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "node_id": "${dictionary.switch_node_id}",
+        "label": "${dictionary.switch_label}",
+        "vendor": "${dictionary.vendor}",
+        "model": "${dictionary.model}",
+        "management_address": "${dictionary.management_address}"
+      },
+      "produces": [
+        "node:network_switch",
+        "relationship:managed_by"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "declare-vlan-intent",
+      "action": "network.vlan_intent.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "switch": "${dictionary.switch_node_id}",
+        "vlans": "${dictionary.vlan_intent}"
+      },
+      "produces": [
+        "node:network",
+        "relationship:uses_vlan"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "declare-port-intent",
+      "action": "switch.port_intent.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "switch": "${dictionary.switch_node_id}",
+        "ports": "${dictionary.port_intent}"
+      },
+      "produces": [
+        "node:switch_port",
+        "relationship:has_port",
+        "relationship:expected_attached_to"
+      ],
+      "timeout_seconds": 15
+    },
+    {
+      "id": "validate-management-reachability",
+      "action": "switch.management.validate",
+      "transport": "bkc-network",
+      "risk": "low",
+      "with": {
+        "switch": "${dictionary.switch_node_id}",
+        "address": "${dictionary.management_address}",
+        "transports": "${dictionary.preferred_transports}",
+        "enabled": "${inputs.enable_read_only_poll}"
+      },
+      "produces": [
+        "event:switch.management_reachable",
+        "evidence:switch_management_endpoint"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "collect-read-only-observations",
+      "action": "switch.observations.collect.plan",
+      "transport": "bkc-network",
+      "risk": "low",
+      "with": {
+        "switch": "${dictionary.switch_node_id}",
+        "observations": [
+          "identity",
+          "interfaces",
+          "vlans",
+          "lldp_neighbors",
+          "mac_table"
+        ],
+        "enabled": "${inputs.enable_read_only_poll}"
+      },
+      "produces": [
+        "event:switch.identity_observed",
+        "event:switch.interfaces_observed",
+        "event:switch.vlans_observed",
+        "event:switch.lldp_neighbors_observed",
+        "event:switch.mac_table_observed"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "id": "correlate-ports-to-nodes",
+      "action": "switch.port_node_correlate.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "switch": "${dictionary.switch_node_id}",
+        "port_intent": "${dictionary.port_intent}",
+        "evidence_sources": [
+          "lldp_neighbors",
+          "mac_table",
+          "dhcp_leases",
+          "pxe_boot_requests",
+          "bmc_inventory"
+        ]
+      },
+      "produces": [
+        "relationship:attached_to",
+        "relationship:observes_mac",
+        "event:switch.port_node_links_planned"
+      ],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "record-pxe-discovery-gates",
+      "action": "validation.evidence.plan",
+      "transport": "internal",
+      "risk": "low",
+      "with": {
+        "expected_observations": "${dictionary.expected_observations}",
+        "checks": [
+          "switch management identity recorded",
+          "PXE-facing ports declared",
+          "observed MACs can map to BKC NIC nodes",
+          "physical install pipelines can require switch port evidence"
+        ]
+      },
+      "produces": [
+        "node:validation_evidence",
+        "event:switch.discovery_plan_validated"
+      ],
+      "timeout_seconds": 30
+    }
+  ],
+  "notes": "Discovery and evidence model only. Do not mutate switch config until credentials, backup/export, out-of-band access, and VLAN IDs are confirmed."
+}
