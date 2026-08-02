@@ -3512,6 +3512,25 @@ WORKFLOW_DEFINITIONS["micro-blog-swarm-compose"] = {
         {"name": "record-micro-blog-known-good-fragment", "kind": "micro-blog-fragment-note", "active": "Recording the known-good micro-blog canary fragment.", "timeout": 60},
     ], "complete_message": "Micro-blog Docker Swarm canary completed and validated.",
 }
+WORKFLOW_DEFINITIONS["micro-blog-esxi-lab-canary-refresh"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "refresh-esxi-lab-canary-from-repo",
+            "kind": "micro-blog-esxi-lab-canary-refresh-script",
+            "active": "Building a fresh micro-blog UI image from the pinned repo commit, pushing through the lab registry, updating the ESXi Swarm service, syncing content, and validating public proof strings.",
+            "timeout": 2400,
+        },
+        {
+            "name": "record-micro-blog-known-good-fragment",
+            "kind": "micro-blog-fragment-note",
+            "active": "Recording the known-good micro-blog ESXi canary refresh fragment.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Micro-blog ESXi lab canary refresh completed and validated.",
+}
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
     "settings_optional": True,
@@ -9544,6 +9563,88 @@ def _run_micro_blog_note(run_id: str, stage_name: str, detail: str, payload: dic
     _set_stage(run_id, stage_name, "complete", detail)
 
 
+def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> None:
+    pipeline_id = "micro-blog-esxi-lab-canary-refresh"
+    pipeline, _, values = _folder_pipeline_context(pipeline_id, _run_request_inputs(run_id))
+    pipeline_folder = _repo_pipeline_folder(pipeline)
+    script_path = pipeline_folder / "scripts" / "refresh-ui-canary.sh"
+    if not script_path.exists():
+        raise PipelineExecutionError(f"Refresh helper script is missing: {script_path}")
+
+    source_path = Path(str(values.get("source_path") or "/home/auzieman/Projects/micro-blog")).expanduser().resolve()
+    if not source_path.exists():
+        raise PipelineExecutionError(f"micro-blog source path is missing: {source_path}")
+
+    source_commit = str(values.get("source_commit") or "").strip()
+    tag_prefix = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(values.get("image_tag_prefix") or "lab-canary")).strip("-")
+    if not tag_prefix:
+        tag_prefix = "lab-canary"
+    commit_part = re.sub(r"[^A-Za-z0-9_.-]+", "-", source_commit or "local").strip("-")[:24] or "local"
+    run_part = re.sub(r"[^A-Za-z0-9_.-]+", "-", run_id).strip("-")[:12] or "run"
+    image_tag = str(values.get("image_tag") or f"{tag_prefix}-{commit_part}-{run_part}").strip()
+
+    content_overlay = str(values.get("content_overlay_dir") or "").strip()
+    command = [str(script_path), str(source_path), image_tag]
+    if content_overlay:
+        overlay_path = Path(content_overlay).expanduser().resolve()
+        if not overlay_path.exists():
+            raise PipelineExecutionError(f"Content overlay path is missing: {overlay_path}")
+        command.append(str(overlay_path))
+
+    env = os.environ.copy()
+    if str(values.get("target_password") or "").strip() and not env.get("BKC_ESXI_SWARM_PASSWORD"):
+        env["BKC_ESXI_SWARM_PASSWORD"] = str(values.get("target_password"))
+
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        json.dumps(
+            {
+                "pipeline_id": pipeline_id,
+                "source_path": str(source_path),
+                "source_branch": values.get("source_branch"),
+                "source_commit": source_commit,
+                "image_tag": image_tag,
+                "edge_url": values.get("edge_url") or "http://swarm1.lab.auzietek.com:8091",
+            },
+            sort_keys=True,
+        ),
+    )
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=int(values.get("script_timeout_seconds") or 2400),
+            cwd=str(source_path),
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PipelineExecutionError(f"micro-blog ESXi canary refresh timed out after {exc.timeout}s") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise PipelineExecutionError(f"micro-blog ESXi canary refresh failed to start: {exc}") from exc
+
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+    if output:
+        append_event(run_id, "info", stage_name, output[-12000:])
+    _store_run_extra(
+        run_id,
+        {
+            "micro_blog_esxi_lab_canary_refresh": {
+                "source_path": str(source_path),
+                "source_commit": source_commit,
+                "image_tag": image_tag,
+                "returncode": completed.returncode,
+            }
+        },
+    )
+    if completed.returncode != 0:
+        raise PipelineExecutionError(output[-4000:] or f"micro-blog ESXi canary refresh exited {completed.returncode}")
+    _set_stage(run_id, stage_name, "complete", f"Micro-blog ESXi lab canary refreshed and validated with image tag {image_tag}.")
+
+
 def _run_trixie_template_upload(run_id: str, stage_name: str, template_name: str, target_key: str, mode: int = 0o644) -> None:
     pipeline, _, values = _folder_pipeline_context("ns1-trixie-pxe-smoke")
     template_path = _repo_pipeline_folder(pipeline) / "templates" / template_name
@@ -13433,6 +13534,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "micro-blog-validate-rollout":
             _run_micro_blog_validate_rollout(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-esxi-lab-canary-refresh-script":
+            _run_micro_blog_esxi_lab_canary_refresh(run_id, stage_name)
             continue
 
         if kind == "micro-blog-lab-journal-note":
