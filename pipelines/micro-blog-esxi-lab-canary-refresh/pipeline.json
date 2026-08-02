@@ -34,11 +34,11 @@
     },
     "source_branch": {
       "required": true,
-      "default": "review/astra-public-polish-20260731"
+      "default": "review/retro-users-experience-refresh-001"
     },
     "source_commit": {
       "required": true,
-      "default": "c8bdb4b"
+      "default": "1d09fb2"
     },
     "image_tag_prefix": {
       "required": true,

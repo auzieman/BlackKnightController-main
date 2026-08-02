@@ -1,8 +1,8 @@
 {
   "pipeline_id": "micro-blog-esxi-lab-canary-refresh",
   "source_path": "/home/auzieman/Projects/micro-blog",
-  "source_branch": "review/astra-public-polish-20260731",
-  "source_commit": "c8bdb4b",
+  "source_branch": "review/retro-users-experience-refresh-001",
+  "source_commit": "1d09fb2",
   "image_service": "blog-ui",
   "registry_host": "swarm1.lab.auzietek.com:5001",
   "registry_push_host": "127.0.0.1:5001",
@@ -45,27 +45,39 @@
   "proof_strings": [
     {
       "path": "/",
-      "contains": "What can Auzietek do for you"
+      "contains": "Human-first engineering for cleaner systems"
     },
     {
       "path": "/articles",
-      "contains": "Field notes, walkthroughs, and proof-backed teaching material"
+      "contains": "Articles, Proof, and Tutorial Lanes"
     },
     {
       "path": "/principles",
-      "contains": "Progressive trust and explicit boundaries"
+      "contains": "Human intent remains authoritative"
+    },
+    {
+      "path": "/thinktank",
+      "contains": "ThinkTank: Ideas with a Path Toward Useful Systems"
     },
     {
       "path": "/aiops",
-      "contains": "Bootstrap CLI versus controller"
+      "contains": "AIOps That Can Show Its Work"
     },
     {
       "path": "/business-case",
-      "contains": "Public benchmarks, carefully used"
+      "contains": "The Business Case for BlackKnightController"
     },
     {
       "path": "/friends",
       "contains": "Good infrastructure work is stronger"
+    },
+    {
+      "path": "/blog?lane=linux",
+      "contains": "Linux find regex without long command chains"
+    },
+    {
+      "path": "/blog?lane=retro",
+      "contains": "Retro computing lessons for modern engineers"
     }
   ],
   "receipt_repo": "/home/auzieman/Projects/bkc-channel",

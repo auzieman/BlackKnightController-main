@@ -108,13 +108,15 @@ done
 
 echo "+ validate proof strings"
 declare -A proof_strings=(
-  [/]="What can Auzietek do for you"
-  [/articles]="Field notes, walkthroughs, and proof-backed teaching material"
+  [/]="Human-first engineering for cleaner systems"
+  [/articles]="Articles, Proof, and Tutorial Lanes"
   [/principles]="Human intent remains authoritative"
   [/thinktank]="ThinkTank: Ideas with a Path Toward Useful Systems"
   [/aiops]="AIOps That Can Show Its Work"
   [/business-case]="The Business Case for BlackKnightController"
   [/friends]="Good infrastructure work is stronger"
+  ["/blog?lane=linux"]="Linux find regex without long command chains"
+  ["/blog?lane=retro"]="Retro computing lessons for modern engineers"
 )
 
 for path in "${!proof_strings[@]}"; do
