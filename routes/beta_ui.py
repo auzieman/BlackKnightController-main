@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, render_template
 from services.automation_runs import load_runs
 from services.integration_store import (
     load_ansible_snapshot,
@@ -471,7 +471,3 @@ def render_company_mind_resource_graph():
         fabric_cards_json=json.dumps(fabric_cards, sort_keys=True),
     )
 
-
-@beta_ui_blueprint.get("/beta")
-def beta_home():
-    return redirect(url_for("resource_graph.resource_graph", **request.args))
