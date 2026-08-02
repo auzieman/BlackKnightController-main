@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
+from routes.beta_ui import render_company_mind_resource_graph
 from services import bkc_db
 from services.access_control import Perm, require_perm
 from services.ai_graph_layout import AIGraphLayoutError, propose_cytoscape_layout
@@ -25,7 +26,7 @@ resource_graph_blueprint = Blueprint("resource_graph", __name__)
 @resource_graph_blueprint.route("/resource", methods=["GET"])
 @resource_graph_blueprint.route("/resources", methods=["GET"])
 def resource_graph():
-    return redirect(url_for("beta_ui.beta_home", **request.args))
+    return render_company_mind_resource_graph()
 
 
 @resource_graph_blueprint.route("/resources/legacy", methods=["GET"])
@@ -136,8 +137,12 @@ def ai_resource_graph_layout():
     if tenant_id is None:
         return jsonify({"error": "tenant_required"}), 403
     payload = request.get_json(silent=True) or {}
-    graph = cached_resource_graph(ttl_seconds=8)
-    elements = cytoscape_elements_from_resource_graph(graph)
+    scoped_elements = payload.get("elements")
+    if isinstance(scoped_elements, dict) and isinstance(scoped_elements.get("nodes"), list):
+        elements = scoped_elements
+    else:
+        graph = cached_resource_graph(ttl_seconds=8)
+        elements = cytoscape_elements_from_resource_graph(graph)
     try:
         proposal = propose_cytoscape_layout(
             elements,

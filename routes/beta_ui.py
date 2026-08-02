@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, request, url_for
 from services.automation_runs import load_runs
 from services.integration_store import (
     load_ansible_snapshot,
@@ -432,17 +432,17 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
             continue
         kept_ids.add(node_id)
         positions = {
-            "edge:internet-cloud": {"x": 70, "y": 120},
-            "edge:spectrum": {"x": 80, "y": 280},
-            "edge:ipfire": {"x": 250, "y": 280},
-            "fabric:n2024": {"x": 430, "y": 280},
-            "control:ipmi": {"x": 620, "y": 160},
-            "core:ns1": {"x": 620, "y": 380},
-            "platform:openstack": {"x": 850, "y": 160},
-            "platform:hypervisors": {"x": 850, "y": 380},
-            "site:ionos": {"x": 250, "y": 60},
-            "host:ionos-auzietek-01": {"x": 450, "y": 35},
-            "host:ionos-auzietek-02": {"x": 450, "y": 115},
+            "edge:internet-cloud": {"x": 55, "y": 118},
+            "edge:spectrum": {"x": 70, "y": 300},
+            "edge:ipfire": {"x": 250, "y": 300},
+            "fabric:n2024": {"x": 465, "y": 300},
+            "control:ipmi": {"x": 690, "y": 120},
+            "core:ns1": {"x": 690, "y": 300},
+            "platform:openstack": {"x": 930, "y": 175},
+            "platform:hypervisors": {"x": 930, "y": 425},
+            "site:ionos": {"x": 255, "y": 70},
+            "host:ionos-auzietek-01": {"x": 505, "y": 35},
+            "host:ionos-auzietek-02": {"x": 505, "y": 115},
         }
         node = {"data": {"id": node_id, **data}}
         if node_id in positions:
@@ -491,11 +491,26 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
         if source in kept_ids and target in kept_ids and edge_type != "pipeline_flow":
             edges.append({"data": data})
 
-    return {"nodes": nodes[:140], "edges": edges[:220]}
+    # Keep the hero graph bounded, but never ship orphaned edges. Cytoscape can
+    # fail hard when an edge references a node trimmed by the display cap; that
+    # makes the whole resource graph look "dead" even though Flask rendered the
+    # page correctly.
+    final_nodes = nodes[:140]
+    final_ids = {
+        str((node.get("data") or {}).get("id") or "")
+        for node in final_nodes
+        if isinstance(node, dict)
+    }
+    final_edges = [
+        edge
+        for edge in edges
+        if str((edge.get("data") or {}).get("source") or "") in final_ids
+        and str((edge.get("data") or {}).get("target") or "") in final_ids
+    ][:220]
+    return {"nodes": final_nodes, "edges": final_edges}
 
 
-@beta_ui_blueprint.get("/beta")
-def beta_home():
+def render_company_mind_resource_graph():
     graph = cached_resource_graph(ttl_seconds=10)
     resources = list(graph.get("resources", []))
     fabric_cards = _fabric_cards()
@@ -526,3 +541,8 @@ def beta_home():
         fabric_cards=fabric_cards,
         fabric_cards_json=json.dumps(fabric_cards, sort_keys=True),
     )
+
+
+@beta_ui_blueprint.get("/beta")
+def beta_home():
+    return redirect(url_for("resource_graph.resource_graph", **request.args))
