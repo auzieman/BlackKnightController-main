@@ -584,6 +584,11 @@ def default_stages(workflow: str, extra: dict | None = None) -> list[str]:
         if normalized == "monitoring-stack":
             return ["stack-render", "stack-deploy", "health-check", "grafana-init", "inventory-refresh", "dashboard-link"]
         return ["repo-sync", "stack-deploy", "health-check", "inventory-refresh", "dashboard-link"]
+    if normalized == "micro-blog-esxi-lab-canary-refresh":
+        return [
+            "refresh-esxi-lab-canary-from-repo",
+            "record-micro-blog-known-good-fragment",
+        ]
     if normalized == "lab-demo":
         return [
             "repo-sync",

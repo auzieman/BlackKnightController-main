@@ -12,7 +12,8 @@ import os
 
 
 def main() -> None:
-    os.environ["BKC_TENANT_SLUG"] = "lab"
+    tenant_slug = os.environ.get("BKC_PIPELINE_TENANT", "default").strip() or "default"
+    os.environ["BKC_TENANT_SLUG"] = tenant_slug
 
     import bkc_server
     from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
@@ -38,16 +39,16 @@ def main() -> None:
             "action_mode": "deploy",
         }
         run = create_automation_run(
-            tenant_slug="lab",
+            tenant_slug=tenant_slug,
             requested_by="codex:pipeline-real-run",
-        trigger_source="codex-internal",
-        repo=pipeline.get("repo", "BlackKnightController"),
-        workflow=workflow,
-        ref=os.environ.get("BKC_PIPELINE_REF", "refs/heads/beta/company-mind-workbench-20260726"),
-        commit=os.environ.get("BKC_PIPELINE_COMMIT", "483dcc2"),
-        notes=pipeline.get("notes", ""),
-        extra=extra,
-    )
+            trigger_source="codex-internal",
+            repo=pipeline.get("repo", "BlackKnightController"),
+            workflow=workflow,
+            ref=os.environ.get("BKC_PIPELINE_REF", "refs/heads/beta/company-mind-workbench-20260726"),
+            commit=os.environ.get("BKC_PIPELINE_COMMIT", "483dcc2"),
+            notes=pipeline.get("notes", ""),
+            extra=extra,
+        )
 
         if not job_queue_enabled():
             print(json.dumps({"run_id": run["id"], "status": "created-no-queue"}, sort_keys=True))
@@ -56,13 +57,13 @@ def main() -> None:
         try:
             job = enqueue_job(
                 "services.job_tasks.automation_pipeline_job",
-                (run["id"], "lab", None, None, "codex-internal"),
+                (run["id"], tenant_slug, None, None, "codex-internal"),
                 job_timeout=workflow_job_timeout(workflow, action_mode="deploy"),
                 queue_name="bkc",
                 meta={
                     "kind": "automation",
                     "run_id": run["id"],
-                    "tenant_slug": "lab",
+                    "tenant_slug": tenant_slug,
                     "repo": run["repo"],
                     "workflow": workflow,
                     "queue_name": "bkc",
