@@ -1,6 +1,6 @@
 {
   "pipeline_id": "micro-blog-esxi-lab-canary-refresh",
-  "source_path": "/home/auzieman/Projects/micro-blog",
+  "source_path": "/var/lib/bkc-builds/src/micro-blog",
   "source_branch": "review/retro-users-experience-refresh-001",
   "source_commit": "1d09fb2",
   "image_service": "blog-ui",
