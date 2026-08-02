@@ -24,6 +24,8 @@ This pipeline must not:
 - redeploy the stack;
 - reset/delete imported content by default;
 - publish to IONOS/public domains.
+- rediscover or replace existing lab edge/IPFire/Portainer tunnel paths unless
+  the health gate proves the known-good path is actually down.
 
 The important contract is inherited from `micro-blog/docs/micro-blog-pattern.md`:
 
@@ -34,3 +36,18 @@ content changes sync/import content
 
 The lab is still where we can be bold, but the bold move here is repeatability:
 article edits should be boring, visible, and re-runnable.
+
+## Known-good transport posture
+
+Do not start from scratch when operating this lane. The lab already has working
+transport patterns:
+
+- `bkc.lab.auzietek.com` is the OpenStack BKC control plane.
+- ESXi swarm app traffic is exposed through the lab edge path.
+- Portainer is a lab helper/control-plane diagnostic, not a public IONOS
+  deployment dependency.
+- IPFire/lab-edge tunnels may already expose internal services; prefer checking
+  them before inventing a new route.
+
+If one of those paths fails, record the failed health check first. Then repair
+that path or use the existing fallback deliberately.
