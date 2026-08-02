@@ -9757,30 +9757,33 @@ def _run_micro_blog_filesystem_sync_api(run_id: str, stage_name: str) -> None:
     sync_mode = str(values.get("sync_mode") or "update").strip()
     status = str(values.get("status") or "published").strip()
     theme_variant = str(values.get("theme_variant") or "midnight").strip()
+    payload_base = json.dumps(
+        {
+            "root_path": "/content",
+            "content_subdir": content_subdir,
+            "sync_mode": sync_mode,
+            "status": status,
+            "theme_variant": theme_variant,
+        },
+        sort_keys=True,
+    )
     command = f"""
 set -euo pipefail
 api_url={shlex.quote(api_url)}
-content_subdir={shlex.quote(content_subdir)}
-sync_mode={shlex.quote(sync_mode)}
-status={shlex.quote(status)}
-theme_variant={shlex.quote(theme_variant)}
+payload_base={shlex.quote(payload_base)}
 env_file=/srv/micro-blog-stack/.env
 admin_email=""
 if [ -f "$env_file" ]; then
   admin_email="$(grep -E '^ADMIN_EMAIL=' "$env_file" | tail -n 1 | cut -d= -f2- || true)"
 fi
 admin_email="${{admin_email:-admin@example.invalid}}"
-payload="$(ADMIN_EMAIL="$admin_email" CONTENT_SUBDIR="$content_subdir" SYNC_MODE="$sync_mode" STATUS="$status" THEME_VARIANT="$theme_variant" python3 - <<'PY'
+payload="$(ADMIN_EMAIL="$admin_email" python3 - "$payload_base" <<'PY'
 import json
 import os
-print(json.dumps({
-    {json.dumps("admin_email")}: os.environ["ADMIN_EMAIL"],
-    {json.dumps("root_path")}: "/content",
-    {json.dumps("content_subdir")}: os.environ["CONTENT_SUBDIR"],
-    {json.dumps("sync_mode")}: os.environ["SYNC_MODE"],
-    {json.dumps("status")}: os.environ["STATUS"],
-    {json.dumps("theme_variant")}: os.environ["THEME_VARIANT"],
-}))
+import sys
+payload = json.loads(sys.argv[1])
+payload["admin_email"] = os.environ["ADMIN_EMAIL"]
+print(json.dumps(payload, sort_keys=True))
 PY
 )"
 curl -fsS -X POST "$api_url/admin/bootstrap/filesystem-sync" \
