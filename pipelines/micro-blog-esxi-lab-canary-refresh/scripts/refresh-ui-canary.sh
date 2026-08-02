@@ -45,6 +45,11 @@ target_service="micro-blog_blog-ui"
 target_nodes=(10.20.0.121 10.20.0.122 10.20.0.123 10.20.0.124 10.20.0.125)
 edge_url="http://swarm1.lab.auzietek.com:8091"
 target_password="${BKC_ESXI_SWARM_PASSWORD:-changeme123}"
+ssh_opts=(
+  -o ConnectTimeout=10
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/tmp/bkc-micro-blog-canary-known-hosts
+)
 
 if [[ ! -d "${source_dir}" ]]; then
   echo "Source directory not found: ${source_dir}" >&2
@@ -86,19 +91,19 @@ docker build -t "${pull_image}" -f "${build_dir}/src/ui/Dockerfile" "${build_dir
 
 echo "+ transfer/push image through lab registry bridge"
 docker save "${pull_image}" |
-  ssh -o ConnectTimeout=10 "${registry_bridge_host}" \
+  ssh "${ssh_opts[@]}" "${registry_bridge_host}" \
     "docker load >/tmp/bkc-micro-blog-ui-load.log && docker tag '${pull_image}' '${push_image}' && docker push '${push_image}'"
 
 echo "+ sync content to ESXi swarm nodes"
 for host in "${target_nodes[@]}"; do
   echo "  -> ${host}"
   tar -C "${build_dir}" -cf - content |
-    ssh "${ns1_host}" \
+    ssh "${ssh_opts[@]}" "${ns1_host}" \
       "sshpass -p '${target_password}' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc-esxi-swarm-known-hosts '${target_user}@${host}' 'sudo mkdir -p /srv/micro-blog && sudo tar -C /srv/micro-blog -xf - && sudo chown -R root:root /srv/micro-blog/content'"
 done
 
 echo "+ update ${target_service}"
-ssh "${ns1_host}" \
+ssh "${ssh_opts[@]}" "${ns1_host}" \
   "sshpass -p '${target_password}' ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/tmp/bkc-esxi-swarm-known-hosts '${target_user}@${target_manager}' 'sudo docker service update --image ${pull_image} ${target_service}'"
 
 echo "+ validate core links"

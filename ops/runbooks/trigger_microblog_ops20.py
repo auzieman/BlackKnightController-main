@@ -40,14 +40,14 @@ def main() -> None:
         run = create_automation_run(
             tenant_slug="lab",
             requested_by="codex:pipeline-real-run",
-            trigger_source="codex-internal",
-            repo=pipeline.get("repo", "BlackKnightController"),
-            workflow=workflow,
-            ref="refs/heads/beta/company-mind-workbench-20260726",
-            commit="888ea20",
-            notes=pipeline.get("notes", ""),
-            extra=extra,
-        )
+        trigger_source="codex-internal",
+        repo=pipeline.get("repo", "BlackKnightController"),
+        workflow=workflow,
+        ref=os.environ.get("BKC_PIPELINE_REF", "refs/heads/beta/company-mind-workbench-20260726"),
+        commit=os.environ.get("BKC_PIPELINE_COMMIT", "483dcc2"),
+        notes=pipeline.get("notes", ""),
+        extra=extra,
+    )
 
         if not job_queue_enabled():
             print(json.dumps({"run_id": run["id"], "status": "created-no-queue"}, sort_keys=True))
