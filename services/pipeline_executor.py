@@ -3483,6 +3483,26 @@ WORKFLOW_DEFINITIONS["openstack-bkc-compose-deploy"] = {
         {"name": "publish-openstack-bkc-edge-pointer", "kind": "openstack-bkc-compose-edge-pointer", "active": "Publishing the intended edge pointer for the OpenStack-side BKC.", "timeout": 60},
     ], "complete_message": "OpenStack-side BKC Docker Compose deployment completed and validated.",
 }
+WORKFLOW_DEFINITIONS["openstack-bkc-swarm-promote"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "promote-openstack-bkc-swarm-services",
+            "kind": "openstack-bkc-swarm-promote-script",
+            "active": "Promoting the canonical OpenStack-hosted BKC Swarm services through Portainer to the selected validated image.",
+            "timeout": 900,
+        },
+        {
+            "name": "record-openstack-bkc-promotion-fragment",
+            "kind": "event-note",
+            "message": "Known-good guardrail: bkc.lab.auzietek.com points at the OpenStack bkc-alt services; edge BKC is utility/fallback.",
+            "complete": "OpenStack BKC promotion fragment recorded.",
+            "timeout": 30,
+        },
+    ],
+    "complete_message": "OpenStack BKC Swarm promotion completed.",
+}
 WORKFLOW_DEFINITIONS["esxi-docker-swarm-seed"] = {
     "supports_undeploy": False, "settings_optional": True,
     "stage_plan": [
@@ -8291,6 +8311,85 @@ def _run_openstack_bkc_edge_pointer(run_id: str, stage_name: str) -> None:
     _store_run_extra(run_id, {"openstack_bkc_edge_pointer": payload})
     append_event(run_id, "info", stage_name, json.dumps(payload, sort_keys=True))
     _set_stage(run_id, stage_name, "complete", f"{payload['label']} edge pointer recorded: {payload['edge_url']} -> {backend}")
+
+
+def _run_openstack_bkc_swarm_promote(run_id: str, stage_name: str) -> None:
+    pipeline_id = "openstack-bkc-swarm-promote"
+    pipeline, _, values = _folder_pipeline_context(pipeline_id, _run_request_inputs(run_id))
+    pipeline_folder = _repo_pipeline_folder(pipeline)
+    script_path = pipeline_folder / "scripts" / "promote-openstack-bkc-image.sh"
+    if not script_path.exists():
+        raise PipelineExecutionError(f"OpenStack BKC promote helper script is missing: {script_path}")
+
+    enable_promote = values.get("enable_promote")
+    if enable_promote is not None and not _truthy(enable_promote):
+        _set_stage(run_id, stage_name, "complete", "Promotion disabled by enable_promote=false; no service update requested.")
+        return
+
+    image = str(values.get("image") or "").strip()
+    if not image:
+        raise PipelineExecutionError("Promotion image is required.")
+
+    env = os.environ.copy()
+    env["BKC_PROMOTE_IMAGE"] = image
+    env["PORTAINER_URL"] = str(values.get("portainer_url") or "https://127.0.0.1:9443")
+    env["PORTAINER_USER"] = str(values.get("portainer_user") or "admin")
+    env["PORTAINER_ENDPOINT_ID"] = str(values.get("portainer_endpoint_id") or 6)
+    services = values.get("services")
+    if isinstance(services, list) and services:
+        env["BKC_PROMOTE_SERVICES"] = ",".join(str(item).strip() for item in services if str(item).strip())
+    elif str(values.get("services") or "").strip():
+        env["BKC_PROMOTE_SERVICES"] = str(values.get("services"))
+    if str(values.get("portainer_password") or "").strip() and not env.get("PORTAINER_PASSWORD"):
+        env["PORTAINER_PASSWORD"] = str(values.get("portainer_password"))
+
+    append_event(
+        run_id,
+        "info",
+        stage_name,
+        json.dumps(
+            {
+                "pipeline_id": pipeline_id,
+                "image": image,
+                "portainer_url": env["PORTAINER_URL"],
+                "endpoint_id": env["PORTAINER_ENDPOINT_ID"],
+                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker"),
+                "edge_url": values.get("edge_url"),
+            },
+            sort_keys=True,
+        ),
+    )
+    try:
+        completed = subprocess.run(
+            [str(script_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=int(values.get("script_timeout_seconds") or 900),
+            cwd=str(pipeline_folder),
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PipelineExecutionError(f"OpenStack BKC Swarm promotion timed out after {exc.timeout}s") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise PipelineExecutionError(f"OpenStack BKC Swarm promotion failed to start: {exc}") from exc
+
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
+    if output:
+        append_event(run_id, "info", stage_name, output[-12000:])
+    _store_run_extra(
+        run_id,
+        {
+            "openstack_bkc_swarm_promote": {
+                "image": image,
+                "returncode": completed.returncode,
+                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker"),
+            }
+        },
+    )
+    if completed.returncode != 0:
+        raise PipelineExecutionError(output[-4000:] or f"OpenStack BKC Swarm promotion exited {completed.returncode}")
+    _set_stage(run_id, stage_name, "complete", f"OpenStack BKC Swarm services promoted to {image}.")
 
 
 def _run_ns1_lan_mac_render_defaults(run_id: str, stage_name: str) -> None:
@@ -13458,6 +13557,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "openstack-bkc-compose-edge-pointer":
             _run_openstack_bkc_edge_pointer(run_id, stage_name)
+            continue
+
+        if kind == "openstack-bkc-swarm-promote-script":
+            _run_openstack_bkc_swarm_promote(run_id, stage_name)
             continue
 
         if kind == "baremetal-bmc-power-reset":
