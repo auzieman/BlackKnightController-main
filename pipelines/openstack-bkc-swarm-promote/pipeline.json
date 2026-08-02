@@ -25,7 +25,7 @@
   "inputs": {
     "image": {
       "required": true,
-      "default": "192.168.1.15:5001/blackknightcontroller/bkc:resources-tray-explainer-20260802093237"
+      "default": "192.168.1.15:5001/blackknightcontroller/bkc:resources-layout-guard-20260802095247"
     },
     "portainer_endpoint_id": {
       "required": true,

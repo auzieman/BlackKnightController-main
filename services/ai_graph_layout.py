@@ -13,6 +13,7 @@ class AIGraphLayoutError(RuntimeError):
 
 def _node_brief(node: dict) -> dict:
     data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    position = node.get("position") if isinstance(node.get("position"), dict) else {}
     return {
         "id": str(data.get("id") or ""),
         "label": str(data.get("label") or ""),
@@ -20,6 +21,10 @@ def _node_brief(node: dict) -> dict:
         "status": str(data.get("status") or ""),
         "parent": str(data.get("parent") or ""),
         "role": str(data.get("layoutRole") or ""),
+        "kind": str(data.get("kind") or ""),
+        "importance": str(data.get("layoutImportance") or data.get("importance") or ""),
+        "x": position.get("x"),
+        "y": position.get("y"),
     }
 
 
@@ -57,7 +62,28 @@ def _fallback_position(index: int, total: int, *, width: float, height: float) -
     return {"x": round((column + 1) * x_gap, 2), "y": round((row + 1) * y_gap, 2)}
 
 
-def _validate_positions(raw: object, valid_ids: list[str], *, width: float, height: float) -> list[dict]:
+def _current_position_map(nodes: list[dict]) -> dict[str, dict[str, float]]:
+    positions: dict[str, dict[str, float]] = {}
+    for node in nodes:
+        node_id = str(node.get("id") or "").strip()
+        try:
+            x = float(node.get("x"))
+            y = float(node.get("y"))
+        except (TypeError, ValueError):
+            continue
+        if node_id:
+            positions[node_id] = {"x": x, "y": y}
+    return positions
+
+
+def _validate_positions(
+    raw: object,
+    valid_ids: list[str],
+    *,
+    width: float,
+    height: float,
+    current_positions: dict[str, dict[str, float]] | None = None,
+) -> list[dict]:
     if isinstance(raw, dict):
         raw_positions = raw.get("positions")
     else:
@@ -87,7 +113,12 @@ def _validate_positions(raw: object, valid_ids: list[str], *, width: float, heig
     for index, node_id in enumerate(valid_ids):
         if node_id in seen:
             continue
-        fallback = _fallback_position(index, len(valid_ids), width=width, height=height)
+        fallback = (current_positions or {}).get(node_id) or _fallback_position(
+            index,
+            len(valid_ids),
+            width=width,
+            height=height,
+        )
         positions.append({"id": node_id, **fallback})
     return positions
 
@@ -114,6 +145,23 @@ def propose_cytoscape_layout(
 
     graph_payload = {
         "canvas": {"width": width, "height": height},
+        "layout_contract": {
+            "style": "company-mind mindmap",
+            "scope": "recent visible operational graph, not the entire database",
+            "lanes": [
+                "left: internet, public/remote, unmanaged edge",
+                "center: firewall, switch, ns1, IPMI evidence",
+                "right: hypervisors, OpenStack, ESXi, Proxmox, active services",
+                "lower: recent pipeline/action path when present",
+            ],
+            "rules": [
+                "keep explicit anchor/important nodes stable and prominent",
+                "minimize edge crossings",
+                "prefer readable branches over circular force-layout blobs",
+                "keep children close to their parent but do not overlap labels",
+                "place stale/offline items lower or slightly outside the main path",
+            ],
+        },
         "nodes": nodes[:max_nodes],
         "edges": scoped_edges,
     }
@@ -123,8 +171,10 @@ def propose_cytoscape_layout(
         "{\"positions\":[{\"id\":\"node-id\",\"x\":123,\"y\":456}],\"notes\":\"short\"}. "
         "Use every node id exactly once if practical. Keep related nodes near each other. "
         f"You must only use these exact ids: {json.dumps(valid_ids)}. "
-        "Place pipelines left-to-right, physical/cluster/container topology top-to-bottom, "
-        "and keep coordinates inside the canvas. Do not invent ids.\n\n"
+        "Make the result look like a clean Mermaid mindmap or operations architecture sketch, "
+        "not a circular force graph. Place pipelines left-to-right, physical edge/fabric/core in the center, "
+        "platforms and active services to the right, and remote/public systems above. "
+        "Keep coordinates inside the canvas. Do not invent ids.\n\n"
         f"GRAPH:\n{json.dumps(graph_payload, separators=(',', ':'))}"
     )
     ollama_body = {
@@ -143,7 +193,13 @@ def propose_cytoscape_layout(
     except json.JSONDecodeError as exc:
         raise AIGraphLayoutError(f"Ollama API response was not JSON: {exc}") from exc
     proposed = _extract_json_object(str(response.get("response") or ""))
-    positions = _validate_positions(proposed, valid_ids, width=width, height=height)
+    positions = _validate_positions(
+        proposed,
+        valid_ids,
+        width=width,
+        height=height,
+        current_positions=_current_position_map(nodes),
+    )
     return {
         "status": "ok",
         "model": model,

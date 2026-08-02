@@ -1313,6 +1313,73 @@ ${data.label || data.id || ""}`;
         exportStatus.innerHTML = `<span class="ready-dot"></span><span>${html}</span>`;
     }
 
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function currentGraphEnvelope(nodes) {
+        const positions = nodes.map((node) => node.position());
+        const xs = positions.map((position) => position.x);
+        const ys = positions.map((position) => position.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        return {
+            minX: minX - 260,
+            maxX: maxX + 260,
+            minY: minY - 180,
+            maxY: maxY + 180,
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY),
+        };
+    }
+
+    function sanitizeAiPositions(rawPositions) {
+        const visibleNodes = cy.nodes()
+            .filter((node) => !node.hasClass("hidden-stale") && !node.hasClass("hidden-pipeline") && node.visible());
+        if (!visibleNodes.length) return [];
+        const envelope = currentGraphEnvelope(visibleNodes);
+        const maxMove = Math.max(260, Math.min(620, Math.max(envelope.width, envelope.height) * 0.42));
+        const anchors = new Set(["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors", "site:ionos"]);
+        const sanitized = [];
+        const occupied = [];
+        const minGapX = 132;
+        const minGapY = 78;
+
+        (rawPositions || []).forEach((position) => {
+            const id = String(position.id || "");
+            const node = cy.getElementById(id);
+            if (!node.length || !Number.isFinite(Number(position.x)) || !Number.isFinite(Number(position.y))) {
+                return;
+            }
+            const current = node.position();
+            let x = clamp(Number(position.x), envelope.minX, envelope.maxX);
+            let y = clamp(Number(position.y), envelope.minY, envelope.maxY);
+            const dx = x - current.x;
+            const dy = y - current.y;
+            const distance = Math.hypot(dx, dy);
+            const nodeIsAnchor = anchors.has(id) || String(node.data("layoutImportance") || "") === "anchor";
+            const allowedMove = nodeIsAnchor ? Math.min(maxMove, 180) : maxMove;
+            if (distance > allowedMove) {
+                const scale = allowedMove / distance;
+                x = current.x + dx * scale;
+                y = current.y + dy * scale;
+            }
+            let attempts = 0;
+            while (occupied.some((other) => Math.abs(other.x - x) < minGapX && Math.abs(other.y - y) < minGapY) && attempts < 14) {
+                const angle = (Math.PI * 2 * attempts) / 7;
+                const radius = 58 + attempts * 18;
+                x = clamp(x + Math.cos(angle) * radius, envelope.minX, envelope.maxX);
+                y = clamp(y + Math.sin(angle) * radius, envelope.minY, envelope.maxY);
+                attempts += 1;
+            }
+            occupied.push({ x, y });
+            sanitized.push({ id, x, y });
+        });
+        return sanitized;
+    }
+
     async function exportVisibleDrawio() {
         const button = document.getElementById("beta-export-drawio");
         if (!button) return;
@@ -1388,19 +1455,21 @@ ${data.label || data.id || ""}`;
             if (!response.ok) {
                 throw new Error(result.detail || result.error || `AI layout failed with HTTP ${response.status}`);
             }
-            (result.positions || []).forEach((position) => {
+            const positions = sanitizeAiPositions(result.positions || []);
+            positions.forEach((position) => {
                 const node = cy.getElementById(String(position.id || ""));
-                if (node.length && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) {
-                    node.animate({ position: { x: Number(position.x), y: Number(position.y) } }, { duration: 420 });
-                }
+                if (node.length) node.animate({ position: { x: position.x, y: position.y } }, { duration: 420 });
             });
             window.setTimeout(() => {
-                cy.animate({ fit: { eles: cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 72 } }, { duration: 280 });
+                const arrangedIds = new Set(positions.map((position) => position.id));
+                const arranged = cy.nodes().filter((node) => arrangedIds.has(node.id()));
+                cy.animate({ fit: { eles: arranged.nonempty() ? arranged : cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 92 } }, { duration: 280 });
             }, 450);
-            actionTitle.textContent = "AI-arranged company mind";
-            actionCopy.textContent = result.notes || "Ollama proposed positions for the visible/recent graph subset; BKC validated node IDs and bounds before previewing them.";
-            actionPayload.innerHTML = `<code>${syntaxJson({ model: result.model, nodes: result.node_count, positions: result.position_count, saved: false, contract: "visible subset only" })}</code>`;
-            button.textContent = `AI arranged ${result.position_count || 0}`;
+            actionTitle.textContent = "Ollama layout preview";
+            actionCopy.textContent = result.notes || "Ollama proposed positions for the visible/recent graph subset; BKC clamped movement, preserved anchors, and spread overlapping nodes. Use Draw.io for the cleaner shareable artifact.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ model: result.model, nodes: result.node_count, proposed: result.position_count, applied: positions.length, saved: false, contract: "preview only; proposal sanitized by BKC geometry guardrails", polished_export: "Draw.io" })}</code>`;
+            setReadyTray("ready", `Ollama preview applied · ${positions.length} nodes · use Draw.io for polished export`);
+            button.textContent = `Previewed ${positions.length || 0}`;
         } catch (error) {
             console.error("BKC beta AI arrange failed", error);
             button.textContent = "AI arrange failed";
