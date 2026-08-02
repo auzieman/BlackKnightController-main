@@ -129,6 +129,10 @@
                 style: { "background-color": "#62451d", "border-color": "#d5a14b", color: "#fff6e8", shape: "ellipse", width: 96, height: 70, "font-size": 12 },
             },
             {
+                selector: "node[type = 'service']",
+                style: { "background-color": "#1f5f47", "border-color": "#8ed8b0", color: "#f0fff7", shape: "round-rectangle", width: 92, height: 58, "font-size": 11 },
+            },
+            {
                 selector: "node[type = 'vm']",
                 style: { "background-color": "#24576b", "border-color": "#7bcce1", color: "#efffff", shape: "diamond", width: 72, height: 72, "font-size": 11 },
             },
@@ -318,7 +322,7 @@ ${data.label || data.id || ""}`;
                 ["fabric:n2024", "host:server1", "switches"],
                 ["fabric:n2024", "host:server2", "switches"],
             ],
-            layout: { mode: "fan", direction: "right", arc: 96, distance: 280 },
+            layout: { mode: "mindmap", direction: "right", distance: 255, rowGap: 112, start: -112 },
         },
         "host:pve1": {
             summary: "Edge Proxmox expands into the living lab VMs. This is intentionally separate from the stale Server2 Proxmox snapshot.",
@@ -342,7 +346,7 @@ ${data.label || data.id || ""}`;
                 ["vm:ns1.lab.auzietek.com", "core:ns1", "represents"],
                 ["vm:pve-ipfire", "edge:ipfire", "represents"],
             ],
-            layout: { mode: "fan", direction: "right", arc: 122, distance: 320 },
+            layout: { mode: "mindmap", direction: "right", distance: 300, rowGap: 82, start: -246 },
         },
         "evidence:pve1-mac-adjacency": {
             summary: "MAC evidence links pve1 to its bridges, VM NICs, ns1 ARP observations, and switch-facing uplinks.",
@@ -377,7 +381,7 @@ ${data.label || data.id || ""}`;
                 ["iface:ipfire-green", "iface:pve1-vmbr20", "on_bridge"],
                 ["iface:ns1-mgmt", "iface:pve1-vmbr20", "on_bridge"],
             ],
-            layout: { mode: "fan", direction: "right", arc: 150, distance: 300 },
+            layout: { mode: "mindmap", direction: "right", distance: 305, rowGap: 62, start: -248 },
         },
         "fabric:n2024": {
             summary: "Switch snapshot fans out observed MAC/IP adjacency. It is refreshed evidence, not a live click-time poll.",
@@ -385,6 +389,11 @@ ${data.label || data.id || ""}`;
                 { id: "host:pve1", label: "pve1\nProxmox .9", type: "host", kind: "hypervisor", status: "running", ip: "192.168.1.9 / 10.20.0.9", platform: "Proxmox VE", role: "edge / legacy workloads", breadcrumb: "Switch › pve1", last_seen: "reachable now on 8006" },
                 { id: "host:server1", label: "server1\nOpenStack", type: "host", kind: "hypervisor", status: "running", ip: "10.20.0.240", platform: "OpenStack lab", role: "future BKC home", breadcrumb: "Switch › server1", last_seen: "reachable now" },
                 { id: "host:server2", label: "server2\nESXi", type: "host", kind: "hypervisor", status: "running", ip: "10.20.0.114", platform: "VMware ESXi 8", role: "API / SSH lab", breadcrumb: "Switch › server2", last_seen: "reachable now" },
+                { id: "wan:internet", label: "Internet\npublic", type: "isp", kind: "wan", status: "running", role: "public traffic / DNS resolution", breadcrumb: "Internet › Spectrum/IPFire › lab edge" },
+                { id: "wan:spectrum", label: "Spectrum\nrouter", type: "isp", kind: "uncontrolled-edge", status: "running", ip: "192.168.1.1", role: "uncontrolled home ISP edge", breadcrumb: "Internet › Spectrum › lab" },
+                { id: "edge:ipfire", label: "IPFire\nedge", type: "firewall", kind: "firewall", status: "running", ip: "10.20.0.254 / 192.168.1.82", role: "NAT / firewall / VPN candidate", breadcrumb: "Switch › IPFire edge" },
+                { id: "remote:ionos", label: "IONOS\npublic VPS", type: "cluster", kind: "remote-site", status: "running", ip: "74.208.45.165 / .164", role: "public VPS swarm / nginx / telemetry", breadcrumb: "Internet › IONOS › Auzietek sites" },
+                { id: "service:public-sites", label: "Public\nSites", type: "service", kind: "public-web", status: "running", role: "Auzietek / BlackKnight / Linux / Retro", breadcrumb: "IONOS › public sites" },
                 { id: "vm:ns1.lab.auzietek.com", label: "ns1\nDNS/NFS/PXE", type: "vm", kind: "core-vm", status: "running", ip: "10.20.0.10", platform: "Proxmox .9", role: "DHCP / DNS / NFS / PXE", parent_host: "pve1", breadcrumb: "Switch › pve1 › ns1", last_seen: "reachable now on 22" },
                 { id: "vm:swarm1.lab.auzietek.com", label: "swarm1\nBKC", type: "vm", kind: "swarm-manager", status: "running", ip: "10.20.0.15", platform: "Proxmox .9", role: "current Docker Swarm / BKC", parent_host: "pve1", breadcrumb: "Switch › pve1 › swarm1", last_seen: "docker stack ls responding" },
                 { id: "iface:pve1-vmbr0", label: "vmbr0\nLAN", type: "interface", kind: "linux-bridge", status: "running", mac: "fc:4d:d4:3d:fa:c9", ip: "192.168.1.9", seen_on: "pve1 enp8s0 / ns1 ens18", breadcrumb: "pve1 › vmbr0 › LAN side" },
@@ -406,6 +415,11 @@ ${data.label || data.id || ""}`;
                 ["fabric:n2024", "switchport:n2024-p05", "has_port"],
                 ["fabric:n2024", "switchport:n2024-p06", "has_port"],
                 ["evidence:n2024-mac-snapshot", "fabric:n2024", "describes"],
+                ["wan:internet", "remote:ionos", "routes_to"],
+                ["remote:ionos", "service:public-sites", "serves"],
+                ["wan:internet", "wan:spectrum", "routes_to"],
+                ["wan:spectrum", "edge:ipfire", "edge_to"],
+                ["edge:ipfire", "fabric:n2024", "protects"],
                 ["switchport:n2024-p01", "host:pve1", "observes_mac"],
                 ["switchport:n2024-p01", "iface:pve1-vmbr20", "observes_mac"],
                 ["switchport:n2024-p01", "iface:pve1-vmbr0", "observes_mac"],
@@ -417,7 +431,32 @@ ${data.label || data.id || ""}`;
                 ["switchport:n2024-p05", "vm:ns1.lab.auzietek.com", "observes_mac"],
                 ["switchport:n2024-p06", "vm:swarm1.lab.auzietek.com", "observes_mac"],
             ],
-            layout: { mode: "fan", direction: "right", arc: 150, distance: 330 },
+            layout: {
+                mode: "eastwest",
+                fitPadding: 82,
+                positions: {
+                    "wan:internet": { x: -520, y: -180 },
+                    "wan:spectrum": { x: -360, y: -72 },
+                    "edge:ipfire": { x: -210, y: 68 },
+                    "remote:ionos": { x: -520, y: 180 },
+                    "service:public-sites": { x: -330, y: 256 },
+                    "switchport:n2024-p04": { x: -120, y: 168 },
+                    "evidence:n2024-mac-snapshot": { x: -120, y: -208 },
+                    "switchport:n2024-p01": { x: 165, y: -172 },
+                    "host:pve1": { x: 350, y: -172 },
+                    "iface:pve1-vmbr0": { x: 540, y: -228 },
+                    "iface:pve1-vmbr20": { x: 540, y: -116 },
+                    "switchport:n2024-p02": { x: 170, y: 0 },
+                    "host:server1": { x: 360, y: 0 },
+                    "switchport:n2024-p03": { x: 170, y: 170 },
+                    "host:server2": { x: 360, y: 170 },
+                    "switchport:n2024-p05": { x: 165, y: 330 },
+                    "vm:ns1.lab.auzietek.com": { x: 360, y: 330 },
+                    "switchport:n2024-p06": { x: 165, y: 472 },
+                    "vm:swarm1.lab.auzietek.com": { x: 360, y: 472 },
+                    "iface:ipfire-green": { x: 72, y: 240 }
+                }
+            },
         },
         "host:server2": {
             summary: "ESXi expands into the staged Docker Swarm VM set.",
@@ -439,7 +478,7 @@ ${data.label || data.id || ""}`;
                 ["vm:esxi-swarm-mgr-01", "vm:esxi-swarm-worker-02", "swarm-controls"],
                 ["vm:esxi-swarm-mgr-01", "vm:esxi-swarm-worker-03", "swarm-controls"],
             ],
-            layout: { mode: "fan", direction: "right", arc: 118, distance: 310 },
+            layout: { mode: "mindmap", direction: "right", distance: 300, rowGap: 74, start: -148 },
         },
         "host:r630-proxmox-01": {
             summary: "Stale Server2 hypervisor snapshot. Kept as evidence, but no longer treated as the edge pve1 parent.",
@@ -503,19 +542,27 @@ ${data.label || data.id || ""}`;
             layout: { start: -52, step: 104, distance: 220 },
         },
         "host:server1": {
-            summary: "OpenStack expands into the first lab tenant instances.",
+            summary: "OpenStack expands into the current tenant swarm and local AI service lane.",
             nodes: [
-                { id: "vm:openstack-manager-01", label: "os-manager1", type: "vm", kind: "swarm-manager", status: "planned", platform: "OpenStack", role: "future BKC/swarm manager" },
-                { id: "vm:openstack-worker-01", label: "os-worker1", type: "vm", kind: "swarm-worker", status: "planned", platform: "OpenStack" },
-                { id: "vm:openstack-worker-02", label: "os-worker2", type: "vm", kind: "swarm-worker", status: "planned", platform: "OpenStack" },
+                { id: "vm:openstack-manager-01", label: "os-manager1\n10.20.0.232", type: "vm", kind: "swarm-manager", status: "running", platform: "OpenStack", role: "BKC / micro-blog / OpenWebUI ingress" },
+                { id: "vm:openstack-worker-01", label: "os-worker1", type: "vm", kind: "swarm-worker", status: "running", platform: "OpenStack", role: "tenant swarm worker" },
+                { id: "vm:openstack-worker-02", label: "os-worker2", type: "vm", kind: "swarm-worker", status: "running", platform: "OpenStack", role: "tenant swarm worker" },
+                { id: "stack:openstack-bkc-live", label: "BKC\nlive", type: "stack", kind: "docker-stack", status: "running", services: "bkc-alt :5000" },
+                { id: "stack:openstack-microblog", label: "micro-blog", type: "stack", kind: "docker-stack", status: "running", services: "blog-ui/api/postgres/rabbit" },
+                { id: "stack:openwebui-os", label: "OpenWebUI", type: "stack", kind: "docker-stack", status: "running", services: "openwebui-os :8088" },
+                { id: "service:ollama-server1", label: "Ollama\nserver1", type: "container", kind: "native-service", status: "running", ip: "10.20.0.240:11434", services: "qwen2.5-coder / llama3.2" },
             ],
             edges: [
                 ["host:server1", "vm:openstack-manager-01", "runs"],
                 ["host:server1", "vm:openstack-worker-01", "runs"],
                 ["host:server1", "vm:openstack-worker-02", "runs"],
                 ["platform:openstack", "host:server1", "backed_by"],
+                ["vm:openstack-manager-01", "stack:openstack-bkc-live", "orchestrates"],
+                ["vm:openstack-manager-01", "stack:openstack-microblog", "orchestrates"],
+                ["vm:openstack-manager-01", "stack:openwebui-os", "orchestrates"],
+                ["stack:openwebui-os", "service:ollama-server1", "calls"],
             ],
-            layout: { start: -82, step: 82, distance: 260 },
+            layout: { mode: "mindmap", direction: "right", distance: 285, rowGap: 68, start: -204 },
         },
         "vm:esxi-swarm-mgr-01": {
             summary: "Swarm manager expands into visible service stacks.",
@@ -531,21 +578,52 @@ ${data.label || data.id || ""}`;
                 ["vm:esxi-swarm-mgr-01", "stack:registry-esxi", "orchestrates"],
                 ["vm:esxi-swarm-mgr-01", "stack:openwebui-esxi", "orchestrates"],
             ],
-            layout: { start: -96, step: 64, distance: 230 },
+            layout: { mode: "mindmap", direction: "right", distance: 250, rowGap: 70, start: -105 },
         },
         "vm:openstack-manager-01": {
-            summary: "OpenStack manager expands into the future BKC home services.",
+            summary: "OpenStack manager expands into current BKC, content, and local AI services.",
             nodes: [
-                { id: "stack:blackknight-openstack", label: "BKC", type: "stack", kind: "docker-stack", status: "planned", services: "api/ui/worker" },
-                { id: "stack:lab-edge-openstack", label: "Edge\nProxy", type: "stack", kind: "docker-stack", status: "planned", services: "nginx routes" },
-                { id: "stack:monitoring-openstack", label: "Monitoring", type: "stack", kind: "docker-stack", status: "planned", services: "grafana/prometheus" },
+                { id: "stack:blackknight-openstack", label: "BKC", type: "stack", kind: "docker-stack", status: "running", services: "api/ui/worker" },
+                { id: "stack:microblog-openstack", label: "micro-blog", type: "stack", kind: "docker-stack", status: "running", services: "content lanes" },
+                { id: "stack:openwebui-openstack", label: "OpenWebUI", type: "stack", kind: "docker-stack", status: "running", services: "AI web UI" },
+                { id: "stack:edge-route-openstack", label: "edge route", type: "stack", kind: "route", status: "running", services: "edge nginx -> 10.20.0.232" },
             ],
             edges: [
                 ["vm:openstack-manager-01", "stack:blackknight-openstack", "orchestrates"],
-                ["vm:openstack-manager-01", "stack:lab-edge-openstack", "orchestrates"],
-                ["vm:openstack-manager-01", "stack:monitoring-openstack", "orchestrates"],
+                ["vm:openstack-manager-01", "stack:microblog-openstack", "orchestrates"],
+                ["vm:openstack-manager-01", "stack:openwebui-openstack", "orchestrates"],
+                ["stack:edge-route-openstack", "vm:openstack-manager-01", "routes_to"],
             ],
-            layout: { start: -76, step: 76, distance: 225 },
+            layout: { mode: "mindmap", direction: "right", distance: 255, rowGap: 72, start: -108 },
+        },
+        "stack:blackknight-openstack": {
+            summary: "BKC stack expands locally into a compact ownership envelope. This should not reposition the switch, hypervisors, or neighboring branches.",
+            nodes: [
+                { id: "container:bkc-web", label: "bkc\nweb", type: "container", kind: "flask-service", status: "running", services: "UI / API" },
+                { id: "container:bkc-worker", label: "worker\nfast", type: "container", kind: "job-worker", status: "running", services: "pipeline jobs" },
+                { id: "container:bkc-slow-worker", label: "worker\nslow", type: "container", kind: "job-worker", status: "running", services: "long jobs" },
+                { id: "container:bkc-redis", label: "redis", type: "container", kind: "queue-cache", status: "running", services: "rate/job state" },
+                { id: "container:bkc-nginx-route", label: "edge\nroute", type: "container", kind: "route", status: "running", services: "edge proxy" },
+                { id: "container:bkc-registry-client", label: "registry\nclient", type: "container", kind: "image-flow", status: "candidate", services: "image pulls" },
+                { id: "container:bkc-fragments", label: "fragments", type: "container", kind: "evidence", status: "running", services: "known-good memory" },
+                { id: "container:bkc-ssh-tools", label: "ssh\ntools", type: "container", kind: "bkc-ssh", status: "running", services: "lab control" },
+            ],
+            edges: [
+                ["stack:blackknight-openstack", "container:bkc-web", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-worker", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-slow-worker", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-redis", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-nginx-route", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-registry-client", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-fragments", "owns"],
+                ["stack:blackknight-openstack", "container:bkc-ssh-tools", "owns"],
+                ["container:bkc-web", "container:bkc-redis", "uses"],
+                ["container:bkc-worker", "container:bkc-redis", "uses"],
+                ["container:bkc-slow-worker", "container:bkc-redis", "uses"],
+                ["container:bkc-web", "container:bkc-fragments", "records"],
+                ["container:bkc-worker", "container:bkc-ssh-tools", "controls"],
+            ],
+            layout: { mode: "ownershipGrid", direction: "right", distance: 245, columns: 4, cellWidth: 118, cellHeight: 86, preserveAncestors: true },
         },
     };
 
@@ -938,6 +1016,63 @@ ${data.label || data.id || ""}`;
         const layout = pack.layout || {};
         const mode = String(layout.mode || "column").toLowerCase();
         const direction = String(layout.direction || "right").toLowerCase();
+        if (mode === "eastwest") {
+            const positions = layout.positions || {};
+            pack.nodes.forEach((nodeData, index) => {
+                const node = cy.getElementById(nodeData.id);
+                if (!node || node.empty()) return;
+                const offset = positions[nodeData.id];
+                if (offset) {
+                    node.animate({
+                        position: {
+                            x: rootPos.x + Number(offset.x || 0),
+                            y: rootPos.y + Number(offset.y || 0),
+                        },
+                    }, { duration: 300 });
+                    return;
+                }
+                const side = String(nodeData.type || "").toLowerCase() === "isp" || String(nodeData.id || "").includes("ionos") ? -1 : 1;
+                node.animate({
+                    position: {
+                        x: rootPos.x + (side * 320),
+                        y: rootPos.y + ((index % 7) - 3) * 86,
+                    },
+                }, { duration: 300 });
+            });
+            return;
+        }
+        if (mode === "ownershipgrid") {
+            const distance = Number(layout.distance === undefined ? 240 : layout.distance);
+            const columns = Math.max(1, Number(layout.columns || 4));
+            const cellWidth = Number(layout.cellWidth || 112);
+            const cellHeight = Number(layout.cellHeight || 82);
+            const dir = {
+                right: { x: 1, y: 0 },
+                left: { x: -1, y: 0 },
+                down: { x: 0, y: 1 },
+                up: { x: 0, y: -1 },
+            }[direction] || { x: 1, y: 0 };
+            const perpendicular = { x: -dir.y, y: dir.x };
+            const count = Math.max(1, (pack.nodes || []).length);
+            const rows = Math.ceil(count / columns);
+            const totalW = (Math.min(columns, count) - 1) * cellWidth;
+            const totalH = (rows - 1) * cellHeight;
+            pack.nodes.forEach((nodeData, index) => {
+                const node = cy.getElementById(nodeData.id);
+                if (!node || node.empty()) return;
+                const col = index % columns;
+                const row = Math.floor(index / columns);
+                const across = (col * cellWidth) - (totalW / 2);
+                const down = (row * cellHeight) - (totalH / 2);
+                node.animate({
+                    position: {
+                        x: rootPos.x + (dir.x * distance) + (perpendicular.x * across) + (dir.y * down),
+                        y: rootPos.y + (dir.y * distance) + (perpendicular.y * across) + (dir.x * down),
+                    },
+                }, { duration: 300 });
+            });
+            return;
+        }
         if (mode === "fan") {
             const count = Math.max(1, (pack.nodes || []).length);
             const arc = Number(layout.arc === undefined ? 110 : layout.arc);
@@ -958,6 +1093,32 @@ ${data.label || data.id || ""}`;
                     position: {
                         x: rootPos.x + Math.cos(angle) * distance,
                         y: rootPos.y + Math.sin(angle) * distance,
+                    },
+                }, { duration: 260 });
+            });
+            return;
+        }
+        if (mode === "mindmap") {
+            const distance = Number(layout.distance === undefined ? 260 : layout.distance);
+            const rowGap = Number(layout.rowGap === undefined ? 76 : layout.rowGap);
+            const start = Number(layout.start === undefined ? -((Math.max(1, (pack.nodes || []).length) - 1) * rowGap) / 2 : layout.start);
+            const columnGap = Number(layout.columnGap === undefined ? 44 : layout.columnGap);
+            const dir = {
+                right: { x: 1, y: 0 },
+                left: { x: -1, y: 0 },
+                down: { x: 0, y: 1 },
+                up: { x: 0, y: -1 },
+            }[direction] || { x: 1, y: 0 };
+            const perpendicular = { x: -dir.y, y: dir.x };
+            pack.nodes.forEach((nodeData, index) => {
+                const node = cy.getElementById(nodeData.id);
+                if (!node || node.empty()) return;
+                const stagger = (index % 2) * columnGap;
+                const offset = start + (index * rowGap);
+                node.animate({
+                    position: {
+                        x: rootPos.x + (dir.x * (distance + stagger)) + (perpendicular.x * offset),
+                        y: rootPos.y + (dir.y * (distance + stagger)) + (perpendicular.y * offset),
                     },
                 }, { duration: 260 });
             });
@@ -1050,6 +1211,84 @@ ${data.label || data.id || ""}`;
         });
     }
 
+    function csrfHeader() {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+        return token ? { "X-CSRFToken": token } : {};
+    }
+
+    function visibleLayoutPayload() {
+        const nodes = cy.nodes()
+            .filter((node) => !node.hasClass("hidden-stale") && !node.hasClass("hidden-pipeline") && node.visible())
+            .slice(0, 70)
+            .map((node) => {
+                const data = Object.assign({}, node.data());
+                delete data.iconLabel;
+                data.layoutImportance = node.locked() || ["edge:ipfire", "fabric:n2024", "core:ns1", "platform:openstack", "platform:hypervisors"].includes(node.id())
+                    ? "anchor"
+                    : "";
+                return { data, position: node.position() };
+            });
+        const nodeIds = new Set(nodes.map((node) => node.data.id));
+        const edges = cy.edges()
+            .filter((edge) => nodeIds.has(edge.source().id()) && nodeIds.has(edge.target().id()) && edge.visible())
+            .slice(0, 150)
+            .map((edge) => ({ data: Object.assign({}, edge.data()) }));
+        return { nodes, edges };
+    }
+
+    async function arrangeVisibleWithAi() {
+        const button = document.getElementById("beta-ai-arrange");
+        if (!button) return;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "AI arranging…";
+        try {
+            const payload = visibleLayoutPayload();
+            const model = document.getElementById("beta-ai-model")?.value || "llama3.2:3b";
+            const response = await fetch("/resources/graph/ai-layout", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: Object.assign({ "Content-Type": "application/json", Accept: "application/json" }, csrfHeader()),
+                body: JSON.stringify({
+                    elements: payload,
+                    save: false,
+                    width: Math.max(1500, cy.width() * 2),
+                    height: Math.max(950, cy.height() * 2),
+                    max_nodes: 70,
+                    model,
+                    ollama_host: "10.20.0.240",
+                }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || result.error || `AI layout failed with HTTP ${response.status}`);
+            }
+            (result.positions || []).forEach((position) => {
+                const node = cy.getElementById(String(position.id || ""));
+                if (node.length && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) {
+                    node.animate({ position: { x: Number(position.x), y: Number(position.y) } }, { duration: 420 });
+                }
+            });
+            window.setTimeout(() => {
+                cy.animate({ fit: { eles: cy.elements().not(".hidden-stale").not(".hidden-pipeline"), padding: 72 } }, { duration: 280 });
+            }, 450);
+            actionTitle.textContent = "AI-arranged company mind";
+            actionCopy.textContent = result.notes || "Ollama proposed positions for the visible/recent graph subset; BKC validated node IDs and bounds before previewing them.";
+            actionPayload.innerHTML = `<code>${syntaxJson({ model: result.model, nodes: result.node_count, positions: result.position_count, saved: false, contract: "visible subset only" })}</code>`;
+            button.textContent = `AI arranged ${result.position_count || 0}`;
+        } catch (error) {
+            console.error("BKC beta AI arrange failed", error);
+            button.textContent = "AI arrange failed";
+            actionTitle.textContent = "AI arrange failed";
+            actionCopy.textContent = String(error.message || error);
+        } finally {
+            window.setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+            }, 2600);
+        }
+    }
+
     function graphText(node) {
         const data = node.data();
         return Object.entries(data)
@@ -1080,7 +1319,7 @@ ${data.label || data.id || ""}`;
     }
 
     function expandUsefulTopology() {
-        ["platform:hypervisors", "host:pve1", "host:server1", "host:server2", "edge:ipfire", "fabric:n2024"].forEach((id) => {
+        ["platform:hypervisors", "fabric:n2024", "edge:ipfire", "host:pve1", "host:server1", "host:server2"].forEach((id) => {
             if (cy.getElementById(id).length) expandGraphPack(id, { auto: true });
         });
     }
@@ -1178,6 +1417,8 @@ ${data.label || data.id || ""}`;
     document.querySelectorAll("[data-view-mode]").forEach((button) => {
         button.addEventListener("click", () => focusViewMode(button.dataset.viewMode || "topology"));
     });
+
+    document.getElementById("beta-ai-arrange")?.addEventListener("click", arrangeVisibleWithAi);
 
     document.querySelectorAll(".pipeline-row-main").forEach((button) => {
         button.addEventListener("click", () => {

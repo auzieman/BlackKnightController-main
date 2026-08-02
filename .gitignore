@@ -6,6 +6,13 @@ venv/
 
 .DS_Store
 
+.env
+.env.*
+!.env.sample
+**/.env
+**/.env.*
+!**/.env.sample
+
 keys/*
 !keys/.gitkeep
 docker/bkc/known_hosts

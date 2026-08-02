@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, request, url_for
 from services.automation_runs import load_runs
 from services.integration_store import (
     load_ansible_snapshot,
@@ -420,11 +420,26 @@ def _beta_graph_elements(elements: dict, fabric_cards: list[dict], pipeline_card
         if source in kept_ids and target in kept_ids and edge_type != "pipeline_flow":
             edges.append({"data": data})
 
-    return {"nodes": nodes[:140], "edges": edges[:220]}
+    # Keep the hero graph bounded, but never ship orphaned edges. Cytoscape can
+    # fail hard when an edge references a node trimmed by the display cap; that
+    # makes the whole resource graph look "dead" even though Flask rendered the
+    # page correctly.
+    final_nodes = nodes[:140]
+    final_ids = {
+        str((node.get("data") or {}).get("id") or "")
+        for node in final_nodes
+        if isinstance(node, dict)
+    }
+    final_edges = [
+        edge
+        for edge in edges
+        if str((edge.get("data") or {}).get("source") or "") in final_ids
+        and str((edge.get("data") or {}).get("target") or "") in final_ids
+    ][:220]
+    return {"nodes": final_nodes, "edges": final_edges}
 
 
-@beta_ui_blueprint.get("/beta")
-def beta_home():
+def render_company_mind_resource_graph():
     graph = cached_resource_graph(ttl_seconds=10)
     resources = list(graph.get("resources", []))
     fabric_cards = _fabric_cards()
@@ -455,3 +470,8 @@ def beta_home():
         fabric_cards=fabric_cards,
         fabric_cards_json=json.dumps(fabric_cards, sort_keys=True),
     )
+
+
+@beta_ui_blueprint.get("/beta")
+def beta_home():
+    return redirect(url_for("resource_graph.resource_graph", **request.args))
