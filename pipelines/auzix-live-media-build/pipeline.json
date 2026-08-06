@@ -7,7 +7,7 @@
   "resource_class": "slow",
   "status": "candidate",
   "tags": ["auzix", "live-media", "squashfs", "overlay", "recovery", "r730", "build", "receipt"],
-  "summary": "Derive AuziX from the pinned bootable ISO and recovered staged root, applying only committed SSH and InstallerEFL deltas before VM135 validation.",
+  "summary": "Derive AuziX from the pinned bootable ISO's embedded SquashFS, applying only committed SSH and InstallerEFL deltas before VM135 validation.",
   "targets": {
     "controller": "host:ns1",
     "worker": "host:r730-ai-01",

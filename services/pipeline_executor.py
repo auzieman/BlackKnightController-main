@@ -1212,7 +1212,6 @@ WORKFLOW_DEFINITIONS = {
                     "bash -lc 'set -e; "
                     "test -x /srv/nfs/swarm/AuziX/src/scripts/run-auzix-live-recovery-r730.sh; "
                     "test -x /srv/nfs/swarm/AuziX/src/scripts/build-auzix-installer-efl-package.sh; "
-                    "test -d /srv/nfs/swarm/AuziX/src/out/auzix-iso/iso/AuzixRoot; "
                     "echo 'dbc37d309059b70cc39e37b7a5e0be7d27dae770654bf3ccf7ddf7d142c25cb6  /srv/nfs/swarm/AuziX/src/artifacts/auzix/auzix-live-theme-app-candidate.iso' | sha256sum -c -; "
                     "test -s /srv/nfs/swarm/AuziX/runtime/keys/authorized_keys; "
                     "test -s /srv/nfs/swarm/AuziX/runtime/secrets/live-root-shadow; "
@@ -1230,7 +1229,7 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc 'set -e; "
                     "run_id=$(date -u +%Y%m%dT%H%M%SZ); "
-                    "ssh -o BatchMode=yes root@10.20.0.130 \"AUZIX_SOURCE_COMMIT=379ee89 AUZIX_RUN_ID=$run_id AUZIX_ISO_NAME=auzix-live-recovery-$run_id.iso /mnt/ns1/AuziX/src/scripts/run-auzix-live-recovery-r730.sh\"; "
+                    "ssh -o BatchMode=yes root@10.20.0.130 \"AUZIX_SOURCE_COMMIT=3a08d8c AUZIX_RUN_ID=$run_id AUZIX_ISO_NAME=auzix-live-recovery-$run_id.iso /mnt/ns1/AuziX/src/scripts/run-auzix-live-recovery-r730.sh\"; "
                     "echo auzix_live_recovery_run_id=$run_id'"
                 ),
                 "timeout": 7200,
