@@ -1230,7 +1230,7 @@ WORKFLOW_DEFINITIONS = {
                 "command": (
                     "bash -lc 'set -e; "
                     "run_id=$(date -u +%Y%m%dT%H%M%SZ); "
-                    "ssh -o BatchMode=yes root@10.20.0.130 \"AUZIX_SOURCE_COMMIT=e3078fe AUZIX_RUN_ID=$run_id AUZIX_ISO_NAME=auzix-live-recovery-$run_id.iso /mnt/ns1/AuziX/src/scripts/run-auzix-live-recovery-r730.sh\"; "
+                    "ssh -o BatchMode=yes root@10.20.0.130 \"AUZIX_SOURCE_COMMIT=379ee89 AUZIX_RUN_ID=$run_id AUZIX_ISO_NAME=auzix-live-recovery-$run_id.iso /mnt/ns1/AuziX/src/scripts/run-auzix-live-recovery-r730.sh\"; "
                     "echo auzix_live_recovery_run_id=$run_id'"
                 ),
                 "timeout": 7200,
