@@ -1199,6 +1199,59 @@ WORKFLOW_DEFINITIONS = {
             "display_name": "kernel-builder-run",
         },
     },
+    "auzix-live-media-build": {
+        "supports_undeploy": False,
+        "stage_plan": [
+            {
+                "name": "preflight-pinned-recovery-inputs",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Checking the pinned AuziX recovery artifact, source commit handoff, runtime key, and R730 worker.",
+                "complete": "Pinned AuziX recovery inputs and worker are ready.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "test -x /srv/nfs/swarm/AuziX/src/scripts/run-auzix-live-recovery-r730.sh; "
+                    "test -x /srv/nfs/swarm/AuziX/src/scripts/build-auzix-installer-efl-package.sh; "
+                    "test -d /srv/nfs/swarm/AuziX/src/out/auzix-iso/iso/AuzixRoot; "
+                    "echo 'dbc37d309059b70cc39e37b7a5e0be7d27dae770654bf3ccf7ddf7d142c25cb6  /srv/nfs/swarm/AuziX/src/artifacts/auzix/auzix-live-theme-app-candidate.iso' | sha256sum -c -; "
+                    "test -s /srv/nfs/swarm/AuziX/runtime/keys/authorized_keys; "
+                    "test -s /srv/nfs/swarm/AuziX/runtime/secrets/live-root-shadow; "
+                    "ssh -o BatchMode=yes root@10.20.0.130 \"docker info >/dev/null; test -d /mnt/ns1/AuziX/src\"; "
+                    "echo auzix-live-media-worker-ready'"
+                ),
+                "timeout": 120,
+            },
+            {
+                "name": "derive-and-validate-recovery-media",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Deriving the committed AuziX recovery SquashFS on the R730 while preserving the pinned kernel and boot map.",
+                "complete": "AuziX recovery derivative passed its static payload and boot checks.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "run_id=$(date -u +%Y%m%dT%H%M%SZ); "
+                    "ssh -o BatchMode=yes root@10.20.0.130 \"AUZIX_SOURCE_COMMIT=e3078fe AUZIX_RUN_ID=$run_id AUZIX_ISO_NAME=auzix-live-recovery-$run_id.iso /mnt/ns1/AuziX/src/scripts/run-auzix-live-recovery-r730.sh\"; "
+                    "echo auzix_live_recovery_run_id=$run_id'"
+                ),
+                "timeout": 7200,
+            },
+            {
+                "name": "publish-live-recovery-receipt",
+                "transport": "ssh-controller",
+                "target": "controller",
+                "active": "Publishing the pinned-input AuziX recovery receipt and checksums for VM135 validation.",
+                "complete": "AuziX recovery receipt is available for VM135 validation.",
+                "command": (
+                    "bash -lc 'set -e; "
+                    "latest=$(ls -1t /srv/nfs/swarm/AuziX/build-receipts/live-recovery-*.receipt | head -n1); "
+                    "test -s \"$latest\"; cat \"$latest\"; "
+                    "grep -Fx status=pass \"$latest\"'"
+                ),
+                "timeout": 120,
+            },
+        ],
+        "complete_message": "AuziX preserved live recovery build completed with a published receipt.",
+    },
     "auzix-vm130-deploy": {
         "supports_undeploy": False,
         "stage_plan": [
@@ -3581,6 +3634,86 @@ WORKFLOW_DEFINITIONS["micro-blog-lab-content-canary"] = {
         },
     ],
     "complete_message": "Micro-blog lab content canary synced and validated without a runtime redeploy.",
+}
+WORKFLOW_DEFINITIONS["auzietek-beta-preview-deploy"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "preflight-source-and-remote-runtime",
+            "kind": "micro-blog-public-ui-preflight",
+            "active": "Validating lab-build source, IONOS Compose runtime, and remote .env before a UI/runtime refresh.",
+            "timeout": 180,
+        },
+        {
+            "name": "sync-source-preserving-remote-secrets",
+            "kind": "micro-blog-public-ui-source-sync",
+            "active": "Syncing micro-blog source to IONOS while preserving .env, docker-compose.yml, and deployment-local state.",
+            "timeout": 600,
+        },
+        {
+            "name": "build-ui-image",
+            "kind": "micro-blog-public-ui-build",
+            "active": "Building the public blog-ui image from the refreshed source on the IONOS Compose host.",
+            "timeout": 900,
+        },
+        {
+            "name": "restart-ui-service",
+            "kind": "micro-blog-public-ui-up",
+            "active": "Recreating only the blog-ui service so route/theme code updates take effect.",
+            "timeout": 300,
+        },
+        {
+            "name": "smoke-public-preview-urls",
+            "kind": "micro-blog-public-ui-smoke",
+            "active": "Validating public lane URLs and featured article routing after the UI refresh.",
+            "timeout": 240,
+        },
+        {
+            "name": "record-deploy-known-good-fragment",
+            "kind": "micro-blog-public-ui-fragment-note",
+            "active": "Recording the UI/runtime deploy receipt and .env preservation guardrail.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Micro-blog public UI/runtime refresh completed with deployment secrets preserved.",
+}
+WORKFLOW_DEFINITIONS["auzietek-public-article-publish"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "backup-live-site-before-public-promotion",
+            "kind": "micro-blog-public-backup",
+            "active": "Backing up the IONOS Compose micro-blog content, database, compose file, and redacted environment keys before public promotion.",
+            "timeout": 900,
+        },
+        {
+            "name": "sync-approved-content-to-public-compose-volume",
+            "kind": "micro-blog-public-content-rsync",
+            "active": "Syncing approved micro-blog content/media into the production Compose content volume without rebuilding or restarting the runtime.",
+            "timeout": 600,
+        },
+        {
+            "name": "import-public-filesystem-content",
+            "kind": "micro-blog-public-filesystem-sync-api",
+            "active": "Calling the production blog-api filesystem sync endpoint on localhost so the copied Markdown/assets become public content.",
+            "timeout": 300,
+        },
+        {
+            "name": "validate-public-compose-services",
+            "kind": "micro-blog-public-compose-proof",
+            "active": "Validating production Compose services and public lane URLs after content promotion.",
+            "timeout": 240,
+        },
+        {
+            "name": "record-article-publish-fragment",
+            "kind": "micro-blog-public-fragment-note",
+            "active": "Recording the content-only public promotion receipt and guardrail.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "Micro-blog public content promotion completed without a runtime redeploy.",
 }
 WORKFLOW_DEFINITIONS["baremetal-lab-reset"] = {
     "supports_undeploy": False,
@@ -9203,6 +9336,19 @@ def _micro_blog_content_context(run_id: str) -> tuple[dict, dict, dict]:
     return _folder_pipeline_context("micro-blog-lab-content-canary", _run_request_inputs(run_id))
 
 
+def _micro_blog_public_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("auzietek-public-article-publish", _run_request_inputs(run_id))
+
+
+def _micro_blog_public_ui_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("auzietek-beta-preview-deploy", _run_request_inputs(run_id))
+
+
+def _micro_blog_public_ui_values(run_id: str) -> dict:
+    _, _, values = _micro_blog_public_ui_context(run_id)
+    return values
+
+
 def _micro_blog_remote(run_id: str, command: str, *, timeout: int = 300, host_override: str = "") -> str:
     _, _, values = _micro_blog_context(run_id)
     host = str(host_override or values.get("target_manager_host") or "10.20.0.121").strip()
@@ -9855,6 +10001,357 @@ def _run_micro_blog_content_fragment_note(run_id: str, stage_name: str) -> None:
         "lab_url": values.get("lab_url") or "http://swarm1.lab.auzietek.com:8091",
     }
     _run_micro_blog_note(run_id, stage_name, "Recorded content-only micro-blog refresh fragment.", payload)
+
+
+def _micro_blog_public_values(run_id: str) -> dict:
+    _, _, values = _micro_blog_public_context(run_id)
+    return values
+
+
+def _micro_blog_public_host(values: dict) -> tuple[str, str]:
+    host = str(values.get("public_remote_host") or values.get("remote_host") or "74.208.45.165").strip()
+    user = str(values.get("public_remote_user") or values.get("remote_user") or "root").strip()
+    if not host or not user:
+        raise PipelineExecutionError("Public micro-blog promotion requires public_remote_host and public_remote_user.")
+    return host, user
+
+
+def _micro_blog_public_app_path(values: dict) -> str:
+    return str(values.get("public_remote_app_path") or "/svc/micro-blog").rstrip("/")
+
+
+def _micro_blog_public_ui_paths(values: dict) -> dict[str, str]:
+    remote_path = str(values.get("remote_path") or values.get("public_remote_app_path") or "/svc/micro-blog").rstrip("/")
+    source_path = str(values.get("source_path") or "/var/lib/bkc-builds/src/micro-blog").rstrip("/")
+    build_host = str(values.get("build_host") or "10.20.0.233").strip()
+    build_user = str(values.get("build_user") or "admin-deploy").strip()
+    remote_host = str(values.get("remote_host") or values.get("public_remote_host") or "74.208.45.165").strip()
+    remote_user = str(values.get("remote_user") or values.get("public_remote_user") or "root").strip()
+    compose_service = str(values.get("compose_service") or "blog-ui").strip()
+    return {
+        "remote_path": remote_path,
+        "source_path": source_path,
+        "build_host": build_host,
+        "build_user": build_user,
+        "remote_host": remote_host,
+        "remote_user": remote_user,
+        "compose_service": compose_service,
+    }
+
+
+def _bool_value(value: object, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on", "enabled"}
+
+
+def _run_micro_blog_public_ui_preflight(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    paths = _micro_blog_public_ui_paths(values)
+    if not paths["remote_host"] or not paths["remote_user"]:
+        raise PipelineExecutionError("Public UI deploy requires remote_host/remote_user.")
+    source_out = "source_sync=disabled; using source already staged on remote Compose host"
+    if _bool_value(values.get("sync_source"), False):
+        if not paths["build_host"] or not paths["build_user"]:
+            raise PipelineExecutionError("Public UI deploy requires build_host/build_user when sync_source is enabled.")
+        source_check = f"""
+set -euo pipefail
+source_path={shlex.quote(paths["source_path"])}
+test -d "$source_path"
+test -f "$source_path/src/ui/app.py"
+test -f "$source_path/src/ui/Dockerfile"
+test -f "$source_path/src/ui/templates/public_index.html"
+printf 'source_path=%s\\n' "$source_path"
+find "$source_path/src/ui" -maxdepth 2 -type f | wc -l
+"""
+        source_out = run_remote_command(host=paths["build_host"], user=paths["build_user"], command=source_check, timeout=180)
+    remote_check = f"""
+set -euo pipefail
+cd {shlex.quote(paths["remote_path"])}
+test -f .env
+test -f docker-compose.yml
+test -f src/ui/app.py
+test -f src/ui/Dockerfile
+docker compose ps --format '{{{{.Service}}}} {{{{.State}}}}' | sort
+"""
+    remote_out = run_remote_command(host=paths["remote_host"], user=paths["remote_user"], command=remote_check, timeout=180)
+    append_event(run_id, "info", stage_name, (source_out + "\n" + remote_out)[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Lab-build source and IONOS Compose runtime are ready; remote .env exists.")
+
+
+def _run_micro_blog_public_ui_source_sync(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    paths = _micro_blog_public_ui_paths(values)
+    if not _bool_value(values.get("sync_source"), False):
+        note = "Source sync disabled for this run; using source already staged at the IONOS Compose path."
+        _store_run_extra(run_id, {"micro_blog_public_ui_source_sync": {"mode": "remote-source-already-staged", "remote_path": paths["remote_path"]}})
+        append_event(run_id, "info", stage_name, note)
+        _set_stage(run_id, stage_name, "complete", note)
+        return
+    excludes = values.get("rsync_excludes") or [".git/", ".env", "docker-compose.yml", "__pycache__/", ".pytest_cache/"]
+    exclude_args = " ".join(f"--exclude {shlex.quote(str(item))}" for item in excludes)
+    target = f"{paths['remote_user']}@{paths['remote_host']}:{paths['remote_path'].rstrip('/')}/"
+    command = f"""
+set -euo pipefail
+source_path={shlex.quote(paths["source_path"])}
+target={shlex.quote(target)}
+test -d "$source_path"
+rsync -az --delete --itemize-changes {exclude_args} "$source_path"/ "$target"
+ssh {shlex.quote(paths["remote_user"] + "@" + paths["remote_host"])} 'test -s {shlex.quote(paths["remote_path"] + "/.env")} && test -f {shlex.quote(paths["remote_path"] + "/docker-compose.yml")}'
+"""
+    out = run_remote_command(host=paths["build_host"], user=paths["build_user"], command=command, timeout=600)
+    _store_run_extra(
+        run_id,
+        {
+            "micro_blog_public_ui_source_sync": {
+                "mode": "rsync-delete-with-deployment-excludes",
+                "source_host": paths["build_host"],
+                "source_path": paths["source_path"],
+                "remote_host": paths["remote_host"],
+                "remote_path": paths["remote_path"],
+                "preserved": [".env", "docker-compose.yml"],
+            }
+        },
+    )
+    append_event(run_id, "info", stage_name, out[-8000:])
+    _set_stage(run_id, stage_name, "complete", "Micro-blog source synced to IONOS while preserving .env and docker-compose.yml.")
+
+
+def _run_micro_blog_public_ui_build(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    paths = _micro_blog_public_ui_paths(values)
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(paths["remote_path"])}
+test -s .env
+docker compose build {shlex.quote(paths["compose_service"])}
+"""
+    out = run_remote_command(host=paths["remote_host"], user=paths["remote_user"], command=command, timeout=900)
+    append_event(run_id, "info", stage_name, out[-8000:])
+    _set_stage(run_id, stage_name, "complete", f"Built Compose service {paths['compose_service']} from refreshed source.")
+
+
+def _run_micro_blog_public_ui_up(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    paths = _micro_blog_public_ui_paths(values)
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(paths["remote_path"])}
+test -s .env
+docker compose up -d {shlex.quote(paths["compose_service"])}
+docker compose ps {shlex.quote(paths["compose_service"])}
+"""
+    out = run_remote_command(host=paths["remote_host"], user=paths["remote_user"], command=command, timeout=300)
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", f"Recreated Compose service {paths['compose_service']} without touching unrelated services.")
+
+
+def _run_micro_blog_public_ui_smoke(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    smoke_urls = values.get("public_smoke_urls") or [
+        "https://auzietek.com/",
+        "https://www.blackknightcontroller.com/",
+        "https://blackknightcontroller.com/blog?lane=blackknight",
+        "https://linux-users.auzietek.com/blog",
+        "https://retro-users.auzietek.com/blog",
+    ]
+    checks: list[dict] = []
+    for url in [str(item).strip() for item in smoke_urls if str(item).strip()]:
+        request = urllib.request.Request(url, headers={"User-Agent": "BlackKnightController-ui-deploy-smoke/1.0"})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - operator-supplied smoke URLs
+                body = response.read(250000).decode("utf-8", errors="replace")
+                title_match = re.search(r"<title>(.*?)</title>", body, flags=re.I | re.S)
+                title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+                checks.append({"url": url, "status": response.status, "title": title})
+        except Exception as exc:  # noqa: BLE001
+            raise PipelineExecutionError(f"Public UI smoke failed for {url}: {exc}") from exc
+    _store_run_extra(run_id, {"micro_blog_public_ui_smoke": checks})
+    append_event(run_id, "info", stage_name, json.dumps(checks, indent=2, sort_keys=True)[-6000:])
+    _set_stage(run_id, stage_name, "complete", f"Smoked {len(checks)} public UI URLs after runtime refresh.")
+
+
+def _run_micro_blog_public_ui_fragment_note(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_ui_values(run_id)
+    paths = _micro_blog_public_ui_paths(values)
+    fragment = {
+        "id": f"micro-blog-public-ui-refresh-{run_id}",
+        "rating": "known-good",
+        "contract": "Runtime/theme refresh preserves /svc/micro-blog/.env and docker-compose.yml, rebuilds only blog-ui, and smokes public hostnames.",
+        "remote_host": paths["remote_host"],
+        "remote_path": paths["remote_path"],
+        "compose_service": paths["compose_service"],
+    }
+    _store_run_extra(run_id, {"micro_blog_public_ui_fragment": fragment})
+    append_event(run_id, "info", stage_name, json.dumps(fragment, indent=2, sort_keys=True))
+    _set_stage(run_id, stage_name, "complete", "Recorded public UI/runtime refresh guardrail fragment.")
+
+
+def _run_micro_blog_public_backup(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_values(run_id)
+    host, user = _micro_blog_public_host(values)
+    app_path = _micro_blog_public_app_path(values)
+    backup_root = str(values.get("backup_root") or "/srv/archive/backups").rstrip("/")
+    command = f"""
+set -euo pipefail
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+dest={shlex.quote(backup_root)}/micro-blog-content-promote-"$stamp"
+mkdir -p "$dest"
+cd {shlex.quote(app_path)}
+cp docker-compose.yml "$dest/docker-compose.yml"
+if [ -f .env ]; then
+  awk -F= '/^[A-Za-z_][A-Za-z0-9_]*=/ {{print $1"=<redacted>"}}' .env > "$dest/env.keys.redacted"
+fi
+tar -czf "$dest/content-before.tgz" content 2>/dev/null || true
+docker compose exec -T postgres pg_dump -U blog microblog > "$dest/postgres-microblog.sql"
+sha256sum "$dest"/* > "$dest/SHA256SUMS"
+echo "$dest"
+ls -lh "$dest"
+"""
+    out = run_remote_command(host=host, user=user, command=command, timeout=900)
+    backup_path = next((line.strip() for line in out.splitlines() if line.strip().startswith(backup_root + "/")), "")
+    _store_run_extra(run_id, {"micro_blog_public_backup": {"host": host, "path": backup_path}})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", f"Production micro-blog backup captured{': ' + backup_path if backup_path else ''}.")
+
+
+def _run_micro_blog_public_content_rsync(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_values(run_id)
+    host, user = _micro_blog_public_host(values)
+    build_host = str(values.get("build_host") or "10.20.0.233").strip()
+    build_user = str(values.get("build_user") or "admin-deploy").strip()
+    source_content_path = str(values.get("source_content_path") or "/var/lib/bkc-builds/src/micro-blog/content").rstrip("/")
+    target_content_path = str(values.get("public_remote_content_path") or "/svc/micro-blog/content").rstrip("/")
+    if not _bool_value(values.get("sync_content"), True):
+        command = f"""
+set -euo pipefail
+test -d {shlex.quote(target_content_path)}
+find {shlex.quote(target_content_path)} -type f | wc -l
+"""
+        out = run_remote_command(host=host, user=user, command=command, timeout=180)
+        _store_run_extra(
+            run_id,
+            {
+                "micro_blog_public_content_sync": {
+                    "mode": "remote-content-already-staged",
+                    "public_host": host,
+                    "target_content_path": target_content_path,
+                }
+            },
+        )
+        append_event(run_id, "info", stage_name, out[-4000:])
+        _set_stage(run_id, stage_name, "complete", "Content sync disabled for this run; using content already staged in the production Compose content volume.")
+        return
+    if not build_host or not build_user:
+        raise PipelineExecutionError("Public content promotion requires build_host/build_user so rsync runs from lab-build.")
+    command = f"""
+set -euo pipefail
+source_content_path={shlex.quote(source_content_path)}
+target={shlex.quote(f"{user}@{host}:{target_content_path}/")}
+test -d "$source_content_path"
+find "$source_content_path" -type f | wc -l
+rsync -az --itemize-changes --exclude __pycache__ --exclude .pytest_cache "$source_content_path"/ "$target"
+"""
+    out = run_remote_command(host=build_host, user=build_user, command=command, timeout=600)
+    _store_run_extra(
+        run_id,
+        {
+            "micro_blog_public_content_sync": {
+                "mode": "rsync-update-no-delete",
+                "build_host": build_host,
+                "public_host": host,
+                "source_content_path": source_content_path,
+                "target_content_path": target_content_path,
+            }
+        },
+    )
+    append_event(run_id, "info", stage_name, out[-8000:])
+    _set_stage(run_id, stage_name, "complete", "Approved micro-blog content synced to the production Compose content volume without deleting existing files.")
+
+
+def _run_micro_blog_public_filesystem_sync_api(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_values(run_id)
+    host, user = _micro_blog_public_host(values)
+    app_path = _micro_blog_public_app_path(values)
+    api_url = str(values.get("public_api_internal_url") or "http://127.0.0.1:18080").rstrip("/")
+    endpoint = str(values.get("public_api_sync_endpoint") or "/admin/bootstrap/filesystem-sync")
+    sync_mode = str(values.get("sync_mode") or "update").strip()
+    status = str(values.get("status") or "published").strip()
+    theme_variant = str(values.get("theme_variant") or "midnight").strip()
+    content_subdir = str(values.get("filesystem_sync_subdir") or "").strip()
+    payload_base = json.dumps(
+        {
+            "root_path": "/content",
+            "content_subdir": content_subdir,
+            "sync_mode": sync_mode,
+            "status": status,
+            "theme_variant": theme_variant,
+        },
+        sort_keys=True,
+    )
+    admin_command = f"""
+set -euo pipefail
+cd {shlex.quote(app_path)}
+python3 -c "from pathlib import Path; print(next(line.split('=', 1)[1].strip().strip(chr(34)+chr(39)) for line in Path('.env').read_text().splitlines() if line.startswith('ADMIN_EMAIL=')))"
+"""
+    admin_email = run_remote_command(host=host, user=user, command=admin_command, timeout=60).strip()
+    if not admin_email:
+        raise PipelineExecutionError("ADMIN_EMAIL not found in production .env")
+    payload = json.loads(payload_base)
+    payload["admin_email"] = admin_email
+    payload_json = json.dumps(payload, sort_keys=True)
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(app_path)}
+curl -fsS -X POST {shlex.quote(api_url + endpoint)} \
+  -H 'Content-Type: application/json' \
+  --data {shlex.quote(payload_json)}
+"""
+    out = run_remote_command(host=host, user=user, command=command, timeout=300)
+    _store_run_extra(run_id, {"micro_blog_public_filesystem_sync": {"api_url": api_url + endpoint, "sync_mode": sync_mode}})
+    append_event(run_id, "info", stage_name, out[-6000:])
+    _set_stage(run_id, stage_name, "complete", "Production filesystem sync API accepted the content promotion request.")
+
+
+def _run_micro_blog_public_compose_proof(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_values(run_id)
+    host, user = _micro_blog_public_host(values)
+    app_path = _micro_blog_public_app_path(values)
+    smoke_urls = values.get("public_smoke_urls") or []
+    checked: list[dict] = []
+    command = f"""
+set -euo pipefail
+cd {shlex.quote(app_path)}
+docker compose ps --format '{{{{.Service}}}} {{{{.State}}}}' | sort
+bad="$(docker compose ps --format '{{{{.Service}}}} {{{{.State}}}}' | awk '$2 != "running" {{print}}' || true)"
+test -z "$bad"
+"""
+    out = run_remote_command(host=host, user=user, command=command, timeout=180)
+    append_event(run_id, "info", stage_name, out[-4000:])
+    for url in [str(item).strip() for item in smoke_urls if str(item).strip()]:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            status_code = int(getattr(response, "status", 200))
+            response.read(4096)
+        if status_code >= 400:
+            raise PipelineExecutionError(f"Public smoke URL returned HTTP {status_code}: {url}")
+        checked.append({"url": url, "status": status_code})
+    _store_run_extra(run_id, {"micro_blog_public_proof": checked})
+    append_event(run_id, "info", stage_name, json.dumps(checked, sort_keys=True)[-6000:])
+    _set_stage(run_id, stage_name, "complete", f"Production Compose services and {len(checked)} public URLs validated.")
+
+
+def _run_micro_blog_public_fragment_note(run_id: str, stage_name: str) -> None:
+    values = _micro_blog_public_values(run_id)
+    payload = {
+        "rating": "candidate-known-good",
+        "contract": "Public micro-blog promotion is content-only for the IONOS Docker Compose runtime: backup, rsync /svc/micro-blog/content, call /admin/bootstrap/filesystem-sync, validate Compose and public URLs. Do not rebuild or restart runtime unless Pipeline 10 was deliberately selected.",
+        "public_remote_host": values.get("public_remote_host") or "74.208.45.165",
+        "public_remote_content_path": values.get("public_remote_content_path") or "/svc/micro-blog/content",
+        "sync_mode": values.get("sync_mode") or "update",
+    }
+    _run_micro_blog_note(run_id, stage_name, "Recorded content-only public promotion fragment.", payload)
 
 
 def _run_micro_blog_esxi_lab_canary_refresh(run_id: str, stage_name: str) -> None:
@@ -13210,6 +13707,7 @@ def _video_openstack_swarm_vms(run_id: str, stage_name: str) -> None:
     flavor = values.get("flavor") if isinstance(values.get("flavor"), dict) else {}
     manager_flavor = values.get("manager_flavor") if isinstance(values.get("manager_flavor"), dict) else {}
     secgroup = values.get("security_group") if isinstance(values.get("security_group"), dict) else {}
+    service_interface = values.get("service_interface") if isinstance(values.get("service_interface"), dict) else {}
     nodes = values.get("nodes") if isinstance(values.get("nodes"), list) else []
     manager_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() == "manager")
     worker_count = sum(1 for node in nodes if isinstance(node, dict) and str(node.get("role") or "").strip().lower() != "manager")
@@ -13223,6 +13721,14 @@ def _video_openstack_swarm_vms(run_id: str, stage_name: str) -> None:
     admin_user = str(values.get("admin_user") or "admin-deploy")
     console_password = str(values.get("console_password") or "changeme123")
     secgroup_name = str(secgroup.get("name") or "bkc-openstack-swarm-allow")
+    service_server = str(service_interface.get("server") or "bkc-swarm-mgr-01")
+    service_network = str(service_interface.get("network") or "lab-service-provider")
+    service_subnet = str(service_interface.get("subnet") or "lab-service-provider-v4")
+    service_port = str(service_interface.get("port") or "bkc-swarm-mgr-01-service")
+    service_address = str(service_interface.get("address") or "10.20.0.230")
+    service_prefix = int(service_interface.get("prefix_length") or 24)
+    service_mac = str(service_interface.get("mac_address") or "fa:16:3e:6f:2c:6f")
+    service_operator_route = str(service_interface.get("operator_route") or "10.20.0.10/32")
     replace_vms = _truthy(inputs.get("enable_replace_swarm_vms"))
     ssh = load_integrations()["ssh"]
     public_key = str(read_key_pair(ssh["private_key_path"], ssh["public_key_path"]).get("public_key") or "").strip()
@@ -13265,6 +13771,7 @@ runcmd:
   - systemctl enable --now qemu-guest-agent || true
   - mkdir -p /var/lib/bkc
   - echo openstack-docker-swarm-base > /var/lib/bkc/role.txt
+  - [sh, -c, 'if [ "$(hostname -s)" = "{service_server}" ]; then printf "%s\\n" "[Match]" "MACAddress={service_mac}" "" "[Network]" "Address={service_address}/{service_prefix}" "LinkLocalAddressing=no" "IPv6AcceptRA=no" "" "[Route]" "Destination={service_operator_route}" "Scope=link" > /etc/systemd/network/20-bkc-service.network; networkctl reload; for n in /sys/class/net/*; do grep -qi "{service_mac}" "$n/address" && networkctl reconfigure "${{n##*/}}"; done; fi']
 """
     encoded = b64encode(cloud_init.encode()).decode()
     node_names = " ".join(shlex.quote(str(node.get("name") or "")) for node in nodes if isinstance(node, dict))
@@ -13280,6 +13787,9 @@ printf '%s\\n' {shlex.quote(public_key)} > "$key_tmp"
 openstack keypair show {shlex.quote(key_name)} >/dev/null 2>&1 || openstack keypair create --public-key "$key_tmp" {shlex.quote(key_name)} >/dev/null
 rm -f "$key_tmp"
 {chr(10).join(secgroup_commands)}
+openstack network show {shlex.quote(service_network)} >/dev/null
+openstack subnet show {shlex.quote(service_subnet)} >/dev/null
+openstack port show {shlex.quote(service_port)} >/dev/null 2>&1 || openstack port create --network {shlex.quote(service_network)} --fixed-ip subnet={shlex.quote(service_subnet)},ip-address={shlex.quote(service_address)} --mac-address {shlex.quote(service_mac)} --security-group {shlex.quote(secgroup_name)} {shlex.quote(service_port)} >/dev/null
 user_data=$(mktemp)
 printf '%s' {shlex.quote(encoded)} | base64 -d > "$user_data"
 for name in {node_names}; do
@@ -13293,7 +13803,9 @@ for name in {node_names}; do
     deadline=$((SECONDS+300))
     while [ "$SECONDS" -lt "$deadline" ]; do openstack server show "$name" >/dev/null 2>&1 || break; sleep 5; done
   fi
-  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor "$node_flavor" --network {shlex.quote(network_name)} --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
+  network_args=(--network {shlex.quote(network_name)})
+  if [ "$name" = {shlex.quote(service_server)} ]; then network_args+=(--port {shlex.quote(service_port)}); fi
+  openstack server show "$name" >/dev/null 2>&1 || openstack server create --image {shlex.quote(image_name)} --flavor "$node_flavor" "${{network_args[@]}}" --key-name {shlex.quote(key_name)} --security-group {shlex.quote(secgroup_name)} --user-data "$user_data" --config-drive true "$name" >/dev/null
 done
 rm -f "$user_data"
 deadline=$((SECONDS+1200))
@@ -13493,6 +14005,7 @@ def _video_seed_openstack(run_id: str, stage_name: str) -> None:
     image = values.get("demo_image") if isinstance(values.get("demo_image"), dict) else {}
     keypair = values.get("demo_keypair") if isinstance(values.get("demo_keypair"), dict) else {}
     security_group = values.get("demo_security_group") if isinstance(values.get("demo_security_group"), dict) else {}
+    provider = values.get("provider_network") if isinstance(values.get("provider_network"), dict) else {}
     network = values.get("self_service_network") if isinstance(values.get("self_service_network"), dict) else {}
     smoke = values.get("smoke_instance") if isinstance(values.get("smoke_instance"), dict) else {}
     image_name = str(image.get("name") or smoke.get("image") or "cirros-bkc-smoke")
@@ -13531,6 +14044,17 @@ def _video_seed_openstack(run_id: str, stage_name: str) -> None:
             "}"
         )
     server_key_arg = f"--key-name {shlex.quote(key_name)}" if public_key.startswith("ssh-") else ""
+    provider_pools = provider.get("allocation_pools") if isinstance(provider.get("allocation_pools"), list) else []
+    provider_pool_args = " ".join(
+        f"--allocation-pool start={shlex.quote(str(pool.get('start') or ''))},end={shlex.quote(str(pool.get('end') or ''))}"
+        for pool in provider_pools
+        if isinstance(pool, dict) and pool.get("start") and pool.get("end")
+    )
+    if not provider_pool_args:
+        provider_pool_args = (
+            f"--allocation-pool start={shlex.quote(str(provider.get('allocation_pool_start') or '10.20.0.232'))},"
+            f"end={shlex.quote(str(provider.get('allocation_pool_end') or '10.20.0.239'))}"
+        )
     script = f'''set -euo pipefail
 . /root/admin-openrc
 install -d -m 0755 /var/lib/bkc/openstack-images
@@ -13540,6 +14064,9 @@ openstack project show {shlex.quote(project)} >/dev/null 2>&1 || openstack proje
 openstack user show {shlex.quote(user)} >/dev/null 2>&1 || openstack user create --domain {shlex.quote(str(values.get("seed_domain") or "Default"))} --password {shlex.quote(password)} {shlex.quote(user)}
 openstack role add --project {shlex.quote(project)} --user {shlex.quote(user)} member || true
 openstack flavor show {shlex.quote(str(flavor.get("name") or "bkc.nano"))} >/dev/null 2>&1 || openstack flavor create --ram {int(flavor.get("ram_mb") or 512)} --disk {int(flavor.get("disk_gb") or 1)} --vcpus {int(flavor.get("vcpus") or 1)} {shlex.quote(str(flavor.get("name") or "bkc.nano"))}
+openstack network show {shlex.quote(str(provider.get("name") or "lab-service-provider"))} >/dev/null 2>&1 || openstack network create --external --share --provider-network-type {shlex.quote(str(provider.get("type") or "flat"))} --provider-physical-network {shlex.quote(str(provider.get("physical_network") or "provider"))} {shlex.quote(str(provider.get("name") or "lab-service-provider"))}
+openstack subnet show {shlex.quote(str(provider.get("subnet_name") or "lab-service-provider-v4"))} >/dev/null 2>&1 || openstack subnet create --network {shlex.quote(str(provider.get("name") or "lab-service-provider"))} --subnet-range {shlex.quote(str(provider.get("cidr") or "10.20.0.0/24"))} --gateway {shlex.quote(str(provider.get("gateway") or "10.20.0.10"))} --no-dhcp {provider_pool_args} {shlex.quote(str(provider.get("subnet_name") or "lab-service-provider-v4"))}
+openstack subnet set --no-allocation-pool {provider_pool_args} {shlex.quote(str(provider.get("subnet_name") or "lab-service-provider-v4"))}
 openstack network show {shlex.quote(str(network.get("name") or "tenant-demo-net"))} >/dev/null 2>&1 || openstack network create {shlex.quote(str(network.get("name") or "tenant-demo-net"))}
 openstack subnet show {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))} >/dev/null 2>&1 || openstack subnet create --network {shlex.quote(str(network.get("name") or "tenant-demo-net"))} --subnet-range {shlex.quote(str(network.get("cidr") or "172.16.10.0/24"))} {shlex.quote(str(network.get("subnet_name") or "tenant-demo-subnet"))}
 {keypair_command}
@@ -13886,6 +14413,50 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "micro-blog-content-fragment-note":
             _run_micro_blog_content_fragment_note(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-preflight":
+            _run_micro_blog_public_ui_preflight(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-source-sync":
+            _run_micro_blog_public_ui_source_sync(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-build":
+            _run_micro_blog_public_ui_build(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-up":
+            _run_micro_blog_public_ui_up(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-smoke":
+            _run_micro_blog_public_ui_smoke(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-ui-fragment-note":
+            _run_micro_blog_public_ui_fragment_note(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-backup":
+            _run_micro_blog_public_backup(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-content-rsync":
+            _run_micro_blog_public_content_rsync(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-filesystem-sync-api":
+            _run_micro_blog_public_filesystem_sync_api(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-compose-proof":
+            _run_micro_blog_public_compose_proof(run_id, stage_name)
+            continue
+
+        if kind == "micro-blog-public-fragment-note":
+            _run_micro_blog_public_fragment_note(run_id, stage_name)
             continue
 
         if kind == "micro-blog-lab-journal-note":
