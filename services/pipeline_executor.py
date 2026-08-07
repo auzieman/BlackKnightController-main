@@ -4645,10 +4645,10 @@ WORKFLOW_DEFINITIONS["auzix-package-repo-stripped-iso"] = {
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Building the AUZiX package repository from the current strict-root receipts.",
+            "active": "Building Flatpak first-pass packages, then the AUZiX package repository from strict-root receipts.",
             "complete": "AUZiX package repository was built from strict-root receipts.",
             "timeout": 1800,
-            "command": "mkdir -p out/package-repo-stripped-iso && ./scripts/build-auzix-package-repo.sh out/auzix-strict/AuzixRoot >out/package-repo-stripped-iso/package-repo-build.log 2>&1 && jq -r '\"packages=\" + ((.packages | length) | tostring)' artifacts/auzix/repo/index.json",
+            "command": "mkdir -p out/package-repo-stripped-iso && { ./scripts/build-auzix-flatpak-runtime-slice.sh out/auzix-strict/AuzixRoot && ./scripts/build-auzix-package-repo.sh out/auzix-strict/AuzixRoot; } >out/package-repo-stripped-iso/package-repo-build.log 2>&1 && jq -r '\"packages=\" + ((.packages | length) | tostring)' artifacts/auzix/repo/index.json",
         },
         {
             "name": "strict-root-no-classic-dir-audit",
