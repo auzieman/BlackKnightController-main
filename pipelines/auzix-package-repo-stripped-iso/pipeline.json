@@ -1,0 +1,203 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-package-repo-stripped-iso",
+  "name": "AUZIX LAB 13 — Package Repo Deploy + Stripped ISO Proof",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-package-repo-stripped-iso",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "packages",
+    "package-repo",
+    "iso",
+    "strict-root",
+    "ollama",
+    "lab-build",
+    "r730-ai-01"
+  ],
+  "summary": "Deploy the AUZiX package repository from strict-root receipts, let the Ollama worker review build/audit receipts, then validate that a rebuilt ISO can boot from AUZiX-native paths with classic Unix top-level directories absent unless declared as break-fix compatibility debt.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "repo_host": "host:lab-build",
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "package_repo": "service:auzix-package-repo",
+    "artifact_store": "service:ns1-nfs",
+    "validation_target": "node:vm:auzix-vm135"
+  },
+  "inputs": {
+    "repo_host": {
+      "required": true,
+      "default": "lab-build"
+    },
+    "repo_host_path": {
+      "required": true,
+      "default": "/home/admin-deploy/src/AuziX"
+    },
+    "worker_host": {
+      "required": true,
+      "default": "10.20.0.130"
+    },
+    "strict_root_path": {
+      "required": true,
+      "default": "/srv/bkc/auzix/src/out/auzix-strict/AuzixRoot"
+    },
+    "package_repo_dir": {
+      "required": true,
+      "default": "/srv/http/auzix/repo"
+    },
+    "artifact_handoff_path": {
+      "required": true,
+      "default": "/mnt/ns1/auzix/handoff/stripped-iso"
+    },
+    "candidate_iso_path": {
+      "required": true,
+      "default": "/srv/bkc/auzix/src/artifacts/auzix/auzix-strict-shell.iso"
+    },
+    "enable_package_build": {
+      "required": false,
+      "default": false
+    },
+    "enable_package_publish": {
+      "required": false,
+      "default": false
+    },
+    "enable_stripped_iso_build": {
+      "required": false,
+      "default": false
+    },
+    "enable_vm135_install_validation": {
+      "required": false,
+      "default": false
+    },
+    "enable_bkc_channel_post": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-lab-build-and-worker",
+      "action": "bkc.hosts.probe",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "sync-auzix-source-to-worker",
+      "action": "repo.rsync.lab_build_to_target",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "validate-package-intents",
+      "action": "auzix.packages.intent.validate",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "build-base-package-batches",
+      "action": "auzix.packages.bot.run_base_batches",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_package_build",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "build-package-repository",
+      "action": "auzix.package_repo.build_from_receipts",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "validate-package-repository",
+      "action": "auzix.package_repo.validate_index_and_archives",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "publish-package-repository",
+      "action": "auzix.package_repo.publish",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_package_publish",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "strict-root-no-classic-dir-audit",
+      "action": "auzix.strict_root.audit",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 1800,
+      "policy": {
+        "legacy_top_level_paths": "invalid-unless-breakfix-fragment-exists"
+      }
+    },
+    {
+      "id": "ollama-review-package-and-root-receipts",
+      "action": "ollama.receipts.triage",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "input_policy": "receipts-only-no-secrets"
+    },
+    {
+      "id": "ollama-select-smallest-rebuild-fix",
+      "action": "ollama.receipts.select_one_failed_check",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "build-stripped-install-iso",
+      "action": "auzix.iso.build_stripped_without_classic_dirs",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_stripped_iso_build",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "validate-iso-publication-contract",
+      "action": "auzix.iso.validate_publication_contract",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "vm135-package-install-proof",
+      "action": "auzix.vm135.package_install_from_repo",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_vm135_install_validation",
+      "timeout_seconds": 2400
+    },
+    {
+      "id": "publish-handoff-receipts",
+      "action": "auzix.receipts.publish_handoff",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "post-bkc-channel-progress",
+      "action": "bkc_channel.progress.post",
+      "transport": "internal",
+      "risk": "low",
+      "enabled_by": "enable_bkc_channel_post",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "record-auzix-package-repo-iso-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Candidate proof-first pipeline. Heavy build, publish, ISO rebuild, and VM135 install stages are disabled by default. Classic Unix top-level paths are a failing condition unless a break-fix fragment names the exact path, owner, reason, and removal condition."
+}

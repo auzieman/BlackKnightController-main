@@ -1,0 +1,80 @@
+{
+  "tenant_slug": "lab",
+  "repo_host": "lab-build",
+  "repo_host_path": "/home/admin-deploy/src/AuziX",
+  "worker_host": "10.20.0.130",
+  "worker_alias": "r730-ai-01",
+  "source_repo_path": "/home/admin-deploy/src/AuziX",
+  "remote_source_path": "/srv/bkc/auzix/src",
+  "strict_root_path": "/srv/bkc/auzix/src/out/auzix-strict/AuzixRoot",
+  "package_repo_build_dir": "/srv/bkc/auzix/src/artifacts/auzix/repo",
+  "package_repo_publish_dir": "/srv/http/auzix/repo",
+  "artifact_handoff_path": "/mnt/ns1/auzix/handoff/stripped-iso",
+  "candidate_iso_path": "/srv/bkc/auzix/src/artifacts/auzix/auzix-strict-shell.iso",
+  "report_dir": "/var/lib/bkc/receipts/auzix-package-repo-stripped-iso",
+  "bkc_channel_progress_path": "/home/auzieman/Projects/bkc-channel/notes",
+  "ollama_host": "10.20.0.130",
+  "ollama_model": "qwen2.5-coder:1.5b",
+  "ollama_input_policy": "receipts-only-no-secrets",
+  "enable_package_build": false,
+  "enable_package_publish": false,
+  "enable_stripped_iso_build": false,
+  "enable_vm135_install_validation": false,
+  "enable_bkc_channel_post": false,
+  "package_intent_files": [
+    "packages/extended-ports.manifest.json",
+    "packages/oci-and-python.queue.json",
+    "packages/flatpak-desktop.queue.json"
+  ],
+  "base_package_batches": [
+    {
+      "queue": "packages/installer-ui.queue.json",
+      "batch": "installer-ui-core"
+    },
+    {
+      "queue": "packages/oci-and-python.queue.json",
+      "batch": "oci-base-runtime"
+    },
+    {
+      "queue": "packages/flatpak-desktop.queue.json",
+      "batch": "flatpak-minimal-runtime"
+    }
+  ],
+  "strict_root_policy": {
+    "classic_top_level_paths": [
+      "/bin",
+      "/sbin",
+      "/lib",
+      "/lib64",
+      "/usr",
+      "/etc",
+      "/var",
+      "/tmp",
+      "/opt",
+      "/home",
+      "/root"
+    ],
+    "default": "invalid",
+    "breakfix_required_fields": [
+      "path",
+      "owner",
+      "reason",
+      "removal_condition"
+    ]
+  },
+  "required_receipts": [
+    "out/package-bot/*.report.json",
+    "artifacts/auzix/repo/index.json",
+    "out/package-bot/repository-publish.report.json",
+    "out/flatpak-strict-proof/audit-report.txt",
+    "artifacts/auzix/*.iso.sha256"
+  ],
+  "notes": [
+    "Default run is proof-only: validate JSON, rebuild repository from existing receipts, run strict-root audit, and send only receipts to Ollama.",
+    "Package builds are enabled only after queue/source catalog entries agree and the operator flips enable_package_build.",
+    "Repository publish is separate from repository build so the package repo can be reviewed before it changes a served path.",
+    "The stripped ISO gate requires no classic top-level directories unless a break-fix fragment declares the compatibility debt.",
+    "Ollama reviews receipts and chooses the smallest next package/root-contract fix; it must not receive keys, env dumps, private certs, or raw secrets.",
+    "VM135 validation is intentionally gated because it may consume or reset the disposable AUZiX proof VM."
+  ]
+}

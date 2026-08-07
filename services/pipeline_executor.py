@@ -4626,6 +4626,64 @@ WORKFLOW_DEFINITIONS["small-office-foobar-services"] = {
     "complete_message": "Small Office FooBar service provisioning pipeline completed.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-package-repo-stripped-iso"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "validate-package-intents",
+            "transport": "local",
+            "kind": "local-command",
+            "cwd": "/home/auzieman/Projects/AuziX",
+            "active": "Validating AUZiX package intent JSON before repository work.",
+            "complete": "AUZiX package intent JSON is syntactically valid.",
+            "timeout": 120,
+            "command": "python3 -m json.tool packages/extended-ports.manifest.json >/dev/null && python3 -m json.tool packages/oci-and-python.queue.json >/dev/null && python3 -m json.tool packages/flatpak-desktop.queue.json >/dev/null",
+        },
+        {
+            "name": "build-package-repository",
+            "transport": "local",
+            "kind": "local-command",
+            "cwd": "/home/auzieman/Projects/AuziX",
+            "active": "Building the AUZiX package repository from the current strict-root receipts.",
+            "complete": "AUZiX package repository was built from strict-root receipts.",
+            "timeout": 1800,
+            "command": "mkdir -p out/package-repo-stripped-iso && ./scripts/build-auzix-package-repo.sh out/auzix-strict/AuzixRoot >out/package-repo-stripped-iso/package-repo-build.log 2>&1 && jq -r '\"packages=\" + ((.packages | length) | tostring)' artifacts/auzix/repo/index.json",
+        },
+        {
+            "name": "strict-root-no-classic-dir-audit",
+            "transport": "local",
+            "kind": "local-command",
+            "cwd": "/home/auzieman/Projects/AuziX",
+            "active": "Running strict-root audit with classic top-level directories treated as invalid.",
+            "complete": "Strict-root audit report captured for Ollama review.",
+            "timeout": 2400,
+            "command": "mkdir -p out/package-repo-stripped-iso; AUZIX_LEGACY_POLICY=invalid ./scripts/audit-auzix-strict-root.sh out/auzix-strict/AuzixRoot out/package-repo-stripped-iso/strict-root-audit.txt >out/package-repo-stripped-iso/strict-root-audit.stdout 2>&1 || true; tail -n 40 out/package-repo-stripped-iso/strict-root-audit.txt",
+        },
+        {
+            "name": "ollama-review-receipts",
+            "transport": "local",
+            "kind": "local-command",
+            "cwd": "/home/auzieman/Projects/AuziX",
+            "active": "Asking Ollama to review package repository and strict-root receipts.",
+            "complete": "Ollama receipt review completed or was recorded as unavailable.",
+            "timeout": 420,
+            "command": "python3 - <<'PY'\nimport json, pathlib, urllib.request\nroot = pathlib.Path('.')\nout = root / 'out/package-repo-stripped-iso'\nout.mkdir(parents=True, exist_ok=True)\nindex = root / 'artifacts/auzix/repo/index.json'\naudit = out / 'strict-root-audit.txt'\nsummary = []\nif index.exists():\n    data = json.loads(index.read_text())\n    summary.append(f\"package_count={len(data.get('packages', []))}\")\n    summary.append('packages=' + ', '.join(pkg.get('name', '') for pkg in data.get('packages', [])[:40]))\nif audit.exists():\n    lines = audit.read_text(errors='replace').splitlines()\n    summary.extend([line for line in lines if line.startswith(('FAIL:', 'WARN:', 'PASS: no undeclared'))][:80])\nprompt = 'Review these AUZiX build receipts. Return concise findings, blockers, and smallest next fix. Do not ask for secrets.\\n\\n' + '\\n'.join(summary)\nreport = out / 'ollama-review.md'\ntry:\n    req = urllib.request.Request('http://10.20.0.130:11434/api/generate', data=json.dumps({'model':'qwen2.5-coder:1.5b','prompt':prompt,'stream':False}).encode(), headers={'Content-Type':'application/json'})\n    with urllib.request.urlopen(req, timeout=300) as resp:\n        payload = json.loads(resp.read().decode())\n    text = payload.get('response') or json.dumps(payload, indent=2)\nexcept Exception as exc:\n    text = f'Ollama review unavailable: {exc}\\n\\nReceipt summary retained locally.\\n\\n' + '\\n'.join(summary[:120])\nreport.write_text(text + '\\n')\nprint(text[-4000:])\nPY",
+        },
+        {
+            "name": "record-proof-handoff",
+            "transport": "local",
+            "kind": "local-command",
+            "cwd": "/home/auzieman/Projects/AuziX",
+            "active": "Recording proof handoff paths for the next stripped ISO pass.",
+            "complete": "AUZiX package repository and strict-root proof receipts are ready for review.",
+            "timeout": 120,
+            "command": "python3 - <<'PY'\nimport json, pathlib, time\nout = pathlib.Path('out/package-repo-stripped-iso')\nout.mkdir(parents=True, exist_ok=True)\npaths = ['artifacts/auzix/repo/index.json','out/package-repo-stripped-iso/package-repo-build.log','out/package-repo-stripped-iso/strict-root-audit.txt','out/package-repo-stripped-iso/ollama-review.md']\nreceipt = {'format':'auzix-package-repo-stripped-iso-proof-v1','created':time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),'paths':paths,'next_gate':'remove or quarantine classic top-level compatibility links before stripped ISO rebuild'}\n(out / 'proof-handoff.json').write_text(json.dumps(receipt, indent=2) + '\\n')\nprint(json.dumps(receipt, indent=2))\nPY",
+        },
+    ],
+    "complete_message": "AUZiX package repo deploy + stripped ISO proof pipeline completed.",
+}
+
 
 def workflow_is_supported(workflow: str) -> bool:
     return (workflow or "").strip().lower() in WORKFLOW_DEFINITIONS
@@ -14185,6 +14243,31 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
             message = str(stage.get("message", "")).strip()
             if message:
                 append_event(run_id, "info", stage_name, message)
+            _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Stage completed.")))
+            continue
+
+        if kind == "local-command":
+            command = str(stage.get("command", "")).strip()
+            if not command:
+                raise PipelineExecutionError(f"Stage {stage_name} is missing a local command.")
+            cwd = str(stage.get("cwd", "")).strip() or None
+            timeout = int(stage.get("timeout", stage.get("timeout_seconds", 120)))
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=cwd,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+            output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+            if output:
+                append_event(run_id, "info", stage_name, output[-6000:])
+            if result.returncode != 0:
+                raise PipelineExecutionError(
+                    f"Stage {stage_name} failed with exit code {result.returncode}."
+                )
             _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Stage completed.")))
             continue
 

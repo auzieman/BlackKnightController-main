@@ -1,0 +1,24 @@
+{
+  "format": "bkc-memory-fragments-v1",
+  "fragments": [
+    {
+      "id": "fragment-2026-08-07-auzix-package-repo-stripped-iso",
+      "status": "candidate",
+      "summary": "AUZiX package repository deploy and stripped ISO proof are now one BKC-visible lane with Ollama receipt review and classic root paths invalid by default.",
+      "facts": [
+        "The AUZiX package repository is generated from strict-root package receipts by scripts/build-auzix-package-repo.sh.",
+        "Publishing the repository is a separate gated stage using scripts/publish-auzix-package-repo.sh.",
+        "The stripped ISO proof requires strict-root audit with AUZIX_LEGACY_POLICY=invalid.",
+        "Classic top-level paths may return only as explicit break-fix compatibility debt with path, owner, reason, and removal condition.",
+        "Ollama receives receipts only and selects the smallest next fix; it does not receive secrets or directly mutate lab state.",
+        "VM135 install validation remains gated because it may consume or reset the disposable AUZiX proof VM."
+      ],
+      "next_steps": [
+        "Run the safe first pass against the existing strict root and package receipts.",
+        "Add missing source catalog entries for OCI and Flatpak package queues before enabling package builds.",
+        "Remove or quarantine compatibility links, then rerun strict-root audit under invalid legacy policy.",
+        "Build a stripped install ISO only after package repo and strict-root gates are understood."
+      ]
+    }
+  ]
+}
