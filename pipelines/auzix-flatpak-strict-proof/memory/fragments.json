@@ -1,0 +1,23 @@
+[
+  {
+    "id": "fragment-2026-08-07-flatpak-strict-path-proof",
+    "status": "candidate",
+    "summary": "Flatpak enters AUZiX as a post-Podman external app provider, not as permission for /usr, /lib, /bin, /etc, /var, or /tmp to return to the base image.",
+    "evidence": [
+      "AUZiX VM135 proved Podman, BusyBox, Nginx, Alpine, and ext4 functional tests before this lane",
+      "packages/flatpak-desktop.queue.json orders Bubblewrap, OSTree, xdg-dbus-proxy, Flatpak, and a Firefox adapter",
+      "scripts/test-auzix-pruned-root.sh already proves an imported runtime can start with /bin, /usr, /lib, and /lib64 removed"
+    ],
+    "decision": "Use BKC to run the strict-path proof before building Flatpak. The stripped ISO should add /System/Compatibility links back only as named break-fix debt after a failing proof.",
+    "anti_patterns": [
+      "Do not call a donor package ready because its Debian layout works under /usr.",
+      "Do not add broad root-level compatibility links to make Flatpak pass without a receipt.",
+      "Do not rebuild the install ISO with legacy links restored by default."
+    ],
+    "reusable_in": [
+      "auzix-strict-root-container-build",
+      "auzix-live-media-build",
+      "auzix-installed-root-recovery"
+    ]
+  }
+]

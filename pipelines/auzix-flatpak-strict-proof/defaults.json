@@ -1,0 +1,27 @@
+{
+  "source_repo_path": "/home/auzieman/Projects/AuziX",
+  "strict_root_path": "/home/auzieman/Projects/AuziX/out/auzix-strict/AuzixRoot",
+  "proof_report_dir": "/home/auzieman/Projects/AuziX/out/flatpak-strict-proof",
+  "flatpak_queue": "packages/flatpak-desktop.queue.json",
+  "extended_manifest": "packages/extended-ports.manifest.json",
+  "proof_image": "auzix-strict:flatpak-proof",
+  "enable_pruned_container_run": false,
+  "enable_flatpak_build": false,
+  "enable_iso_rebuild": false,
+  "legacy_policy": "invalid",
+  "break_fix_compatibility_policy": "Only restore /System/Compatibility links when a failing proof names the exact legacy path, owner package, reason, and removal plan.",
+  "planned_flatpak_order": [
+    "Bubblewrap",
+    "OSTree",
+    "XdgDbusProxy",
+    "Flatpak",
+    "FlatpakFirefoxAdapter"
+  ],
+  "required_proof_checks": [
+    "package JSON validates",
+    "strict root audit can run with AUZIX_LEGACY_POLICY=invalid",
+    "pruned container can start without /bin, /usr, /lib, or /lib64 when enabled",
+    "Flatpak app adapters project into /Programs/<App>/current/Commands",
+    "ISO rebuild stays disabled until strict proof evidence exists"
+  ]
+}

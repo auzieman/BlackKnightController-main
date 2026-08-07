@@ -1,0 +1,139 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-flatpak-strict-proof",
+  "name": "AUZIX LAB 12 — Flatpak Strict Path Proof",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-flatpak-strict-proof",
+  "resource_class": "standard",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "flatpak",
+    "strict-root",
+    "packages",
+    "r730",
+    "iso-prep"
+  ],
+  "summary": "Prepare the Flatpak package lane while proving AUZiX can run from real /Programs and /System paths without promoting donor /usr compatibility links into the base image.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "source_repo": "repo:AuziX",
+    "build_worker": "host:r730-ai-01",
+    "proof_image": "image:auzix-strict:flatpak-proof",
+    "vm_validation": "vm:vmid135"
+  },
+  "inputs": {
+    "source_repo_path": {
+      "required": true,
+      "default": "/home/auzieman/Projects/AuziX"
+    },
+    "strict_root_path": {
+      "required": true,
+      "default": "/home/auzieman/Projects/AuziX/out/auzix-strict/AuzixRoot"
+    },
+    "proof_report_dir": {
+      "required": true,
+      "default": "/home/auzieman/Projects/AuziX/out/flatpak-strict-proof"
+    },
+    "enable_pruned_container_run": {
+      "required": false,
+      "default": false
+    },
+    "enable_flatpak_build": {
+      "required": false,
+      "default": false
+    },
+    "enable_iso_rebuild": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "read-flatpak-package-intent",
+      "action": "auzix.packages.intent.read",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 60,
+      "artifacts": [
+        "packages/flatpak-desktop.queue.json",
+        "packages/extended-ports.manifest.json"
+      ]
+    },
+    {
+      "id": "validate-package-json",
+      "action": "auzix.packages.json.validate",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "strict-root-audit-invalid-legacy-policy",
+      "action": "auzix.strict_root.audit.invalid_legacy_policy",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "evidence": [
+        "AUZIX_LEGACY_POLICY=invalid scripts/audit-auzix-strict-root.sh"
+      ]
+    },
+    {
+      "id": "pruned-container-no-legacy-root-links",
+      "action": "auzix.strict_root.container.pruned_run",
+      "transport": "docker",
+      "risk": "medium",
+      "enabled_by": "enable_pruned_container_run",
+      "timeout_seconds": 1800,
+      "evidence": [
+        "scripts/test-auzix-pruned-root.sh proves /bin, /usr, /lib, and /lib64 are absent in the imported image"
+      ]
+    },
+    {
+      "id": "flatpak-dependency-closure-plan",
+      "action": "auzix.flatpak.dependency_closure.plan",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "evidence": [
+        "Bubblewrap",
+        "OSTree",
+        "XdgDbusProxy",
+        "Flatpak",
+        "FlatpakFirefoxAdapter"
+      ]
+    },
+    {
+      "id": "build-flatpak-minimal-runtime",
+      "action": "auzix.flatpak.minimal_runtime.build",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_flatpak_build",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "break-fix-compatibility-decision",
+      "action": "auzix.compatibility.break_fix.decide",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "notes": "Only add /System/Compatibility exports after a failing proof names the exact missing path, owner package, and removal plan."
+    },
+    {
+      "id": "iso-strip-readiness-gate",
+      "action": "auzix.iso.strip_readiness.gate",
+      "transport": "filesystem",
+      "risk": "low",
+      "enabled_by": "enable_iso_rebuild",
+      "timeout_seconds": 300,
+      "notes": "This gate prepares the 2026-08-08 stripped ISO run; it does not rebuild media unless explicitly enabled."
+    },
+    {
+      "id": "record-proof-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Keep the first run cheap: validate JSON and path policy, then run the pruned-container proof only when the current strict root exists. Flatpak package builds and ISO rebuilds remain explicit opt-in stages."
+}
