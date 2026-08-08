@@ -4,9 +4,9 @@ services:
   nginx:
     image: nginx:1.27-alpine
     configs:
-      - source: lab_edge_nginx_v19
+      - source: lab_edge_nginx_v30
         target: /etc/nginx/nginx.conf
-      - source: lab_edge_index_v10
+      - source: lab_edge_index_v20
         target: /usr/share/nginx/html/index.html
       - source: lab_edge_proxmoxlib_v1
         target: /usr/share/nginx/proxmox-edge/proxmoxlib.js
@@ -93,9 +93,9 @@ services:
         condition: on-failure
 
 configs:
-  lab_edge_nginx_v19:
+  lab_edge_nginx_v30:
     file: ./nginx.conf
-  lab_edge_index_v10:
+  lab_edge_index_v20:
     file: ./index.html
   lab_edge_proxmoxlib_v1:
     file: ./proxmoxlib.js
