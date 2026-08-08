@@ -105,6 +105,9 @@ AUZIX_VM130_SOURCE_ROOT = "/srv/nfs/swarm/AuziX/src/out/auzix-strict/AuzixRoot"
 AUZIX_VM134_ID = 134
 AUZIX_ARTIFACT_ROOT = "/mnt/swarm/AuziX/src"
 AUZIX_ARTIFACT_HOST = "192.168.1.15"
+AUZIX_R730_BUILD_HOST = "10.20.0.130"
+AUZIX_R730_BUILD_USER = "root"
+AUZIX_R730_SOURCE_ROOT = "/srv/auzix/AuziX/src"
 AUZIX_VM134_ISO_NAME = "auzix-strict-desktop-vm134.iso"
 AUZIX_VM134_MIN_DISK_GIB = 32
 AUZIX_VM135_ID = 135
@@ -1938,30 +1941,31 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "builder-prepare",
-                "transport": "ssh-manager",
-                "target": "manager",
-                "active": "Preparing the dedicated Debian Trixie package intake image.",
-                "complete": "Debian Trixie package intake image is ready.",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Verifying the R730 AUZiX Trixie package intake image.",
+                "complete": "R730 AUZiX Trixie package intake image is ready.",
                 "command": (
-                    "bash -lc 'mkdir -p /mnt/swarm/AuziX && "
-                    "{ mountpoint -q /mnt/swarm/AuziX || mount -t nfs "
-                    "192.168.1.10:/srv/nfs/swarm/AuziX /mnt/swarm/AuziX; } && "
-                    "docker build --pull=false "
-                    "-f /mnt/swarm/AuziX/src/docker/trixie-builder/Dockerfile "
-                    "-t auzix/trixie-builder:local /mnt/swarm/AuziX/src'"
+                    "bash -lc 'set -e; "
+                    f"test -s {AUZIX_R730_SOURCE_ROOT}/.auzix-commit && "
+                    "docker image inspect auzix/trixie-builder:lab >/dev/null && "
+                    "docker image inspect auzix/builder:lab >/dev/null && "
+                    f"docker run --rm -v {AUZIX_R730_SOURCE_ROOT}:/workspace -w /workspace "
+                    "auzix/trixie-builder:lab bash -lc "
+                    "'\"'\"'./scripts/test-auzix-trixie-intake.sh'\"'\"''"
                 ),
                 "timeout": 3600,
             },
             {
                 "name": "package-intake",
-                "transport": "ssh-manager",
-                "target": "manager",
-                "active": "Attempting the Trixie user application profile sequentially.",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Attempting the Trixie user application profile sequentially on the R730 AUZiX build worker.",
                 "complete": "Trixie package intake attempts completed.",
                 "command": (
                     "bash -lc 'docker run --rm "
-                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
-                    "auzix/trixie-builder:local bash -lc "
+                    f"-v {AUZIX_R730_SOURCE_ROOT}:/workspace -w /workspace "
+                    "auzix/trixie-builder:lab bash -lc "
                     "'\"'\"'apt-get update >/dev/null && "
                     "./scripts/run-auzix-trixie-intake.sh'\"'\"''"
                 ),
@@ -1969,29 +1973,32 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "repository-build",
-                "transport": "ssh-manager",
-                "target": "manager",
-                "active": "Rebuilding the AuziX repository with successful Trixie intake receipts.",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Rebuilding the AuziX repository with successful Trixie intake receipts on the R730 AUZiX build worker.",
                 "complete": "AuziX repository includes successful Trixie intake packages.",
                 "command": (
                     "bash -lc 'docker run --rm "
-                    "-v /mnt/swarm/AuziX/src:/workspace -w /workspace "
-                    "auzix/builder:local ./scripts/build-auzix-package-repo.sh "
+                    f"-v {AUZIX_R730_SOURCE_ROOT}:/workspace -w /workspace "
+                    "auzix/builder:lab ./scripts/build-auzix-package-repo.sh "
                     "/workspace/out/auzix-strict/AuzixRoot'"
                 ),
                 "timeout": 7200,
             },
             {
                 "name": "repository-publish",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
                 "active": "Publishing successful Trixie intake packages.",
                 "complete": "Successful Trixie intake packages were published.",
                 "command": (
-                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
-                    "./scripts/publish-auzix-package-repo.sh "
-                    "/srv/nfs/swarm/AuziX/src/artifacts/auzix/repo "
-                    "/srv/http/auzix/repo'"
+                    "bash -lc 'rsync -a --delete "
+                    "/srv/auzix/AuziX/src/artifacts/auzix/repo/ "
+                    "root@192.168.1.10:/srv/http/auzix/repo/ && "
+                    "ssh root@192.168.1.10 "
+                    "\"chown -R root:root /srv/http/auzix/repo && "
+                    "find /srv/http/auzix/repo -type d -exec chmod 755 {} + && "
+                    "find /srv/http/auzix/repo -type f -exec chmod 644 {} +\"'"
                 ),
                 "timeout": 3600,
             },
@@ -2002,12 +2009,15 @@ WORKFLOW_DEFINITIONS = {
                 "active": "Verifying the Trixie intake report and served compatibility packages.",
                 "complete": "Trixie intake report and published packages are available.",
                 "command": (
-                    "bash -lc 'cd /srv/nfs/swarm/AuziX/src && "
+                    "bash -lc 'cd /srv/auzix/AuziX/src && "
                     "report=out/package-bot/trixie-user-apps.report.json && "
                     "jq -e '\"'\"'.format == \"auzix-trixie-intake-report-v1\" "
                     "and .complete > 0'\"'\"' \"$report\" >/dev/null && "
                     "curl -fsS http://192.168.1.10/auzix/repo/index.json | "
-                    "jq -e '\"'\"'any(.packages[]; (.name | startswith(\"Debian.\")))'\"'\"' >/dev/null && "
+                    "jq -e '\"'\"'(.packages | length) > 80 and "
+                    "any(.packages[]; .name == \"LibreOffice\") and "
+                    "any(.packages[]; .name == \"Python3\") and "
+                    "all(.packages[]; (.name | startswith(\"Debian.\") | not))'\"'\"' >/dev/null && "
                     "jq '\"'\"'{status, complete, failed}'\"'\"' \"$report\"'"
                 ),
                 "timeout": 180,
@@ -4822,6 +4832,12 @@ def _command_target(settings: dict[str, str], target: str) -> tuple[str, str, st
             settings["controller_host"],
             settings["controller_user"],
             settings["controller_password"],
+        )
+    if normalized == "auzix-r730-build":
+        return (
+            AUZIX_R730_BUILD_HOST,
+            AUZIX_R730_BUILD_USER,
+            "",
         )
     return (
         settings["manager_host"],
@@ -8575,7 +8591,7 @@ def _run_openstack_bkc_swarm_promote(run_id: str, stage_name: str) -> None:
                 "image": image,
                 "portainer_url": env["PORTAINER_URL"],
                 "endpoint_id": env["PORTAINER_ENDPOINT_ID"],
-                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker"),
+                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker,bkc-alt_slow-worker"),
                 "edge_url": values.get("edge_url"),
             },
             sort_keys=True,
@@ -8605,7 +8621,7 @@ def _run_openstack_bkc_swarm_promote(run_id: str, stage_name: str) -> None:
             "openstack_bkc_swarm_promote": {
                 "image": image,
                 "returncode": completed.returncode,
-                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker"),
+                "services": env.get("BKC_PROMOTE_SERVICES", "bkc-alt_bkc,bkc-alt_worker,bkc-alt_slow-worker"),
             }
         },
     )
