@@ -1972,6 +1972,23 @@ WORKFLOW_DEFINITIONS = {
                 "timeout": 21600,
             },
             {
+                "name": "office-closure",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Restoring higher-trust AbiWord and Gnumeric closure packages after broad intake.",
+                "complete": "Office closure packages replaced raw intake packages.",
+                "command": (
+                    "bash -lc 'docker run --rm "
+                    f"-v {AUZIX_R730_SOURCE_ROOT}:/workspace -w /workspace "
+                    "auzix/trixie-builder:lab bash -lc "
+                    "'\"'\"'apt-get update >/dev/null && "
+                    "./scripts/run-auzix-office-smoke.sh && "
+                    "./scripts/test-auzix-office-smoke.sh "
+                    "/workspace/out/auzix-strict/AuzixRoot'\"'\"''"
+                ),
+                "timeout": 7200,
+            },
+            {
                 "name": "repository-build",
                 "transport": "bkc-ssh",
                 "target": "auzix-r730-build",
@@ -2027,6 +2044,8 @@ WORKFLOW_DEFINITIONS = {
                     "  \"Pluma\": \"pluma\",\n"
                     "  \"Htop\": \"htop\",\n"
                     "  \"Geany\": \"geany\",\n"
+                    "  \"AbiWord\": \"abiword\",\n"
+                    "  \"Gnumeric\": \"gnumeric\",\n"
                     "}\n"
                     "missing=[]\n"
                     "for package, command in required_commands.items():\n"
@@ -2038,6 +2057,11 @@ WORKFLOW_DEFINITIONS = {
                     "    if not any(str(path).endswith('/Commands/'+command) for path in commands):\n"
                     "        missing.append(f\"{package}:missing-command-{command}\")\n"
                     "assert not missing, missing\n"
+                    "for package in (\"AbiWord\", \"Gnumeric\"):\n"
+                    "    item=by_name.get(package)\n"
+                    "    assert item, package\n"
+                    "    assert item.get(\"migration_stage\") == \"stage-1-compat-install\", item\n"
+                    "    assert item.get(\"source\", {}).get(\"type\") == \"debian-installed-closure\", item\n"
                     "zero_command_programs=[pkg.get(\"name\") for pkg in packages if pkg.get(\"kind\") == \"program\" and not (pkg.get(\"commands\") or [])]\n"
                     "allowed_zero={\"AuzixInstallerEfl\"}\n"
                     "unexpected=[name for name in zero_command_programs if name not in allowed_zero]\n"
