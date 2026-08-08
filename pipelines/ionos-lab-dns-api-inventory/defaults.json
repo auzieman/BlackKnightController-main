@@ -20,6 +20,12 @@
       "purpose": "BKC web UI"
     },
     {
+      "name": "bkc-tickets-01.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "purpose": "BKC scrum/ticket board edge name for vmid138"
+    },
+    {
       "name": "edge.lab.auzietek.com",
       "type": "CNAME",
       "content": "swarm1.lab.auzietek.com",

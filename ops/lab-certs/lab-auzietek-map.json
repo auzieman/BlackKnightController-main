@@ -38,6 +38,27 @@
       "purpose": "BKC UI by name"
     },
     {
+      "name": "bkc-tickets-01.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "BKC scrum/ticket board edge name for vmid138"
+    },
+    {
+      "name": "bkc-os.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted BKC edge name"
+    },
+    {
+      "name": "blackknight-os.lab.auzietek.com",
+      "type": "CNAME",
+      "content": "swarm1.lab.auzietek.com",
+      "ttl": 300,
+      "purpose": "OpenStack-hosted BlackKnightController edge alias"
+    },
+    {
       "name": "edge.lab.auzietek.com",
       "type": "CNAME",
       "content": "swarm1.lab.auzietek.com",
