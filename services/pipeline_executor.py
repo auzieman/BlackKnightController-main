@@ -2004,8 +2004,8 @@ WORKFLOW_DEFINITIONS = {
             },
             {
                 "name": "repository-verify",
-                "transport": "ssh-controller",
-                "target": "controller",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
                 "active": "Verifying the Trixie intake report and served compatibility packages.",
                 "complete": "Trixie intake report and published packages are available.",
                 "command": (
