@@ -2003,6 +2003,90 @@ WORKFLOW_DEFINITIONS = {
                 "timeout": 7200,
             },
             {
+                "name": "hardwired-path-audit",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Auditing user-layer packages for hardwired donor OS paths.",
+                "complete": "Hardwired donor path audit completed with current ratchets.",
+                "command": (
+                    "bash -lc 'cd /srv/auzix/AuziX/src && "
+                    "test -x scripts/audit-auzix-hardwired-paths.sh && "
+                    "test -s packages/hardwired-path-audit.ollama-prompt.md && "
+                    "./scripts/audit-auzix-hardwired-paths.sh "
+                    "out/auzix-strict/AuzixRoot "
+                    "out/package-bot/hardwired-paths.pipeline.json && "
+                    "python3 - <<'\"'\"'PY'\"'\"'\n"
+                    "import json\n"
+                    "report=json.load(open(\"out/package-bot/hardwired-paths.pipeline.json\"))\n"
+                    "assert report.get(\"format\") == \"auzix-hardwired-path-audit-v1\", report\n"
+                    "actionable=int(report.get(\"actionable_finding_count\") or 0)\n"
+                    "assert actionable <= 650, actionable\n"
+                    "fixed_packages={\n"
+                    "  \"GnomeControlCenter\",\n"
+                    "  \"GnomeDiskUtility\",\n"
+                    "  \"Baobab\",\n"
+                    "  \"LibreOfficeCalc\",\n"
+                    "  \"LibreOfficeWriter\",\n"
+                    "}\n"
+                    "regressions=[]\n"
+                    "for item in report.get(\"findings\", []):\n"
+                    "    if item.get(\"package\") in fixed_packages and item.get(\"actionable\"):\n"
+                    "        regressions.append({k:item.get(k) for k in (\"package\", \"payload_class\", \"payload_path\", \"hits\")})\n"
+                    "assert not regressions, regressions[:20]\n"
+                    "summary={\n"
+                    "  \"actionable_finding_count\": actionable,\n"
+                    "  \"finding_count\": report.get(\"finding_count\"),\n"
+                    "  \"top_actionable\": report.get(\"actionable_priority_packages\", [])[:12],\n"
+                    "  \"ollama_prompt\": \"packages/hardwired-path-audit.ollama-prompt.md\",\n"
+                    "  \"report\": \"out/package-bot/hardwired-paths.pipeline.json\",\n"
+                    "}\n"
+                    "print(json.dumps(summary, sort_keys=True))\n"
+                    "PY'"
+                ),
+                "timeout": 900,
+            },
+            {
+                "name": "ollama-path-review",
+                "transport": "bkc-ssh",
+                "target": "auzix-r730-build",
+                "active": "Asking the lab Ollama worker to classify top hardwired path offenders.",
+                "complete": "Ollama hardwired path review notes were written.",
+                "command": (
+                    "bash -lc 'cd /srv/auzix/AuziX/src && "
+                    "python3 - <<'\"'\"'PY'\"'\"'\n"
+                    "import json, urllib.request, urllib.error\n"
+                    "report=json.load(open(\"out/package-bot/hardwired-paths.pipeline.json\"))\n"
+                    "prompt=open(\"packages/hardwired-path-audit.ollama-prompt.md\").read()\n"
+                    "trimmed={\n"
+                    "  \"format\": report.get(\"format\"),\n"
+                    "  \"actionable_finding_count\": report.get(\"actionable_finding_count\"),\n"
+                    "  \"actionable_priority_packages\": report.get(\"actionable_priority_packages\", [])[:15],\n"
+                    "  \"findings\": [\n"
+                    "    item for item in report.get(\"findings\", [])\n"
+                    "    if item.get(\"actionable\") and item.get(\"payload_class\") != \"documentation\"\n"
+                    "  ][:120],\n"
+                    "}\n"
+                    "body={\n"
+                    "  \"model\": \"qwen2.5-coder:1.5b\",\n"
+                    "  \"stream\": False,\n"
+                    "  \"prompt\": prompt + \"\\n\\nAudit JSON excerpt:\\n\" + json.dumps(trimmed, indent=2, sort_keys=True),\n"
+                    "  \"options\": {\"temperature\": 0.1},\n"
+                    "}\n"
+                    "out={\"status\": \"unavailable\", \"model\": body[\"model\"], \"report\": \"out/package-bot/hardwired-paths.pipeline.json\"}\n"
+                    "try:\n"
+                    "    req=urllib.request.Request(\"http://127.0.0.1:11434/api/generate\", data=json.dumps(body).encode(), headers={\"Content-Type\": \"application/json\"})\n"
+                    "    with urllib.request.urlopen(req, timeout=240) as response:\n"
+                    "        payload=json.load(response)\n"
+                    "    out.update({\"status\": \"complete\", \"response\": payload.get(\"response\", \"\")})\n"
+                    "except Exception as exc:\n"
+                    "    out.update({\"error\": repr(exc)})\n"
+                    "open(\"out/package-bot/hardwired-paths.ollama.json\", \"w\").write(json.dumps(out, indent=2, sort_keys=True)+\"\\n\")\n"
+                    "print(json.dumps({\"status\": out[\"status\"], \"notes\": \"out/package-bot/hardwired-paths.ollama.json\"}, sort_keys=True))\n"
+                    "PY'"
+                ),
+                "timeout": 360,
+            },
+            {
                 "name": "repository-publish",
                 "transport": "bkc-ssh",
                 "target": "auzix-r730-build",
@@ -2069,7 +2153,8 @@ WORKFLOW_DEFINITIONS = {
                     "allowed_zero={\"AuzixInstallerEfl\"}\n"
                     "unexpected=[name for name in zero_command_programs if name not in allowed_zero]\n"
                     "assert len(unexpected) <= 8, unexpected[:40]\n"
-                    "print(json.dumps({\"status\": report.get(\"status\"), \"complete\": report.get(\"complete\"), \"failed\": report.get(\"failed\"), \"repo_packages\": len(names), \"zero_command_programs\": len(zero_command_programs), \"unexpected_zero_command_programs\": len(unexpected)}, sort_keys=True))\n"
+                    "path_report=json.load(open(\"out/package-bot/hardwired-paths.pipeline.json\"))\n"
+                    "print(json.dumps({\"status\": report.get(\"status\"), \"complete\": report.get(\"complete\"), \"failed\": report.get(\"failed\"), \"repo_packages\": len(names), \"zero_command_programs\": len(zero_command_programs), \"unexpected_zero_command_programs\": len(unexpected), \"hardwired_actionable_findings\": path_report.get(\"actionable_finding_count\")}, sort_keys=True))\n"
                     "PY'"
                 ),
                 "timeout": 180,
