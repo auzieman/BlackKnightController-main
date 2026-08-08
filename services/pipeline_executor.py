@@ -1930,7 +1930,8 @@ WORKFLOW_DEFINITIONS = {
                     "test -s docker/trixie-builder/Dockerfile && "
                     "test -x scripts/run-auzix-trixie-intake.sh && "
                     "test -x scripts/test-auzix-trixie-intake.sh && "
-                    "grep -Fx 0a64310 .auzix-commit >/dev/null && "
+                    "test -s .auzix-commit && "
+                    "printf \"auzix_commit=%s\\n\" \"$(cat .auzix-commit)\" && "
                     "./scripts/test-auzix-trixie-intake.sh'"
                 ),
                 "timeout": 120,
