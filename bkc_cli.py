@@ -69,6 +69,9 @@ def main() -> int:
             "scan-subnet",
             "migrate-secrets",
             "fresh-build-plan",
+            "trigger-pipeline",
+            "run-status",
+            "recent-runs",
         ],
         nargs="?",
         default="summary",
@@ -98,6 +101,17 @@ def main() -> int:
     parser.add_argument("--gateway", default="", help="Gateway for static Kickstart generation.")
     parser.add_argument("--dns-servers", default="", help="Comma-separated DNS server list for static Kickstart generation.")
     parser.add_argument("--nameserver-host", default="ns1.morgans.lan", help="Host that will serve Kickstart files.")
+    parser.add_argument("--pipeline-id", help="Pipeline id to trigger with trigger-pipeline.")
+    parser.add_argument("--run-id", help="Automation run id for run-status.")
+    parser.add_argument("--ref", default="refs/heads/main", help="Git ref recorded on triggered pipeline runs.")
+    parser.add_argument("--commit", default="", help="Git commit recorded on triggered pipeline runs.")
+    parser.add_argument("--notes", default="", help="Operator notes recorded on triggered pipeline runs.")
+    parser.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        help="Pipeline input override as key=value. Can be repeated.",
+    )
     parser.add_argument(
         "--install-key",
         action="store_true",
@@ -222,6 +236,154 @@ def main() -> int:
         print(json.dumps(plan, indent=2))
         if args.output:
             args.output.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+        return 0
+
+    if args.command == "trigger-pipeline":
+        from services.automation_pipeline import create_automation_run, mark_run_blocked, mark_run_queued
+        from services.job_queue import SLOW_QUEUE_NAME, enqueue_job, job_queue_enabled
+        from services.pipeline_catalog import pipeline_by_id
+        from services.pipeline_executor import workflow_is_supported, workflow_job_timeout, workflow_stage_definitions
+
+        if not args.pipeline_id:
+            print("trigger-pipeline requires --pipeline-id.")
+            return 2
+        pipeline = pipeline_by_id(args.pipeline_id)
+        if not pipeline:
+            print(f"Pipeline not found: {args.pipeline_id}")
+            return 2
+        workflow = str(pipeline.get("workflow", "")).strip()
+        if not workflow_is_supported(workflow):
+            print(f"Pipeline is not wired: {pipeline.get('name', args.pipeline_id)} ({workflow or 'missing workflow'})")
+            return 3
+
+        input_overrides: dict[str, object] = {}
+        for item in args.input:
+            if "=" not in item:
+                print(f"Invalid --input value {item!r}; expected key=value.")
+                return 2
+            key, value = item.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                print(f"Invalid --input value {item!r}; key is empty.")
+                return 2
+            if value.lower() in {"true", "false"}:
+                input_overrides[key] = value.lower() == "true"
+            else:
+                input_overrides[key] = value
+
+        extra = {
+            "pipeline_id": pipeline["id"],
+            "pipeline_name": pipeline.get("name", pipeline["id"]),
+        }
+        resource_class = str(pipeline.get("resource_class", "")).strip().lower()
+        if resource_class:
+            extra["resource_class"] = resource_class
+        if input_overrides:
+            extra["request_payload"] = {"inputs": input_overrides}
+
+        run = create_automation_run(
+            tenant_slug="default",
+            requested_by="bkc-cli:operator",
+            trigger_source="bkc-cli",
+            repo=str(pipeline.get("repo", "")),
+            workflow=workflow,
+            ref=args.ref,
+            commit=args.commit,
+            notes=args.notes or str(pipeline.get("notes", "")),
+            extra=extra,
+        )
+
+        queued = False
+        job_id = ""
+        if job_queue_enabled():
+            queue_name = SLOW_QUEUE_NAME if resource_class == "slow" else "bkc"
+            try:
+                timeout = workflow_job_timeout(workflow)
+                job = enqueue_job(
+                    "services.job_tasks.automation_pipeline_job",
+                    (run["id"], "default", None, None, "bkc-cli"),
+                    job_timeout=timeout,
+                    queue_name=queue_name,
+                    meta={
+                        "kind": "automation",
+                        "run_id": run["id"],
+                        "tenant_slug": "default",
+                        "repo": run.get("repo", ""),
+                        "workflow": workflow,
+                        "job_timeout": timeout,
+                        "queue_name": queue_name,
+                    },
+                )
+                job_id = job.id
+                queued = True
+                run = mark_run_queued(run["id"], job.id) or run
+            except Exception as exc:
+                run = mark_run_blocked(run["id"], f"Queue backend unavailable: {exc}") or run
+
+        print(f"pipeline: {pipeline.get('name', pipeline['id'])}")
+        print(f"workflow: {workflow}")
+        print(f"run_id: {run['id']}")
+        print(f"status: {run.get('status')}")
+        print(f"queued: {str(queued).lower()}")
+        if job_id:
+            print(f"job_id: {job_id}")
+        print(f"url: /pipelines/{run['id']}")
+        print("stages:")
+        for stage in workflow_stage_definitions(workflow):
+            print(f"- {stage.get('name')}")
+        return 0
+
+    if args.command == "run-status":
+        from services.automation_runs import load_runs
+
+        if not args.run_id:
+            print("run-status requires --run-id.")
+            return 2
+        run = next((item for item in load_runs() if item.get("id") == args.run_id), None)
+        if not run:
+            print(f"Run not found: {args.run_id}")
+            return 2
+        print(f"run_id: {run.get('id')}")
+        print(f"status: {run.get('status')}")
+        print(f"workflow: {run.get('workflow')}")
+        print(f"updated_at: {run.get('updated_at') or run.get('created_at')}")
+        extra = run.get("extra") or {}
+        if extra.get("pipeline_id"):
+            print(f"pipeline_id: {extra.get('pipeline_id')}")
+        if extra.get("pipeline_name"):
+            print(f"pipeline_name: {extra.get('pipeline_name')}")
+        if run.get("notes"):
+            print(f"notes: {run.get('notes')}")
+        print("stages:")
+        for stage in run.get("stages", []):
+            detail = stage.get("detail") or stage.get("message") or ""
+            print(f"- {stage.get('name')}: {stage.get('status')} {detail}".rstrip())
+        events = run.get("events", [])[-12:]
+        if events:
+            print("events:")
+            for event in events:
+                message = str(event.get("message") or "")
+                if len(message) > 500:
+                    message = message[:497] + "..."
+                print(f"- {event.get('level')} {event.get('stage')}: {message}")
+        return 0
+
+    if args.command == "recent-runs":
+        from services.automation_runs import load_runs
+
+        runs = sorted(
+            load_runs(),
+            key=lambda run: run.get("updated_at") or run.get("created_at") or "",
+            reverse=True,
+        )
+        for run in runs[:30]:
+            extra = run.get("extra") or {}
+            pipeline_id = extra.get("pipeline_id") or run.get("workflow") or ""
+            print(
+                f"{run.get('id')} {run.get('status')} {pipeline_id} "
+                f"{run.get('updated_at') or run.get('created_at')}"
+            )
         return 0
 
     print(json.dumps(rules, indent=2))

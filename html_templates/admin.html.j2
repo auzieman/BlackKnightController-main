@@ -29,8 +29,16 @@
                 </label>
                 <label class="wide">
                     Command
-                    <input type="text" name="command" placeholder="hostname && uname -a">
+                    <textarea name="command" rows="5" data-code-preview data-preview-label="Command preview" placeholder="hostname && uname -a"></textarea>
                 </label>
+                <div class="wide">
+                    <p class="sidebar-copy">Starter fleet checks</p>
+                    <div class="button-row">
+                        {% for snippet in command_snippets %}
+                            <button class="button secondary" type="button" data-admin-command-snippet="{{ snippet.command }}">{{ snippet.name }}</button>
+                        {% endfor %}
+                    </div>
+                </div>
                 <div class="wide inventory-picklist">
                     {% for group_data in actionable_inventory %}
                         <section class="picklist-group">
@@ -262,4 +270,18 @@
             </table>
         </section>
     </section>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        document.querySelectorAll("[data-admin-command-snippet]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const commandBox = document.querySelector("textarea[name='command']");
+                if (!commandBox) return;
+                commandBox.value = button.dataset.adminCommandSnippet || "";
+                commandBox.dispatchEvent(new Event("input", { bubbles: true }));
+                commandBox.focus();
+            });
+        });
+    </script>
 {% endblock %}

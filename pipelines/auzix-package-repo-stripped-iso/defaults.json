@@ -24,7 +24,10 @@
   "package_intent_files": [
     "packages/extended-ports.manifest.json",
     "packages/oci-and-python.queue.json",
-    "packages/flatpak-desktop.queue.json"
+    "packages/flatpak-desktop.queue.json",
+    "packages/desktop-control-and-userapps.queue.json",
+    "packages/desktop-userapps.sources.json",
+    "packages/auzix-control-panel.intent.json"
   ],
   "base_package_batches": [
     {

@@ -47,6 +47,26 @@ def _validate_selected_targets(selected_hosts: list[str], actionable_inventory: 
     return validated
 
 
+ADMIN_COMMAND_SNIPPETS = [
+    {
+        "name": "Kernel + OS differential",
+        "command": "printf 'host=%s\\n' \"$(hostname -f 2>/dev/null || hostname)\"; uname -srvmo; test -r /etc/os-release && sed -n 's/^PRETTY_NAME=//p' /etc/os-release | tr -d '\"'",
+    },
+    {
+        "name": "Disk pressure",
+        "command": "df -hT / /var /tmp 2>/dev/null || df -hT; printf '\\n'; du -sh /var/log /tmp 2>/dev/null || true",
+    },
+    {
+        "name": "Container runtime quick check",
+        "command": "for tool in docker podman nerdctl crictl; do command -v \"$tool\" >/dev/null 2>&1 && { printf '%s: ' \"$tool\"; \"$tool\" --version 2>/dev/null | head -n 1; }; done",
+    },
+    {
+        "name": "Service failures",
+        "command": "systemctl --failed --no-pager 2>/dev/null || rc-status 2>/dev/null || service --status-all 2>/dev/null | head -n 80",
+    },
+]
+
+
 @admin_blueprint.route("/admin", methods=["GET", "POST"])
 def admin():
     rules = load_rules()
@@ -168,4 +188,5 @@ def admin():
         template_assets=template_assets,
         result=result,
         result_buckets=result_buckets,
+        command_snippets=ADMIN_COMMAND_SNIPPETS,
     )

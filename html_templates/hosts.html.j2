@@ -177,7 +177,9 @@
                         <th>OS</th>
                         <th>IPs</th>
                         <th>Pkg mgr</th>
+                        <th>Kernel</th>
                         <th>Services</th>
+                        <th>Facter</th>
                         <th>Runtime</th>
                     </tr>
                 </thead>
@@ -190,7 +192,9 @@
                             <td>{{ resolved.os_name or 'unset' }}</td>
                             <td>{{ resolved.observed_ips | join(', ') if resolved.observed_ips else (resolved.ip or 'unset') }}</td>
                             <td>{{ resolved.package_manager or 'unset' }}</td>
+                            <td>{{ resolved.kernel or 'unset' }}</td>
                             <td>{{ resolved.services_detected | join(', ') if resolved.services_detected else 'unset' }}</td>
+                            <td>{{ resolved.facter_status or 'unset' }}</td>
                             <td>
                                 {% if resolved.docker_service %}
                                     {{ resolved.docker_stack or 'stack' }} / {{ resolved.docker_replicas or 'unset' }}
@@ -201,7 +205,7 @@
                         </tr>
                     {% else %}
                         <tr>
-                            <td colspan="8">No observed facts yet.</td>
+                            <td colspan="10">No observed facts yet.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -226,6 +230,9 @@
                             <th>IP</th>
                             <th>OS</th>
                             <th>Services</th>
+                            <th>Kernel</th>
+                            <th>Disks</th>
+                            <th>Repos</th>
                             <th>Notes</th>
                         </tr>
                     </thead>
@@ -237,6 +244,9 @@
                                 <td>{{ result.ip or 'unset' }}</td>
                                 <td>{{ result.os_name or 'unset' }}</td>
                                 <td>{{ result.services_detected | join(', ') if result.services_detected else 'unset' }}</td>
+                                <td>{{ result.kernel or 'unset' }}</td>
+                                <td>{{ result.disk_report | join(' / ') if result.disk_report else 'unset' }}</td>
+                                <td>{{ result.repo_states | join(' / ') if result.repo_states else 'unset' }}</td>
                                 <td>{{ result.error or result.auth_method or 'ok' }}</td>
                             </tr>
                         {% endfor %}
