@@ -2010,15 +2010,19 @@ WORKFLOW_DEFINITIONS = {
                 "complete": "Trixie intake report and published packages are available.",
                 "command": (
                     "bash -lc 'cd /srv/auzix/AuziX/src && "
-                    "report=out/package-bot/trixie-user-apps.report.json && "
-                    "jq -e '\"'\"'.format == \"auzix-trixie-intake-report-v1\" "
-                    "and .complete > 0'\"'\"' \"$report\" >/dev/null && "
-                    "curl -fsS http://192.168.1.10/auzix/repo/index.json | "
-                    "jq -e '\"'\"'(.packages | length) > 80 and "
-                    "any(.packages[]; .name == \"LibreOffice\") and "
-                    "any(.packages[]; .name == \"Python3\") and "
-                    "all(.packages[]; (.name | startswith(\"Debian.\") | not))'\"'\"' >/dev/null && "
-                    "jq '\"'\"'{status, complete, failed}'\"'\"' \"$report\"'"
+                    "python3 - <<'\"'\"'PY'\"'\"'\n"
+                    "import json, urllib.request\n"
+                    "report=json.load(open(\"out/package-bot/trixie-user-apps.report.json\"))\n"
+                    "assert report.get(\"format\") == \"auzix-trixie-intake-report-v1\", report\n"
+                    "assert int(report.get(\"complete\") or 0) > 0, report\n"
+                    "repo=json.load(urllib.request.urlopen(\"http://192.168.1.10/auzix/repo/index.json\", timeout=30))\n"
+                    "names=[pkg.get(\"name\", \"\") for pkg in repo.get(\"packages\", [])]\n"
+                    "assert len(names) > 80, len(names)\n"
+                    "assert \"LibreOffice\" in names, names\n"
+                    "assert \"Python3\" in names, names\n"
+                    "assert not any(name.startswith(\"Debian.\") for name in names), names\n"
+                    "print(json.dumps({\"status\": report.get(\"status\"), \"complete\": report.get(\"complete\"), \"failed\": report.get(\"failed\"), \"repo_packages\": len(names)}, sort_keys=True))\n"
+                    "PY'"
                 ),
                 "timeout": 180,
             },
