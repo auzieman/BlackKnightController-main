@@ -70,6 +70,26 @@ See `docs/pipeline-folder-layout.md` for the contract.
   and ticket endpoint service lane for the `foo.bar` small-office demo.
 - `small-office-foobar-reset/`: safe reset scaffold for wiping only `foo.bar`
   demo targets and generated evidence while preserving shared lab services.
+- `auzietek-vps-ops-inventory/`: read-only IONOS/Auzietek VPS inventory and
+  health snapshot lane for SSH, Docker/Swarm, nginx, disk/log/update posture,
+  and public preview endpoint evidence.
+- `auzietek-vps-backup-prepare/`: application-aware backup candidate for nginx,
+  compose metadata, micro-blog, legacy Drupal, and Kanboard before deploy,
+  cleanup, maintenance, or cutover work.
+- `auzietek-beta-preview-deploy/`: repeatable micro-blog beta preview deploy
+  lane that preserves remote `.env` and the VPS-only localhost nginx binding.
+- `auzietek-vps-failover-sync/`: dry-run-first rsync/failover candidate that
+  captures the historical paired-host pattern: whichever host is active primary
+  for persistent data syncs to the opposite host, with `/svc` versus `/srv`
+  planning scopes.
+- `auzietek-vps-maintenance-check/`: safe maintenance and security posture lane
+  for updates, reboot-needed status, listening ports, TLS expiry, logs, Docker
+  image posture, and gated rolling restarts.
+- `auzietek-vps-cleanup-dryrun/`: dry-run cleanup planner for retired remote
+  artifacts with explicit preserve rules and gated apply.
+- `auzix-public-beta-shelf/`: gated public AUZiX beta shelf publish lane for
+  `auzix.auzietek.com`, staging `index.html`, `repo/`, `isos/`, and
+  `receipts/` from lab-build outputs onto the Auzietek IONOS public path.
 
 See `docs/small-office-foobar-example.md` for the packaged architecture,
 credentials, validation evidence, and BKC SSH handoff pattern.

@@ -1,0 +1,157 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-public-beta-shelf",
+  "name": "AUZIX PUBLIC 40 — Publish Beta Repo + ISO Shelf",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-public-beta-shelf",
+  "resource_class": "standard",
+  "status": "candidate",
+  "owner": "auzix",
+  "tags": [
+    "auzix",
+    "auzietek",
+    "ionos",
+    "public-beta",
+    "package-repo",
+    "iso",
+    "nginx",
+    "dns",
+    "gated"
+  ],
+  "summary": "Publish a blessed AUZiX beta shelf to the Auzietek public VPS path, with repo/ISO/receipt content staged from lab-build and DNS/SSL changes kept behind explicit gates.",
+  "targets": {
+    "source_repo": "repo:AuziX",
+    "build_host": "host:lab-build",
+    "primary_public_host": "node:vps:ionos-primary",
+    "secondary_public_host": "node:vps:ionos-secondary",
+    "public_site": "https://auzix.auzietek.com/",
+    "public_content_root": "path:/srv/auzix",
+    "dns_provider": "provider:ionos"
+  },
+  "inputs": {
+    "build_host": {"required": true, "default": "10.20.0.233"},
+    "build_user": {"required": true, "default": "admin-deploy"},
+    "source_repo_path": {"required": true, "default": "/home/admin-deploy/src/AuziX"},
+    "lab_repo_publish_dir": {"required": true, "default": "/srv/http/auzix/repo"},
+    "lab_iso_publish_dir": {"required": true, "default": "/var/lib/auzix-build/publish"},
+    "lab_receipt_dir": {"required": true, "default": "/var/lib/bkc/receipts"},
+    "public_remote_host": {"required": true, "default": "74.208.45.165"},
+    "public_remote_user": {"required": true, "default": "root"},
+    "public_remote_root": {"required": true, "default": "/srv/auzix"},
+    "public_nginx_site": {"required": false, "default": "/etc/nginx/sites-available/auzix.auzietek.com.conf"},
+    "public_hostname": {"required": false, "default": "auzix.auzietek.com"},
+    "dns_record_target": {"required": false, "default": "auzietek.com"},
+    "enable_public_rsync": {"required": false, "default": false},
+    "enable_nginx_apply": {"required": false, "default": false},
+    "enable_dns_apply": {"required": false, "default": false},
+    "enable_cert_request": {"required": false, "default": false},
+    "enable_secondary_sync": {"required": false, "default": false}
+  },
+  "stages": [
+    {
+      "id": "preflight-lab-build-artifacts",
+      "action": "auzix.public_shelf.preflight_lab_artifacts",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "validate-public-safety-gate",
+      "action": "auzix.public_shelf.validate_public_safety_gate",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "notes": "Reject lab SSH keys, password hashes, internal hostnames/IPs, private URLs, and raw build secrets before any public rsync."
+    },
+    {
+      "id": "render-static-beta-shelf",
+      "action": "auzix.public_shelf.render_static_site",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 240,
+      "produces": [
+        "public/auzix/index.html",
+        "public/auzix/repo/index.json",
+        "public/auzix/isos/*.iso",
+        "public/auzix/isos/*.sha256",
+        "public/auzix/receipts/*"
+      ]
+    },
+    {
+      "id": "dryrun-public-rsync",
+      "action": "rsync.public_shelf.dryrun",
+      "transport": "rsync+ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "sync-public-shelf-gated",
+      "action": "rsync.public_shelf.apply",
+      "transport": "rsync+ssh",
+      "risk": "medium",
+      "enabled_by": "enable_public_rsync",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "render-nginx-vhost",
+      "action": "nginx.auzix_public_shelf.render",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "apply-nginx-vhost-gated",
+      "action": "nginx.auzix_public_shelf.apply",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_nginx_apply",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "snapshot-public-dns",
+      "action": "ionos.dns.records.snapshot",
+      "transport": "https-api",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "apply-auzix-public-dns-gated",
+      "action": "ionos.dns.records.apply_gated",
+      "transport": "https-api",
+      "risk": "medium",
+      "enabled_by": "enable_dns_apply",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "request-auzix-public-cert-gated",
+      "action": "letsencrypt.dns01.request",
+      "transport": "bkc-ssh+ionos-api",
+      "risk": "medium",
+      "enabled_by": "enable_cert_request",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "smoke-public-shelf",
+      "action": "http.urls.smoke",
+      "transport": "https",
+      "risk": "low",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "sync-secondary-public-shelf-gated",
+      "action": "rsync.public_shelf.secondary_apply",
+      "transport": "rsync+ssh",
+      "risk": "medium",
+      "enabled_by": "enable_secondary_sync",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "record-auzix-public-shelf-fragment",
+      "action": "fragments.remote_site.auzix_public_shelf.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "This pipeline intentionally separates artifact rendering, public rsync, nginx, DNS, certificate request, and secondary sync. Default runs are dry-run/smoke only. Public publication requires flipping explicit gates after the lab ISO/repo are blessed."
+}

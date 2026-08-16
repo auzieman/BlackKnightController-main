@@ -1,0 +1,92 @@
+{
+  "pipeline_id": "auzix-public-beta-shelf",
+  "display_name": "AUZIX PUBLIC 40 — Publish Beta Repo + ISO Shelf",
+  "build_host": "10.20.0.233",
+  "build_host_alias": "lab-build",
+  "build_user": "admin-deploy",
+  "source_repo_path": "/home/admin-deploy/src/AuziX",
+  "lab_repo_publish_dir": "/srv/http/auzix/repo",
+  "lab_iso_publish_dir": "/var/lib/auzix-build/publish",
+  "lab_receipt_dir": "/var/lib/bkc/receipts",
+  "public_remote_host": "74.208.45.165",
+  "public_secondary_host": "74.208.235.36",
+  "public_alternate_secondary_host": "74.208.45.164",
+  "public_remote_user": "root",
+  "public_remote_root": "/srv/auzix",
+  "public_paths": {
+    "site": "/srv/auzix/site",
+    "repo": "/srv/auzix/site/repo",
+    "isos": "/srv/auzix/site/isos",
+    "receipts": "/srv/auzix/site/receipts",
+    "archive": "/srv/auzix/archive"
+  },
+  "public_hostname": "auzix.auzietek.com",
+  "public_url": "https://auzix.auzietek.com/",
+  "public_nginx_site": "/etc/nginx/sites-available/auzix.auzietek.com.conf",
+  "public_nginx_enabled": "/etc/nginx/sites-enabled/auzix.auzietek.com.conf",
+  "dns_provider": "ionos",
+  "dns_api_secret_ref": "secret:ionos/dns/api",
+  "dns_zone": "auzietek.com",
+  "desired_dns_records": [
+    {
+      "name": "auzix.auzietek.com",
+      "type": "A",
+      "content": "74.208.45.165",
+      "ttl": 300,
+      "purpose": "AUZiX public beta shelf"
+    }
+  ],
+  "certificate_names": [
+    "auzix.auzietek.com"
+  ],
+  "letsencrypt_email": "admin@auzietek.com",
+  "rsync_excludes": [
+    ".git/",
+    "*.tmp",
+    "*.partial",
+    "work/",
+    "cache/",
+    "private/",
+    "secrets/",
+    "authorized_keys",
+    "shadow",
+    "shadow-*"
+  ],
+  "public_safety_denylists": {
+    "paths": [
+      "/root/.ssh",
+      "/Users/root/.ssh",
+      "/home/auzieman/.ssh",
+      "/run/auzix-runtime",
+      "/var/lib/bkc/secrets"
+    ],
+    "patterns": [
+      "PRIVATE KEY",
+      "authorized_keys",
+      "10.20.",
+      "192.168.1.",
+      "bkc.lab.auzietek.com",
+      "swarm1.lab.auzietek.com",
+      "lab-build",
+      "changeme123"
+    ]
+  },
+  "public_smoke_urls": [
+    "https://auzix.auzietek.com/",
+    "https://auzix.auzietek.com/repo/index.json",
+    "https://auzix.auzietek.com/isos/",
+    "https://auzix.auzietek.com/receipts/"
+  ],
+  "enable_public_rsync": false,
+  "enable_nginx_apply": false,
+  "enable_dns_apply": false,
+  "enable_cert_request": false,
+  "enable_secondary_sync": false,
+  "notes": [
+    "lab-build/R730 remains the build authority; IONOS is only the public mirror/shelf.",
+    "Default runs render and dry-run. They do not write DNS, request certs, or rsync public content unless explicit gates are true.",
+    "The shelf mirrors AUZiX docs/auzix-beta-publication-plan.md: index.html, repo/, isos/, receipts/.",
+    "Public ISO assets must pass the secret/lab-address safety gate before publication.",
+    "Use the existing Auzietek community/contact page for Discord/community links instead of spraying brittle raw invite URLs through generated artifacts."
+  ]
+}
