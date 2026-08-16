@@ -12,10 +12,18 @@ primary_iso="${AUZIX_PRIMARY_ISO:-auzix-live-installer-current-${run_id}.iso}"
 extra_isos="${AUZIX_EXTRA_ISOS:-auzix-live-desktop-current-${run_id}.iso}"
 
 ssh_esxi() {
-  sshpass -e ssh \
+  if [ -n "${SSHPASS:-}" ] && command -v sshpass >/dev/null 2>&1; then
+    sshpass -e ssh \
+      -F "${ssh_config}" \
+      -o PreferredAuthentications=password,keyboard-interactive \
+      -o PubkeyAuthentication=no \
+      -o StrictHostKeyChecking=no \
+      "${esxi_host}" "$@"
+    return
+  fi
+  ssh \
     -F "${ssh_config}" \
-    -o PreferredAuthentications=password,keyboard-interactive \
-    -o PubkeyAuthentication=no \
+    -o BatchMode=yes \
     -o StrictHostKeyChecking=no \
     "${esxi_host}" "$@"
 }

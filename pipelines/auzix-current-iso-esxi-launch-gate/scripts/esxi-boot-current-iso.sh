@@ -66,10 +66,18 @@ esxi_iso_dir="${BKC_ESXI_ISO_DIR:-/vmfs/volumes/datastore1/auzix-isos}"
 ssh_config="${BKC_SSH_CONFIG:-/home/auzieman/Projects/BlackKnightController/ops/workstation-ssh/bkc-lab.conf}"
 
 ssh_esxi() {
-  sshpass -e ssh \
+  if [ -n "${SSHPASS:-}" ] && command -v sshpass >/dev/null 2>&1; then
+    sshpass -e ssh \
+      -F "${ssh_config}" \
+      -o PreferredAuthentications=password,keyboard-interactive \
+      -o PubkeyAuthentication=no \
+      -o StrictHostKeyChecking=no \
+      "${esxi_host}" "$@"
+    return
+  fi
+  ssh \
     -F "${ssh_config}" \
-    -o PreferredAuthentications=password,keyboard-interactive \
-    -o PubkeyAuthentication=no \
+    -o BatchMode=yes \
     -o StrictHostKeyChecking=no \
     "${esxi_host}" "$@"
 }
