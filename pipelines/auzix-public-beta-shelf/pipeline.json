@@ -44,6 +44,7 @@
     "public_nginx_site": {"required": false, "default": "/etc/nginx/sites-available/auzix.auzietek.com.conf"},
     "public_hostname": {"required": false, "default": "auzix.auzietek.com"},
     "dns_record_target": {"required": false, "default": "auzietek.com"},
+    "landing_only": {"required": false, "default": true},
     "enable_public_rsync": {"required": false, "default": false},
     "enable_nginx_apply": {"required": false, "default": false},
     "enable_dns_apply": {"required": false, "default": false},
@@ -91,6 +92,12 @@
       "transport": "bkc-ssh",
       "risk": "low",
       "timeout_seconds": 240,
+      "with": {
+        "script": "scripts/stage-auzix-public-beta-shelf.sh",
+        "environment": {
+          "AUZIX_PUBLIC_LANDING_ONLY": "${inputs.landing_only}"
+        }
+      },
       "produces": [
         "public/auzix/index.html",
         "public/auzix/repo/index.json",

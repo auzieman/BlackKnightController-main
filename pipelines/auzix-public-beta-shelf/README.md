@@ -20,7 +20,7 @@ The default pipeline run is intentionally non-destructive:
 
 1. verify lab artifacts exist;
 2. run public-safety checks;
-3. render the static shelf;
+3. render the static landing shelf in `landing_only` mode;
 4. dry-run the rsync;
 5. snapshot DNS;
 6. smoke URLs if already live;
@@ -34,6 +34,11 @@ The following gates must be deliberately enabled for external changes:
 - `enable_wildcard_cert_deploy`
 - `enable_cert_request`
 - `enable_secondary_sync`
+
+`landing_only` defaults to `true` until the next AUZiX ISO/install test blesses
+the repo, ISO, and receipt payloads. In that mode the shelf renderer creates the
+landing page plus lightweight placeholder `repo/`, `isos/`, and `receipts/`
+paths, but does not copy package archives or ISO images.
 
 TLS should normally reuse the existing `*.auzietek.com` star certificate. The
 certificate-request gate is fallback/renewal work, not the first path for

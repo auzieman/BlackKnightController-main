@@ -110,6 +110,7 @@
     "https://auzix.auzietek.com/isos/",
     "https://auzix.auzietek.com/receipts/"
   ],
+  "landing_only": true,
   "enable_public_rsync": false,
   "enable_nginx_apply": false,
   "enable_dns_apply": false,
@@ -119,6 +120,7 @@
   "notes": [
     "lab-build/R730 remains the build authority; IONOS is only the public mirror/shelf.",
     "Default runs render and dry-run. They do not write DNS, deploy certs, request cert renewal, or rsync public content unless explicit gates are true.",
+    "Landing-only mode is the default until the next AUZiX ISO/install test blesses repo, ISO, and receipt artifacts.",
     "Subdomains should use the existing Auzietek star certificate; requesting a new certificate is fallback/renewal only.",
     "IONOS DNS API material lives on ns1 under /root and is referenced by path; do not copy or print the key into receipts.",
     "Operational facts should be read from ops/remote-sites/auzietek-public-inventory.json; defaults are a render-time fallback, not the authority.",
