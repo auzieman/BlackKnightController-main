@@ -33,6 +33,27 @@ receipt=/var/lib/auzix-build/local-receipts/live-build-current-live-20260816T185
 Both ISOs passed the boot ISO publication contract on r730. They still need the
 ESXi boot smoke and launch audit before any public payload promotion.
 
+## 2026-08-16 ESXi boot-smoke receipts
+
+- BKC run `4f6d5f36-e5d7-4ba1-9bd5-5268a5f55979` failed usefully: the pipeline
+  stage executed, but the helper contract still expected `AUZIX_ISO_NAME` in
+  the workstation/tunnel environment.
+- BKC run `28dcf92d-89a9-46ca-bdc3-c367aa75a176` completed with a real
+  executable `boot-desktop-iso-smoke` stage. It booted
+  `auzix-live-desktop-current-current-live-20260816T185556Z.iso` on
+  `auzix-esxi-workstation-media-01` and captured serial evidence in BKC.
+
+The lane is intentionally mixed-mode for now:
+
+- most stages record/review the gate contract;
+- `boot-desktop-iso-smoke` executes the ESXi media attach, VM reboot, CD-ROM
+  backing validation, and serial-tail capture.
+
+Known remaining image-content warning from that run: the serial receipt says
+`ssh tcp/22 not listening`. AUZiX commit `9688a01` records the investigation and
+adds a bounded wait before the StartSequence SSH listen probe so the next ISO
+can distinguish a real sshd failure from a too-early receipt.
+
 ## Semi-public package gate
 
 Before package repo promotion, the validation target must prove the package can
