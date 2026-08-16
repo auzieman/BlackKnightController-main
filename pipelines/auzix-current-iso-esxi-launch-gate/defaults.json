@@ -1,0 +1,75 @@
+{
+  "tenant_slug": "lab",
+  "source_repo": "repo:AuziX",
+  "source_repo_path": "/home/admin-deploy/src/AuziX",
+  "build_worker": "r730-ai-01",
+  "build_worker_ip": "10.20.0.130",
+  "build_source_snapshot_dir": "/var/lib/auzix-build/source-snapshots",
+  "build_run_dir": "/var/lib/auzix-build/runs",
+  "build_receipt_dir": "/var/lib/auzix-build/local-receipts",
+  "build_publish_dir": "/var/lib/auzix-build/published",
+  "builder_image": "auzix/builder:lab",
+  "build_target": "strict-all",
+  "live_current_only": true,
+  "primary_iso_name_template": "auzix-live-installer-current-${run_id}.iso",
+  "extra_iso_names": [
+    "auzix-live-desktop-current-${run_id}.iso"
+  ],
+  "esxi_host": "10.20.0.114",
+  "esxi_datastore": "datastore1",
+  "esxi_iso_dir": "/vmfs/volumes/datastore1/auzix-isos",
+  "esxi_reference_vm": "auzix-esxi-workstation-media-01",
+  "esxi_reference_vmid": "13",
+  "esxi_test_vm_prefix": "auzix-current-smoke",
+  "validation_hosts": {
+    "trixie_reference": {
+      "vmid": 132,
+      "lan_ip": "192.168.1.169",
+      "lab_ip": "10.20.0.117"
+    },
+    "auzix_workstation": {
+      "vmid": 135,
+      "role": "disposable AUZiX proof VM"
+    }
+  },
+  "required_live_contracts": [
+    "network-online",
+    "sshd-key-auth",
+    "x11-input-keyboard",
+    "x11-input-pointer",
+    "lightdm-greeter",
+    "enlightenment-session",
+    "terminology-launches",
+    "midori-launches",
+    "auzix-installer-launches"
+  ],
+  "repo_launch_gate_targets": [
+    "Terminology",
+    "Midori",
+    "Pluma",
+    "Gedit",
+    "Geany",
+    "EPhoto",
+    "LibreOfficeWriter",
+    "LibreOfficeCalc",
+    "LibreOfficeImpress",
+    "LibreOfficeDraw",
+    "Flatpak",
+    "Podman"
+  ],
+  "public_mirror": {
+    "enabled": false,
+    "host": "auzietek-ionos",
+    "landing": "https://auzix.auzietek.com/",
+    "repo_path": "/auzix/repo/current/",
+    "iso_path": "/auzix/iso/current/",
+    "policy": "publish only after lab boot and package launch gates pass"
+  },
+  "notes": [
+    "All heavy work runs on r730/lab-build local disk, not the laptop and not ns1 scratch.",
+    "BKC is the visible control plane; shell-only work must leave pipeline receipts and fragments.",
+    "Runtime audit warnings are not public-ready. They are allowed only for lab boot exploration with an explicit warning receipt.",
+    "Package tarballs must preserve ownership, modes, setuid/sticky bits, package scripts, and declared launch contracts.",
+    "No package or desktop launcher is promoted to a semi-public repo until it installs and runs through a scripted or observed launch check."
+  ]
+}

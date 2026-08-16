@@ -1,0 +1,274 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-current-iso-esxi-launch-gate",
+  "name": "AUZiX LAB 14 — Current ISO ESXi + Repo Launch Gate",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-current-iso-esxi-launch-gate",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "current-live",
+    "iso",
+    "esxi",
+    "repo-quality",
+    "desktop-launch",
+    "r730-ai-01",
+    "semi-public-gate"
+  ],
+  "summary": "Build the current AUZiX live ISO pair on r730, publish receipts, boot-test on ESXi, and gate package repository promotion on real install/run checks instead of archive-only success.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "controller": "service:bkc.lab",
+    "build_worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "hypervisor": "host:server3-esxi",
+    "reference_desktop": "node:vm:trixie-smoke-132",
+    "validation_workstation": "node:vm:auzix-vm135",
+    "package_repo": "service:auzix-package-repo",
+    "public_landing": "service:auzix.auzietek.com"
+  },
+  "inputs": {
+    "run_id": {
+      "required": false,
+      "default": "current-live-${timestamp_utc}"
+    },
+    "source_repo_path": {
+      "required": true,
+      "default": "/home/admin-deploy/src/AuziX"
+    },
+    "build_worker": {
+      "required": true,
+      "default": "r730-ai-01"
+    },
+    "builder_image": {
+      "required": true,
+      "default": "auzix/builder:lab"
+    },
+    "build_target": {
+      "required": true,
+      "default": "strict-all"
+    },
+    "live_current_only": {
+      "required": false,
+      "default": true
+    },
+    "primary_iso_name": {
+      "required": false,
+      "default": "auzix-live-installer-current-${inputs.run_id}.iso"
+    },
+    "extra_iso_names": {
+      "required": false,
+      "default": "auzix-live-desktop-current-${inputs.run_id}.iso"
+    },
+    "enable_esxi_boot_smoke": {
+      "required": false,
+      "default": true
+    },
+    "enable_vm135_repo_install_gate": {
+      "required": false,
+      "default": false
+    },
+    "enable_public_payload_publish": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "load-operator-notes-and-last-known-good-contract",
+      "action": "notes.read_required",
+      "transport": "bkc",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "with": {
+        "required_notes": [
+          "notes/esxi-bootstrap-contract-iso-boot-2026-08-16.md",
+          "notes/esxi-auzix-workstation-media-boot-2026-08-15.md",
+          "notes/package-permission-preservation-*.md",
+          "notes/desktop-session-contract-*.md"
+        ]
+      }
+    },
+    {
+      "id": "preflight-build-worker-local-disk",
+      "action": "auzix.build_worker.preflight",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "with": {
+        "host": "${inputs.build_worker}",
+        "must_have_free_gb": 80,
+        "scratch_policy": "r730-local-disk-not-laptop-not-ns1"
+      }
+    },
+    {
+      "id": "sync-source-snapshot-to-r730",
+      "action": "repo.snapshot.rsync_to_worker",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "with": {
+        "source": "${inputs.source_repo_path}",
+        "exclude": [
+          ".git",
+          "public",
+          "out",
+          "artifacts"
+        ]
+      }
+    },
+    {
+      "id": "validate-package-contracts-before-build",
+      "action": "auzix.packages.contract_validate",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 900,
+      "with": {
+        "checks": [
+          "json-valid",
+          "metadata-preserves-mode-owner",
+          "desktop-launchers-have-run-contracts",
+          "package-scripts-preserved"
+        ]
+      }
+    },
+    {
+      "id": "build-current-live-iso-pair-on-r730",
+      "action": "auzix.iso.build_current_live_pair",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "timeout_seconds": 10800,
+      "with": {
+        "runner": "scripts/run-auzix-live-build-r730.sh",
+        "environment": {
+          "AUZIX_BUILD_TARGET": "${inputs.build_target}",
+          "AUZIX_LIVE_CURRENT_ONLY": "${inputs.live_current_only}",
+          "AUZIX_ISO_NAME": "${inputs.primary_iso_name}",
+          "AUZIX_EXTRA_ISO_NAMES": "${inputs.extra_iso_names}",
+          "AUZIX_PACKAGE_RUNTIME_AUDIT_MODE": "warn"
+        }
+      },
+      "produces": [
+        "/var/lib/auzix-build/local-receipts/live-build-*.receipt",
+        "/var/lib/auzix-build/local-receipts/*.driver.log",
+        "/var/lib/auzix-build/published/auzix-live-*.iso",
+        "/var/lib/auzix-build/published/auzix-live-*.iso.sha256"
+      ]
+    },
+    {
+      "id": "audit-runtime-warnings-as-not-public-ready",
+      "action": "auzix.receipts.runtime_warning_gate",
+      "transport": "bkc",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "policy": {
+        "warning_mode_allowed_for_lab_iso": true,
+        "warning_mode_blocks_public_repo": true
+      }
+    },
+    {
+      "id": "stage-isos-to-esxi-datastore",
+      "action": "vmware.esxi.iso.stage",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_by": "enable_esxi_boot_smoke",
+      "timeout_seconds": 1800,
+      "with": {
+        "datastore": "datastore1",
+        "iso_dir": "/vmfs/volumes/datastore1/auzix-isos",
+        "no_delete": true
+      }
+    },
+    {
+      "id": "clone-or-reuse-esxi-smoke-vms",
+      "action": "vmware.esxi.vm.clone_for_iso_smoke",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_by": "enable_esxi_boot_smoke",
+      "timeout_seconds": 1200,
+      "with": {
+        "reference_vm": "auzix-esxi-workstation-media-01",
+        "test_vm_prefix": "auzix-current-smoke",
+        "clone_preferred": true
+      }
+    },
+    {
+      "id": "boot-installer-iso-smoke",
+      "action": "vmware.esxi.vm.boot_iso_and_collect_serial",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_by": "enable_esxi_boot_smoke",
+      "timeout_seconds": 900,
+      "with": {
+        "expected": [
+          "dhcp-address-or-serial-prompt",
+          "x11-or-rescue-shell",
+          "no-kernel-panic"
+        ]
+      }
+    },
+    {
+      "id": "boot-desktop-iso-smoke",
+      "action": "vmware.esxi.vm.boot_iso_and_collect_serial",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_by": "enable_esxi_boot_smoke",
+      "timeout_seconds": 900,
+      "with": {
+        "expected": [
+          "lightdm-or-enlightenment",
+          "keyboard-input",
+          "pointer-input",
+          "terminology-or-xterm-launchable",
+          "midori-launchable"
+        ]
+      }
+    },
+    {
+      "id": "vm135-install-run-launch-gate",
+      "action": "auzix.vm135.install_and_launch_audit",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_vm135_repo_install_gate",
+      "timeout_seconds": 3600,
+      "with": {
+        "targets": "${defaults.repo_launch_gate_targets}",
+        "e_logs": [
+          "/Users/auzix/.e-log.log",
+          "/Users/auzix/.xsession-errors"
+        ],
+        "hard_fail_on": [
+          "command-not-found",
+          "missing-shared-library",
+          "efreet-cache-permission-error",
+          "desktop-launcher-exits-immediately"
+        ]
+      }
+    },
+    {
+      "id": "public-payload-publish-gate",
+      "action": "auzix.public_mirror.publish_payloads",
+      "transport": "bkc-ssh",
+      "risk": "high",
+      "enabled_by": "enable_public_payload_publish",
+      "timeout_seconds": 1800,
+      "policy": {
+        "requires_clean_lab_boot": true,
+        "requires_clean_repo_launch_gate": true,
+        "requires_operator_approval": true
+      }
+    },
+    {
+      "id": "record-fragment-and-ticket-summary",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "with": {
+        "summary": "Record ISO checksums, ESXi VM IDs, runtime warnings, failed launchers, and next package-contract fixes."
+      }
+    }
+  ],
+  "notes": "This is the no-spiral gate for semi-public AUZiX work. It is allowed to build and boot lab candidates with warnings, but public package/repo/ISO payloads require a clean boot smoke and real app launch evidence. Failures become receipts/fragments; do not hand-fix indefinitely on the guest."
+}

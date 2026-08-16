@@ -47,6 +47,11 @@ These are disabled in `defaults.json` until the operator flips them:
 - `enable_vm135_install_validation`: install from the repo inside VM135.
 - `enable_bkc_channel_post`: post progress to bkc-channel.
 
+Publication rule: a package archive is not semi-public-ready merely because it
+exists in the repository. Command-bearing packages must preserve ownership,
+modes, setuid/sticky bits, package scripts, and must pass install/run validation
+or remain lab-only with a clear warning receipt.
+
 ## Ollama worker role
 
 Ollama is in the loop as a receipt reviewer, not as an authority to mutate the
@@ -57,4 +62,3 @@ check fails.
 
 Never send secrets, raw environment dumps, private cert material, SSH keys, or
 API tokens to the model.
-

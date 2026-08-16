@@ -1,0 +1,38 @@
+{
+  "tenant_slug": "lab",
+  "source_repo": "repo:AuziX",
+  "source_repo_path": "/home/admin-deploy/src/AuziX",
+  "build_worker": "r730-ai-01",
+  "build_worker_ip": "10.20.0.130",
+  "build_source_snapshot_dir": "/var/lib/auzix-build/source-snapshots",
+  "build_run_dir": "/var/lib/auzix-build/runs",
+  "build_receipt_dir": "/var/lib/auzix-build/local-receipts",
+  "build_publish_dir": "/var/lib/auzix-build/published",
+  "builder_image": "auzix/builder:lab",
+  "build_target": "strict-all",
+  "live_current_only": true,
+  "primary_iso_name_template": "auzix-live-installer-current-${run_id}.iso",
+  "extra_iso_names": [
+    "auzix-live-desktop-current-${run_id}.iso"
+  ],
+  "esxi_host": "10.20.0.114",
+  "esxi_datastore": "datastore1",
+  "esxi_iso_dir": "/vmfs/volumes/datastore1/auzix-isos",
+  "esxi_reference_vm": "auzix-esxi-workstation-media-01",
+  "esxi_reference_vmid": "13",
+  "esxi_test_vm_prefix": "auzix-current-smoke",
+  "repo_launch_gate_targets": [
+    "Terminology",
+    "Midori",
+    "Pluma",
+    "Gedit",
+    "Geany",
+    "EPhoto",
+    "LibreOfficeWriter",
+    "LibreOfficeCalc",
+    "LibreOfficeImpress",
+    "LibreOfficeDraw",
+    "Flatpak",
+    "Podman"
+  ]
+}
