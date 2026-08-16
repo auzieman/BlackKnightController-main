@@ -16,6 +16,8 @@ so the work is visible from the web UI and reviewable later during filming.
 - Package archives must preserve ownership, modes, setuid/sticky bits, scripts,
   and desktop launch contracts.
 - A desktop menu entry is not valid unless its target installs and launches.
+- ESXi must be keyed before ISO staging/boot smoke. Password bootstrap is only a
+  setup step; repeated boots should use the checked-in SSH alias/key path.
 
 ## Current run evidence
 

@@ -168,6 +168,18 @@
       }
     },
     {
+      "id": "authorize-esxi-operator-key",
+      "action": "vmware.esxi.ssh.authorize_operator_key",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_by": "enable_esxi_boot_smoke",
+      "timeout_seconds": 120,
+      "with": {
+        "script": "scripts/esxi-authorize-operator-key.sh",
+        "reason": "Password bootstrap is allowed once; repeated AUZiX ISO boot smoke should use key auth."
+      }
+    },
+    {
       "id": "stage-isos-to-esxi-datastore",
       "action": "vmware.esxi.iso.stage",
       "transport": "bkc-ssh-through-ns1",
