@@ -18,7 +18,7 @@
     "dns",
     "gated"
   ],
-  "summary": "Publish a blessed AUZiX beta shelf to the Auzietek public VPS path, with repo/ISO/receipt content staged from lab-build and DNS/SSL changes kept behind explicit gates.",
+  "summary": "Publish a blessed AUZiX beta shelf to the Auzietek public VPS path, with repo/ISO/receipt content staged from lab-build, DNS changes gated through ns1's IONOS helper, and TLS served from the existing Auzietek wildcard certificate.",
   "targets": {
     "source_repo": "repo:AuziX",
     "build_host": "host:lab-build",
@@ -26,9 +26,12 @@
     "secondary_public_host": "node:vps:ionos-secondary",
     "public_site": "https://auzix.auzietek.com/",
     "public_content_root": "path:/srv/auzix",
-    "dns_provider": "provider:ionos"
+    "dns_provider": "provider:ionos",
+    "dns_workhorse": "node:host:ns1",
+    "tls_certificate": "cert:wildcard-auzietek-com"
   },
   "inputs": {
+    "inventory_source": {"required": false, "default": "ops/remote-sites/auzietek-public-inventory.json"},
     "build_host": {"required": true, "default": "10.20.0.233"},
     "build_user": {"required": true, "default": "admin-deploy"},
     "source_repo_path": {"required": true, "default": "/home/admin-deploy/src/AuziX"},
@@ -44,10 +47,29 @@
     "enable_public_rsync": {"required": false, "default": false},
     "enable_nginx_apply": {"required": false, "default": false},
     "enable_dns_apply": {"required": false, "default": false},
+    "enable_wildcard_cert_deploy": {"required": false, "default": false},
     "enable_cert_request": {"required": false, "default": false},
     "enable_secondary_sync": {"required": false, "default": false}
   },
   "stages": [
+    {
+      "id": "load-auzietek-public-inventory",
+      "action": "inventory.remote_site.load",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60,
+      "with": {
+        "inventory_source": "${inputs.inventory_source}",
+        "required_refs": [
+          "remote-site:auzietek",
+          "node:vps:ionos-primary",
+          "service:ionos-dns-api",
+          "tool:ns1-ionos-dns-helper",
+          "cert:wildcard-auzietek-com",
+          "service:auzix-public-beta-shelf"
+        ]
+      }
+    },
     {
       "id": "preflight-lab-build-artifacts",
       "action": "auzix.public_shelf.preflight_lab_artifacts",
@@ -117,18 +139,28 @@
     {
       "id": "apply-auzix-public-dns-gated",
       "action": "ionos.dns.records.apply_gated",
-      "transport": "https-api",
+      "transport": "bkc-ssh+ns1-ionos-api",
       "risk": "medium",
       "enabled_by": "enable_dns_apply",
       "timeout_seconds": 300
     },
     {
-      "id": "request-auzix-public-cert-gated",
-      "action": "letsencrypt.dns01.request",
-      "transport": "bkc-ssh+ionos-api",
+      "id": "deploy-existing-auzietek-wildcard-cert-gated",
+      "action": "nginx.tls.deploy_existing_wildcard_cert",
+      "transport": "bkc-ssh+filesystem",
+      "risk": "medium",
+      "enabled_by": "enable_wildcard_cert_deploy",
+      "timeout_seconds": 300,
+      "notes": "Primary TLS path: reuse the existing *.auzietek.com star certificate for auzix.auzietek.com."
+    },
+    {
+      "id": "request-auzietek-wildcard-renewal-fallback-gated",
+      "action": "letsencrypt.dns01.request_wildcard",
+      "transport": "bkc-ssh+ns1-ionos-api",
       "risk": "medium",
       "enabled_by": "enable_cert_request",
-      "timeout_seconds": 900
+      "timeout_seconds": 900,
+      "notes": "Fallback only. Normal AUZiX public shelf launch should use the existing Auzietek wildcard certificate."
     },
     {
       "id": "smoke-public-shelf",
@@ -153,5 +185,5 @@
       "timeout_seconds": 60
     }
   ],
-  "notes": "This pipeline intentionally separates artifact rendering, public rsync, nginx, DNS, certificate request, and secondary sync. Default runs are dry-run/smoke only. Public publication requires flipping explicit gates after the lab ISO/repo are blessed."
+  "notes": "This pipeline intentionally separates artifact rendering, public rsync, nginx, DNS, wildcard certificate deployment, optional fallback renewal, and secondary sync. DNS writes use the ns1 IONOS helper and the API key already stored under /root on ns1. Default runs are dry-run/smoke only. Public publication requires flipping explicit gates after the lab ISO/repo are blessed."
 }

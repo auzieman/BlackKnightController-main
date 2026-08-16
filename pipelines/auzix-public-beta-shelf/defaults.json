@@ -24,8 +24,23 @@
   "public_url": "https://auzix.auzietek.com/",
   "public_nginx_site": "/etc/nginx/sites-available/auzix.auzietek.com.conf",
   "public_nginx_enabled": "/etc/nginx/sites-enabled/auzix.auzietek.com.conf",
+  "inventory_source": "ops/remote-sites/auzietek-public-inventory.json",
+  "inventory_refs": {
+    "site": "remote-site:auzietek",
+    "primary_host": "node:vps:ionos-primary",
+    "secondary_host": "node:vps:ionos-secondary",
+    "dns_api": "service:ionos-dns-api",
+    "dns_helper": "tool:ns1-ionos-dns-helper",
+    "dns_record": "dns:auzix.auzietek.com",
+    "tls_certificate": "cert:wildcard-auzietek-com",
+    "public_shelf": "service:auzix-public-beta-shelf"
+  },
   "dns_provider": "ionos",
-  "dns_api_secret_ref": "secret:ionos/dns/api",
+  "dns_workhorse_host": "ns1.lab.auzietek.com",
+  "dns_workhorse_ssh": "root@192.168.1.10",
+  "dns_api_secret_ref": "secret:ns1/root/ionos-api-key",
+  "dns_api_key_file": "/root/.secrets/ionos-api-key",
+  "dns_helper_path": "/opt/bkc-lab-certs/ionos_dns.py",
   "dns_zone": "auzietek.com",
   "desired_dns_records": [
     {
@@ -36,8 +51,26 @@
       "purpose": "AUZiX public beta shelf"
     }
   ],
-  "certificate_names": [
+  "tls_mode": "reuse-existing-wildcard",
+  "wildcard_certificate_name": "*.auzietek.com",
+  "wildcard_certificate_covers": [
     "auzix.auzietek.com"
+  ],
+  "wildcard_certificate_source": {
+    "kind": "existing-star-cert",
+    "host": "ionos-primary",
+    "expected_fullchain_candidates": [
+      "/etc/letsencrypt/live/auzietek.com/fullchain.pem",
+      "/etc/letsencrypt/live/wildcard.auzietek.com/fullchain.pem"
+    ],
+    "expected_privkey_candidates": [
+      "/etc/letsencrypt/live/auzietek.com/privkey.pem",
+      "/etc/letsencrypt/live/wildcard.auzietek.com/privkey.pem"
+    ]
+  },
+  "certificate_names": [
+    "auzietek.com",
+    "*.auzietek.com"
   ],
   "letsencrypt_email": "admin@auzietek.com",
   "rsync_excludes": [
@@ -80,11 +113,15 @@
   "enable_public_rsync": false,
   "enable_nginx_apply": false,
   "enable_dns_apply": false,
+  "enable_wildcard_cert_deploy": false,
   "enable_cert_request": false,
   "enable_secondary_sync": false,
   "notes": [
     "lab-build/R730 remains the build authority; IONOS is only the public mirror/shelf.",
-    "Default runs render and dry-run. They do not write DNS, request certs, or rsync public content unless explicit gates are true.",
+    "Default runs render and dry-run. They do not write DNS, deploy certs, request cert renewal, or rsync public content unless explicit gates are true.",
+    "Subdomains should use the existing Auzietek star certificate; requesting a new certificate is fallback/renewal only.",
+    "IONOS DNS API material lives on ns1 under /root and is referenced by path; do not copy or print the key into receipts.",
+    "Operational facts should be read from ops/remote-sites/auzietek-public-inventory.json; defaults are a render-time fallback, not the authority.",
     "The shelf mirrors AUZiX docs/auzix-beta-publication-plan.md: index.html, repo/, isos/, receipts/.",
     "Public ISO assets must pass the secret/lab-address safety gate before publication.",
     "Use the existing Auzietek community/contact page for Discord/community links instead of spraying brittle raw invite URLs through generated artifacts."

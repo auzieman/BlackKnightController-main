@@ -1,0 +1,113 @@
+{
+  "format": "bkc.remote-site-inventory.v1",
+  "site": {
+    "id": "remote-site:auzietek",
+    "name": "Auzietek public VPS pair",
+    "provider": "ionos",
+    "environment": "public",
+    "classification": "production-candidate",
+    "notes": "Public web/service shelf for Auzietek, BlackKnight, Linux Users, Retro Users, and AUZiX beta artifacts."
+  },
+  "hosts": [
+    {
+      "id": "node:vps:ionos-primary",
+      "name": "ionos-auzietek-01",
+      "address": "74.208.45.165",
+      "ssh_user": "root",
+      "role": "primary public nginx / Docker / content host",
+      "path_contract": {
+        "/svc": "service/app/config working trees and compose-owned deployment folders",
+        "/srv": "persistent service data, archives, public shelves, and larger runtime content"
+      }
+    },
+    {
+      "id": "node:vps:ionos-secondary",
+      "name": "ionos-auzietek-02",
+      "address": "74.208.235.36",
+      "alternate_address": "74.208.45.164",
+      "ssh_user": "root",
+      "role": "secondary / failover / warm rsync candidate"
+    }
+  ],
+  "dns": {
+    "id": "service:ionos-dns-api",
+    "provider": "ionos",
+    "zone": "auzietek.com",
+    "workhorse": "node:host:ns1",
+    "helper": {
+      "id": "tool:ns1-ionos-dns-helper",
+      "host": "ns1.lab.auzietek.com",
+      "ssh_target": "root@192.168.1.10",
+      "path": "/opt/bkc-lab-certs/ionos_dns.py",
+      "secret_ref": "secret:ns1/root/ionos-api-key",
+      "api_key_file": "/root/.secrets/ionos-api-key"
+    },
+    "records": [
+      {
+        "id": "dns:auzix.auzietek.com",
+        "name": "auzix.auzietek.com",
+        "type": "A",
+        "content": "74.208.45.165",
+        "ttl": 300,
+        "purpose": "AUZiX public beta shelf",
+        "managed_by": "pipeline:auzix-public-beta-shelf"
+      }
+    ]
+  },
+  "tls": {
+    "id": "cert:wildcard-auzietek-com",
+    "name": "*.auzietek.com",
+    "mode": "reuse-existing-wildcard",
+    "covers": [
+      "auzix.auzietek.com"
+    ],
+    "issuer": "letsencrypt",
+    "primary_host": "node:vps:ionos-primary",
+    "expected_fullchain_candidates": [
+      "/etc/letsencrypt/live/auzietek.com/fullchain.pem",
+      "/etc/letsencrypt/live/wildcard.auzietek.com/fullchain.pem"
+    ],
+    "expected_privkey_candidates": [
+      "/etc/letsencrypt/live/auzietek.com/privkey.pem",
+      "/etc/letsencrypt/live/wildcard.auzietek.com/privkey.pem"
+    ],
+    "renewal_workhorse": "node:host:ns1",
+    "renewal_dns_helper": "tool:ns1-ionos-dns-helper"
+  },
+  "public_shelves": [
+    {
+      "id": "service:auzix-public-beta-shelf",
+      "hostname": "auzix.auzietek.com",
+      "url": "https://auzix.auzietek.com/",
+      "host": "node:vps:ionos-primary",
+      "root": "/srv/auzix/site",
+      "paths": {
+        "repo": "/srv/auzix/site/repo",
+        "isos": "/srv/auzix/site/isos",
+        "receipts": "/srv/auzix/site/receipts",
+        "archive": "/srv/auzix/archive"
+      },
+      "nginx_site": "/etc/nginx/sites-available/auzix.auzietek.com.conf",
+      "nginx_enabled": "/etc/nginx/sites-enabled/auzix.auzietek.com.conf",
+      "dns_record": "dns:auzix.auzietek.com",
+      "tls_certificate": "cert:wildcard-auzietek-com",
+      "build_authority": "host:lab-build",
+      "source_repo": "repo:AuziX"
+    }
+  ],
+  "secret_policy": {
+    "never_commit_values": true,
+    "allowed_in_receipts": [
+      "secret id",
+      "host",
+      "path",
+      "fingerprint/check status"
+    ],
+    "forbidden_in_receipts": [
+      "api key value",
+      "private key value",
+      "certificate private key",
+      "password"
+    ]
+  }
+}

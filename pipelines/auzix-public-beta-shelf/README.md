@@ -31,8 +31,26 @@ The following gates must be deliberately enabled for external changes:
 - `enable_public_rsync`
 - `enable_nginx_apply`
 - `enable_dns_apply`
+- `enable_wildcard_cert_deploy`
 - `enable_cert_request`
 - `enable_secondary_sync`
+
+TLS should normally reuse the existing `*.auzietek.com` star certificate. The
+certificate-request gate is fallback/renewal work, not the first path for
+`auzix.auzietek.com`.
+
+DNS changes should run through ns1's IONOS DNS helper. The API key lives on ns1
+under `/root/.secrets/ionos-api-key`; pipeline receipts must reference the
+secret path only and never copy or print the key.
+
+The operational facts live in BKC inventory:
+
+- `ops/remote-sites/auzietek-public-inventory.json`
+
+The pipeline should load that inventory first and use IDs such as
+`service:auzix-public-beta-shelf`, `dns:auzix.auzietek.com`,
+`tool:ns1-ionos-dns-helper`, and `cert:wildcard-auzietek-com` instead of
+hand-maintaining one-off host/cert/DNS facts.
 
 ## Public content contract
 
@@ -54,4 +72,4 @@ receipts. They must not publish private workdirs or runtime secrets.
 - `auzietek-vps-ops-inventory` snapshots the public VPS state.
 - `auzietek-vps-backup-prepare` should run before a public apply.
 - `ionos-lab-dns-api-inventory` and `lab-auzietek-dns-cert-prepare` are the
-  existing DNS/API/certificate patterns this lane follows.
+  existing DNS/API/helper patterns this lane follows.
