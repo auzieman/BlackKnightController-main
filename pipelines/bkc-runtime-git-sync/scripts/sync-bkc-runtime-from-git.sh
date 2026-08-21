@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE="${BKC_RUNTIME_GIT_REMOTE:-ssh://root@lab-ai-worker/srv/auzix/git-remotes/BlackKnightController.git}"
+REMOTE="${BKC_RUNTIME_GIT_REMOTE:-ssh://root@10.20.0.130/srv/auzix/git-remotes/BlackKnightController.git}"
 BRANCH="${BKC_RUNTIME_GIT_BRANCH:-${BKC_INPUT_BRANCH:-beta/company-mind-workbench-20260726}}"
 if [[ -d /srv/bkc/runtime ]]; then
   DEFAULT_RUNTIME_ROOT="/srv/bkc/runtime"
