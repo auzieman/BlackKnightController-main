@@ -1,0 +1,77 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-vm-disk-install-boot",
+  "name": "AUZiX 25 — Disk Install + Boot Validation",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-vm-disk-install-boot",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "installer",
+    "disk-install",
+    "vm",
+    "destructive-test",
+    "product-gate"
+  ],
+  "summary": "Install AUZiX from live media to disk, reboot from disk, and validate first boot.",
+  "operator_rule": "Target VM must be disposable. Failures become installer/package fixes; do not maintain the VM by hand.",
+  "targets": {
+    "target_vm": "node:vm:auzix-installed-test",
+    "reference_desktop": "node:vm:trixie-smoke-132",
+    "package_repo": "service:auzix-package-repo"
+  },
+  "inputs": {
+    "target_vm": {
+      "required": true,
+      "default": "vmid135"
+    },
+    "wipe_disk": {
+      "required": false,
+      "default": true
+    },
+    "package_profile": {
+      "required": false,
+      "default": "workstation-lite"
+    }
+  },
+  "stages": [
+    {
+      "id": "confirm-live-environment",
+      "action": "auzix.disk_install.confirm_live_env",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "run-installer-to-target-disk",
+      "action": "auzix.disk_install.run_installer",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "high",
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "detach-iso-and-hard-reboot",
+      "action": "auzix.disk_install.reboot_disk",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "firstboot-desktop-and-package-audit",
+      "action": "auzix.disk_install.firstboot_audit",
+      "transport": "bkc-ssh+console",
+      "risk": "medium",
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "record-disk-install-receipt",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Use this after AUZiX 24 live ISO review passes. The product is an installed VM booted from disk with launch/audit receipts."
+}
+

@@ -1,0 +1,74 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-vm-stage-reload",
+  "name": "AUZiX 24 — Stage ISO + Reload Test VM",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-vm-stage-reload",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "iso",
+    "vm",
+    "live-review",
+    "esxi",
+    "pve"
+  ],
+  "summary": "Stage a built AUZiX ISO and reload a disposable VM into live ISO review.",
+  "operator_rule": "This pipeline reloads the test VM only. It does not build packages and does not install to disk.",
+  "targets": {
+    "artifact_store": "path:/var/lib/auzix-build/published",
+    "pve_vm": "node:vm:auzix-vm135",
+    "esxi_vm": "node:vm:auzix-esxi-workstation-media-01"
+  },
+  "inputs": {
+    "iso_path": {
+      "required": true,
+      "default": "/var/lib/auzix-build/published/auzix-live-installer-current.iso"
+    },
+    "target_vm": {
+      "required": true,
+      "default": "vmid135"
+    },
+    "hypervisor": {
+      "required": true,
+      "default": "pve",
+      "allowed": [
+        "pve",
+        "esxi"
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "verify-iso-artifact",
+      "action": "auzix.vm_stage.verify_iso",
+      "transport": "bkc",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "stage-iso-to-hypervisor",
+      "action": "auzix.vm_stage.stage_iso",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "attach-media-and-hard-reload",
+      "action": "auzix.vm_stage.reload_vm",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "record-live-review-handoff",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Use this after package/repo build and ISO pack. The expected result is a VM booted to live ISO review for human or automated inspection."
+}
+

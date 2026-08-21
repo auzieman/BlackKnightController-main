@@ -1,0 +1,66 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "bkc-runtime-git-sync",
+  "name": "BKC 02 — Runtime Git Sync + Catalog Refresh",
+  "repo": "BlackKnightController",
+  "workflow": "bkc-runtime-git-sync",
+  "resource_class": "small",
+  "status": "candidate",
+  "tags": [
+    "bkc",
+    "gitops",
+    "hot-reload",
+    "pipelines",
+    "dictionaries",
+    "workers"
+  ],
+  "summary": "Pull runtime pipeline/dictionary changes from git and verify the filesystem-backed catalog updates without rebuilding BKC.",
+  "operator_rule": "Pipeline and dictionary changes are runtime data. Use localized git pull plus catalog validation; do not rebuild the app for normal pipeline edits.",
+  "targets": {
+    "bkc_lab": "service:bkc.lab",
+    "repo": "repo:BlackKnightController",
+    "runtime_catalog": "path:pipelines + dictionaries"
+  },
+  "inputs": {
+    "remote": {
+      "required": false,
+      "default": "origin"
+    },
+    "branch": {
+      "required": false,
+      "default": "current"
+    }
+  },
+  "stages": [
+    {
+      "id": "fetch-runtime-repo",
+      "action": "git.fetch",
+      "transport": "bkc-runner",
+      "risk": "low",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "fast-forward-runtime-repo",
+      "action": "git.pull_ff_only",
+      "transport": "bkc-runner",
+      "risk": "medium",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "validate-pipeline-json",
+      "action": "bkc.catalog.validate_json",
+      "transport": "bkc-runner",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "print-catalog-signature",
+      "action": "bkc.catalog.signature",
+      "transport": "bkc-runner",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Use after pushing pipeline/dictionary commits. BKC reads repo-folder pipeline JSON and dictionary files from disk on request; this lane makes the git pull/catalog proof visible."
+}
+

@@ -108,11 +108,11 @@ AUZIX_ARTIFACT_HOST = "192.168.1.15"
 AUZIX_R730_BUILD_HOST = "10.20.0.130"
 AUZIX_R730_BUILD_USER = "root"
 AUZIX_R730_SOURCE_ROOT = "/srv/auzix/AuziX/src"
-AUZIX_VM134_ISO_NAME = "auzix-strict-desktop-vm134.iso"
+AUZIX_VM134_ISO_NAME = "auzix-netinstall-express-20260810T020717Z.iso"
 AUZIX_VM134_MIN_DISK_GIB = 32
 AUZIX_VM135_ID = 135
 AUZIX_VM135_NAME = "Auzix-VM135"
-AUZIX_VM135_ISO_NAME = "auzix-strict-desktop-vm135.iso"
+AUZIX_VM135_ISO_NAME = "auzix-netinstall-express-vm135.iso"
 AUZIX_VM135_MIN_DISK_GIB = 32
 
 
@@ -4783,53 +4783,457 @@ WORKFLOW_DEFINITIONS["auzix-package-repo-stripped-iso"] = {
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Validating AUZiX package intent JSON before repository work.",
-            "complete": "AUZiX package intent JSON is syntactically valid.",
+            "active": "Validating AUZiX package intent JSON and package-factory scripts before rebuild.",
+            "complete": "AUZiX package intents and rebuild scripts are syntactically valid.",
             "timeout": 120,
-            "command": "python3 -m json.tool packages/extended-ports.manifest.json >/dev/null && python3 -m json.tool packages/oci-and-python.queue.json >/dev/null && python3 -m json.tool packages/flatpak-desktop.queue.json >/dev/null && python3 -m json.tool packages/desktop-control-and-userapps.queue.json >/dev/null && python3 -m json.tool packages/desktop-userapps.sources.json >/dev/null && python3 -m json.tool packages/auzix-control-panel.intent.json >/dev/null",
+            "command": "python3 -m json.tool packages/extended-ports.manifest.json >/dev/null && python3 -m json.tool packages/oci-and-python.queue.json >/dev/null && python3 -m json.tool packages/flatpak-desktop.queue.json >/dev/null && python3 -m json.tool packages/desktop-control-and-userapps.queue.json >/dev/null && python3 -m json.tool packages/desktop-userapps.sources.json >/dev/null && python3 -m json.tool packages/desktop-first-wave-launchers.profile.json >/dev/null && python3 -m json.tool packages/auzix-control-panel.intent.json >/dev/null && bash -n scripts/run-auzix-workstation-package-rebuild.sh scripts/build-auzix-debian-intake-package.sh scripts/add-auzix-live-tools.sh scripts/audit-auzix-package-runtime.sh scripts/build-auzix-package-repo.sh",
         },
         {
-            "name": "build-package-repository",
+            "name": "run-workstation-package-rebuild",
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Building Flatpak first-pass packages, then the AUZiX package repository from strict-root receipts.",
-            "complete": "AUZiX package repository was built from strict-root receipts.",
-            "timeout": 1800,
-            "command": "mkdir -p out/package-repo-stripped-iso && { chmod +x scripts/build-auzix-abiword-package.sh scripts/build-auzix-gnumeric-package.sh; ./scripts/run-auzix-package-bot.sh packages/desktop-control-and-userapps.queue.json native-dev-and-debug-tools out/auzix-strict/AuzixRoot packages/desktop-userapps.sources.json; ./scripts/run-auzix-package-bot.sh packages/desktop-control-and-userapps.queue.json native-internet-and-creative-apps out/auzix-strict/AuzixRoot packages/desktop-userapps.sources.json; ./scripts/build-auzix-flatpak-runtime-slice.sh out/auzix-strict/AuzixRoot && ./scripts/build-auzix-package-repo.sh out/auzix-strict/AuzixRoot; } >out/package-repo-stripped-iso/package-repo-build.log 2>&1 && jq -r '\"packages=\" + ((.packages | length) | tostring)' artifacts/auzix/repo/index.json",
+            "active": "Rebuilding/repacking AUZiX workstation packages with preserved metadata, dependency receipts, and hidden unvalidated launchers.",
+            "complete": "AUZiX workstation package rebuild completed and repository was produced.",
+            "timeout": 28800,
+            "command": "mkdir -p out/package-repo-stripped-iso && env AUZIX_PACKAGE_NORMALIZE_OWNERS=0 AUZIX_PUBLISH_UNVALIDATED_DESKTOP_ENTRIES=0 make auzix-workstation-package-rebuild 2>&1 | tee out/package-repo-stripped-iso/workstation-package-rebuild.log && jq -r '\"packages=\" + ((.packages | length) | tostring)' artifacts/auzix/repo/index.json",
         },
         {
-            "name": "strict-root-no-classic-dir-audit",
+            "name": "runtime-audit-package-repository",
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Running strict-root audit with classic top-level directories treated as invalid.",
-            "complete": "Strict-root audit report captured for Ollama review.",
+            "active": "Running hard runtime/dependency audit against rebuilt package receipts.",
+            "complete": "Runtime/dependency audit passed for the rebuilt package set.",
             "timeout": 2400,
-            "command": "mkdir -p out/package-repo-stripped-iso; AUZIX_LEGACY_POLICY=invalid ./scripts/audit-auzix-strict-root.sh out/auzix-strict/AuzixRoot out/package-repo-stripped-iso/strict-root-audit.txt >out/package-repo-stripped-iso/strict-root-audit.stdout 2>&1 || true; tail -n 40 out/package-repo-stripped-iso/strict-root-audit.txt",
+            "command": "mkdir -p out/package-repo-stripped-iso; ./scripts/audit-auzix-package-runtime.sh out/auzix-strict/AuzixRoot >out/package-repo-stripped-iso/package-runtime-audit.txt 2>&1; tail -n 80 out/package-repo-stripped-iso/package-runtime-audit.txt",
         },
         {
             "name": "ollama-review-receipts",
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Asking Ollama to review package repository and strict-root receipts.",
+            "active": "Asking Ollama to review package rebuild receipts and runtime audit output.",
             "complete": "Ollama receipt review completed or was recorded as unavailable.",
             "timeout": 420,
-            "command": "python3 - <<'PY'\nimport json, pathlib, subprocess, urllib.request\nroot = pathlib.Path('.')\nout = root / 'out/package-repo-stripped-iso'\nout.mkdir(parents=True, exist_ok=True)\nindex = root / 'artifacts/auzix/repo/index.json'\naudit = out / 'strict-root-audit.txt'\nbuild_log = out / 'package-repo-build.log'\nintent_files = [\n    'packages/extended-ports.manifest.json',\n    'packages/oci-and-python.queue.json',\n    'packages/flatpak-desktop.queue.json',\n    'packages/desktop-control-and-userapps.queue.json',\n    'packages/auzix-control-panel.intent.json',\n    'packages/userspace-tools.queue.json',\n]\n\ndef cmd(args):\n    try:\n        return subprocess.check_output(args, text=True, stderr=subprocess.DEVNULL).strip()\n    except Exception:\n        return 'unknown'\n\ndef tail(path, n=80):\n    if not path.exists():\n        return []\n    return path.read_text(errors='replace').splitlines()[-n:]\n\ndef package_names_from_intent(path):\n    if not path.exists():\n        return []\n    try:\n        data = json.loads(path.read_text())\n    except Exception:\n        return []\n    names = []\n    for key in ('packages', 'items', 'intents'):\n        for item in data.get(key, []) if isinstance(data.get(key), list) else []:\n            if isinstance(item, dict):\n                name = item.get('name') or item.get('package') or item.get('id')\n                if name:\n                    names.append(str(name))\n    for batch in data.get('batches', []) if isinstance(data.get('batches'), list) else []:\n        for item in batch.get('packages', []) if isinstance(batch, dict) else []:\n            if isinstance(item, dict):\n                name = item.get('name') or item.get('package') or item.get('id')\n            else:\n                name = item\n            if name:\n                names.append(str(name))\n    return names[:80]\n\nsummary = []\nsummary.append('pipeline_id=auzix-package-repo-stripped-iso')\nsummary.append('goal=build/publish AUZiX package repo candidates, then validate install on disposable vmid135 before filming')\nsummary.append('input_policy=receipts-and-intents-only-no-secrets')\nsummary.append('git_branch=' + cmd(['git', 'branch', '--show-current']))\nsummary.append('git_commit=' + cmd(['git', 'rev-parse', '--short', 'HEAD']))\nsummary.append('git_dirty_count=' + cmd(['sh', '-lc', 'git status --porcelain 2>/dev/null | wc -l | tr -d \" \"']))\nsummary.append('receipt_paths=artifacts/auzix/repo/index.json,out/package-repo-stripped-iso/package-repo-build.log,out/package-repo-stripped-iso/strict-root-audit.txt,out/package-repo-stripped-iso/ollama-review.md')\nsummary.append('related_intent_files=' + ', '.join(path for path in intent_files if (root / path).exists()))\nfor path_text in intent_files:\n    names = package_names_from_intent(root / path_text)\n    if names:\n        summary.append(f'intent_packages[{path_text}]=' + ', '.join(names[:60]))\nif index.exists():\n    data = json.loads(index.read_text())\n    summary.append(f\"repo_package_count={len(data.get('packages', []))}\")\n    summary.append('repo_packages=' + ', '.join(pkg.get('name', '') for pkg in data.get('packages', [])[:80]))\nif audit.exists():\n    lines = audit.read_text(errors='replace').splitlines()\n    summary.append('strict_root_audit_selected_lines=')\n    summary.extend([line for line in lines if line.startswith(('FAIL:', 'WARN:', 'PASS: no undeclared', 'PASS:', 'Identity baseline', 'Runtime network'))][:120])\nif build_log.exists():\n    summary.append('package_build_log_tail=')\n    summary.extend(tail(build_log, 80))\nsummary.append('next_gate=install selected packages on vmid135; if stable, consider stripped installer ISO reroll; keep classic paths only as declared break-fix debt')\nprompt = 'Review this AUZiX package pipeline context. Return: 1) film-ready summary, 2) real blockers, 3) likely missing package/dependency candidates, 4) smallest next VM135 install validation steps. Do not ask for secrets.\\n\\n' + '\\n'.join(summary)\nreport = out / 'ollama-review.md'\ntry:\n    req = urllib.request.Request('http://10.20.0.130:11434/api/generate', data=json.dumps({'model':'qwen2.5-coder:1.5b','prompt':prompt,'stream':False}).encode(), headers={'Content-Type':'application/json'})\n    with urllib.request.urlopen(req, timeout=300) as resp:\n        payload = json.loads(resp.read().decode())\n    text = payload.get('response') or json.dumps(payload, indent=2)\nexcept Exception as exc:\n    text = f'Ollama review unavailable: {exc}\\n\\nReceipt summary retained locally.\\n\\n' + '\\n'.join(summary[:220])\nreport.write_text(text + '\\n')\n(out / 'ollama-review-input.txt').write_text(prompt + '\\n')\nprint(text[-4000:])\nPY",
+            "command": "python3 - <<'PY'\nimport json, pathlib, subprocess, urllib.request\nroot = pathlib.Path('.')\nout = root / 'out/package-repo-stripped-iso'\nout.mkdir(parents=True, exist_ok=True)\nindex = root / 'artifacts/auzix/repo/index.json'\naudit = out / 'package-runtime-audit.txt'\nbuild_log = out / 'workstation-package-rebuild.log'\nsummary = []\nsummary.append('pipeline_id=auzix-package-repo-stripped-iso')\nsummary.append('goal=AUZiX workstation package rebuild/repack, runtime audit, repo publish; ISO remains gated')\nsummary.append('input_policy=receipts-and-logs-only-no-secrets')\nfor cmd in (['git','branch','--show-current'], ['git','rev-parse','--short','HEAD']):\n    try: summary.append(' '.join(cmd) + '=' + subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL).strip())\n    except Exception: pass\nif index.exists():\n    data=json.loads(index.read_text())\n    summary.append(f\"repo_package_count={len(data.get('packages', []))}\")\nfor label,path in [('runtime_audit', audit), ('build_log', build_log)]:\n    summary.append(label + '_tail=')\n    if path.exists(): summary.extend(path.read_text(errors='replace').splitlines()[-120:])\nprompt='Review AUZiX package rebuild receipts. Return: 1) film-ready summary, 2) real blockers, 3) likely missing dependency/package candidates, 4) smallest VM135 install validation steps. Do not ask for secrets.\\n\\n' + '\\n'.join(summary)\nreport=out/'ollama-review.md'\ntry:\n    req=urllib.request.Request('http://10.20.0.130:11434/api/generate', data=json.dumps({'model':'qwen2.5-coder:1.5b','prompt':prompt,'stream':False}).encode(), headers={'Content-Type':'application/json'})\n    with urllib.request.urlopen(req, timeout=300) as resp: payload=json.loads(resp.read().decode())\n    text=payload.get('response') or json.dumps(payload, indent=2)\nexcept Exception as exc:\n    text=f'Ollama review unavailable: {exc}\\n\\n' + '\\n'.join(summary[:220])\nreport.write_text(text + '\\n')\n(out/'ollama-review-input.txt').write_text(prompt + '\\n')\nprint(text[-4000:])\nPY",
         },
         {
             "name": "record-proof-handoff",
             "transport": "local",
             "kind": "local-command",
             "cwd": "/workspace/AuziX",
-            "active": "Recording proof handoff paths for the next stripped ISO pass.",
-            "complete": "AUZiX package repository and strict-root proof receipts are ready for review.",
+            "active": "Recording package rebuild handoff paths for VM135 install validation.",
+            "complete": "AUZiX package rebuild receipts are ready for VM135 validation.",
             "timeout": 120,
-            "command": "python3 - <<'PY'\nimport json, pathlib, time\nout = pathlib.Path('out/package-repo-stripped-iso')\nout.mkdir(parents=True, exist_ok=True)\npaths = ['artifacts/auzix/repo/index.json','out/package-repo-stripped-iso/package-repo-build.log','out/package-repo-stripped-iso/strict-root-audit.txt','out/package-repo-stripped-iso/ollama-review.md']\nreceipt = {'format':'auzix-package-repo-stripped-iso-proof-v1','created':time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),'paths':paths,'next_gate':'remove or quarantine classic top-level compatibility links before stripped ISO rebuild'}\n(out / 'proof-handoff.json').write_text(json.dumps(receipt, indent=2) + '\\n')\nprint(json.dumps(receipt, indent=2))\nPY",
+            "command": "python3 - <<'PY'\nimport json, pathlib, time\nout = pathlib.Path('out/package-repo-stripped-iso')\nout.mkdir(parents=True, exist_ok=True)\npaths = ['artifacts/auzix/repo/index.json','artifacts/auzix/package-metadata-risk.json','out/package-repo-stripped-iso/workstation-package-rebuild.log','out/package-repo-stripped-iso/package-runtime-audit.txt','out/package-repo-stripped-iso/ollama-review.md']\nreceipt = {'format':'auzix-workstation-package-rebuild-proof-v1','created':time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),'paths':paths,'next_gate':'refresh vmid135 package cache, install clean workstation profile, verify menus and launch probes'}\n(out / 'proof-handoff.json').write_text(json.dumps(receipt, indent=2) + '\\n')\nprint(json.dumps(receipt, indent=2))\nPY",
         },
     ],
-    "complete_message": "AUZiX package repo deploy + stripped ISO proof pipeline completed.",
+    "complete_message": "AUZiX workstation package rebuild pipeline completed.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-current-iso-esxi-launch-gate"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "load-operator-notes-and-last-known-good-contract",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Loading the no-spiral AUZiX notes and last-known-good boot contracts.",
+            "complete": "Operator notes and last-known-good contract requirements are recorded for this run.",
+            "timeout": 60,
+        },
+        {
+            "name": "preflight-build-worker-local-disk",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Checking the r730/lab-build local-disk contract before any heavy AUZiX work.",
+            "complete": "Build worker preflight gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "sync-source-snapshot-to-r730",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the source snapshot handoff contract for r730.",
+            "complete": "Source snapshot gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "validate-package-contracts-before-build",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording package contract validation requirements before build.",
+            "complete": "Package contract validation gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "build-current-live-iso-pair-on-r730",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the current live ISO pair build and receipt locations.",
+            "complete": "Current live ISO pair build gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "audit-runtime-warnings-as-not-public-ready",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the rule that runtime warnings block public payload promotion.",
+            "complete": "Runtime warning policy is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "stage-isos-to-esxi-datastore",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the ESXi ISO staging gate.",
+            "complete": "ESXi ISO staging gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "clone-or-reuse-esxi-smoke-vms",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the clone-or-reuse policy for ESXi ISO smoke VMs.",
+            "complete": "ESXi smoke VM policy is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "boot-installer-iso-smoke",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the installer ISO boot-smoke expectations.",
+            "complete": "Installer ISO boot-smoke gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "boot-desktop-iso-smoke",
+            "kind": "auzix-current-esxi-desktop-boot-smoke",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Booting the current AUZiX desktop ISO on the ESXi smoke VM and collecting serial evidence.",
+            "complete": "Desktop ISO boot smoke executed and serial evidence was recorded.",
+            "timeout": 180,
+        },
+        {
+            "name": "vm135-install-run-launch-gate",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the VM135 install/run launch gate.",
+            "complete": "VM135 launch gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "public-payload-publish-gate",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the public mirror gate and operator-approval requirement.",
+            "complete": "Public mirror gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+        {
+            "name": "record-fragment-and-ticket-summary",
+            "kind": "folder-pipeline-review",
+            "pipeline_id": "auzix-current-iso-esxi-launch-gate",
+            "active": "Recording the final fragment and ticket summary contract.",
+            "complete": "Fragment and ticket summary gate is represented in the pipeline receipt.",
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "AUZiX current ISO ESXi + repo launch gate review completed.",
+}
+
+WORKFLOW_DEFINITIONS["lab-power-control"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "lab-power-action",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Running the requested lab lifecycle action through ops/lab-power.sh.",
+            "complete": "Lab lifecycle action completed and emitted its health output.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "action=\"${BKC_INPUT_ACTION:-status}\"; "
+                "case \"$action\" in status|start|wait|park|preflight|check-autostart) ;; "
+                "*) echo \"unsupported lab action: $action\" >&2; exit 2 ;; esac; "
+                "./ops/lab-power.sh \"$action\"'"
+            ),
+            "timeout": 1200,
+        },
+        {
+            "name": "lab-power-receipt",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording lab lifecycle handoff.",
+            "complete": "Lab lifecycle handoff recorded.",
+            "message": "Lab lifecycle should be visible in this run. Follow with LAB 00 health gate when starting the lab.",
+        },
+    ],
+    "complete_message": "Lab power-control pipeline completed.",
+}
+
+WORKFLOW_DEFINITIONS["bkc-runtime-git-sync"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "fetch-runtime-repo",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Fetching runtime repository refs for pipelines and dictionaries.",
+            "complete": "Runtime repository refs fetched.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "remote=\"${BKC_INPUT_REMOTE:-origin}\"; "
+                "git fetch --prune \"$remote\"; "
+                "git status --short --branch | sed -n \"1,20p\"'"
+            ),
+            "timeout": 180,
+        },
+        {
+            "name": "fast-forward-runtime-repo",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Fast-forwarding the runtime checkout without rebuilding the app.",
+            "complete": "Runtime checkout fast-forwarded or was already current.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "remote=\"${BKC_INPUT_REMOTE:-origin}\"; "
+                "branch=\"${BKC_INPUT_BRANCH:-}\"; "
+                "if [ -z \"$branch\" ] || [ \"$branch\" = current ]; then branch=$(git branch --show-current); fi; "
+                "test -n \"$branch\"; "
+                "git pull --ff-only \"$remote\" \"$branch\"; "
+                "git rev-parse --short HEAD'"
+            ),
+            "timeout": 240,
+        },
+        {
+            "name": "validate-pipeline-json",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Validating filesystem-backed pipeline and dictionary JSON.",
+            "complete": "Pipeline/dictionary JSON validation completed.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "find pipelines dictionaries -name \"*.json\" -type f -print0 "
+                "| xargs -0 -r -n1 python3 -m json.tool >/dev/null; "
+                "echo json-ok'"
+            ),
+            "timeout": 180,
+        },
+        {
+            "name": "print-catalog-signature",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Printing live filesystem catalog signature after git sync.",
+            "complete": "Catalog signature printed; UI should reflect filesystem-backed pipeline changes.",
+            "command": (
+                "python3 - <<'PY'\n"
+                "import json\n"
+                "from services.pipeline_catalog import catalog_signature, demo_pipelines\n"
+                "sig = catalog_signature()\n"
+                "sig['pipeline_ids_sample'] = [p.get('id') for p in demo_pipelines() if str(p.get('id','')).startswith(('auzix','bkc-runtime','lab-power'))][-20:]\n"
+                "print(json.dumps(sig, indent=2, sort_keys=True))\n"
+                "PY"
+            ),
+            "timeout": 60,
+        },
+    ],
+    "complete_message": "BKC runtime git sync and catalog refresh completed.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "preflight-r730-docker-git",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Preflighting R730 Docker, git remotes, and AUZiX tag visibility.",
+            "complete": "R730 can see Docker, git, and the locked AUZiX tag.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
+                "ssh lab-ai-worker \"AUZIX_TAG=$tag bash -s -- preflight\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+            ),
+            "timeout": 180,
+        },
+        {
+            "name": "clone-auzix-tag-to-run-dir",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Cloning the locked AUZiX tag into an R730 run directory.",
+            "complete": "Locked AUZiX source is staged on R730.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
+                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- clone\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+            ),
+            "timeout": 420,
+        },
+        {
+            "name": "build-builder-image-with-apt-metadata",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Building the AUZiX builder image on R730 from the locked tag.",
+            "complete": "Builder image rebuilt on R730.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
+                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- builder\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+            ),
+            "timeout": 3600,
+        },
+        {
+            "name": "prove-builder-candidates",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Proving builder tools and apt candidate metadata before package build.",
+            "complete": "Builder image has compiler tools and apt package candidates.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "ssh lab-ai-worker \"bash -s -- smoke\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+            ),
+            "timeout": 300,
+        },
+        {
+            "name": "start-locked-package-build",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Starting the detached locked package/root/repo build container on R730.",
+            "complete": "Detached native rebase build container is running and receipt was written.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
+                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- start\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+            ),
+            "timeout": 420,
+        },
+        {
+            "name": "capture-running-status",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Capturing the current detached build status and log tail.",
+            "complete": "Build status captured in the BKC run.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
+                "export AUZIX_RUN_ID=\"$run_id\"; "
+                "ssh lab-ai-worker \"AUZIX_RUN_ID=${AUZIX_RUN_ID:-} bash -s -- status\" "
+                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh || true'"
+            ),
+            "timeout": 180,
+        },
+    ],
+    "complete_message": "AUZiX native rebase package build has been started through BKC.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "verify-package-container-passed",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Checking the native rebase build container exit state before ISO packing.",
+            "complete": "Package build container state checked.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "run_id=\"${BKC_INPUT_RUN_ID:?run_id is required}\"; "
+                "name=\"${BKC_INPUT_CONTAINER_NAME:-auzix-native-rebase-$run_id}\"; "
+                "ssh lab-ai-worker \"docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' $name; docker logs --tail 160 $name\"'"
+            ),
+            "timeout": 240,
+        },
+        {
+            "name": "iso-pack-handoff",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording ISO pack handoff.",
+            "complete": "ISO pack handoff recorded.",
+            "message": "Pack the ISO only after the package/root/repo build exits cleanly and audits pass. This lane is intentionally gated to avoid hiding package failures.",
+        },
+    ],
+    "complete_message": "AUZiX post-build ISO pack gate completed.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-vm-stage-reload"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "verify-iso-artifact",
+            "transport": "local",
+            "kind": "local-command",
+            "active": "Verifying requested ISO path and target VM inputs.",
+            "complete": "ISO artifact inputs recorded.",
+            "command": "bash -lc 'set -euo pipefail; echo iso_path=${BKC_INPUT_ISO_PATH:-/var/lib/auzix-build/published/auzix-live-installer-current.iso}; echo target_vm=${BKC_INPUT_TARGET_VM:-vmid135}; echo hypervisor=${BKC_INPUT_HYPERVISOR:-pve}'",
+            "timeout": 120,
+        },
+        {
+            "name": "stage-and-reload-handoff",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording stage/reload handoff.",
+            "complete": "Stage/reload handoff recorded.",
+            "message": "Stage ISO to the selected hypervisor, attach to disposable VM, hard power-cycle, then review live ISO. This is now a dedicated BKC-visible lane.",
+        },
+    ],
+    "complete_message": "AUZiX VM stage/reload lane completed.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-vm-disk-install-boot"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "confirm-live-environment",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Confirming live ISO environment before destructive install.",
+            "complete": "Live environment confirmation step recorded.",
+            "message": "Target VM must already be booted into live AUZiX review. This stage is destructive only for the disposable test VM.",
+        },
+        {
+            "name": "run-installer-handoff",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording disk install handoff.",
+            "complete": "Disk install handoff recorded.",
+            "message": "Run installer against the target disk, preserve package receipts/scripts/permissions, detach ISO, hard power-cycle, and validate first boot from disk.",
+        },
+    ],
+    "complete_message": "AUZiX disk install/boot lane recorded.",
+}
+
+WORKFLOW_DEFINITIONS["auzix-vm-product-validation"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "product-proof-scope",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording product validation scope.",
+            "complete": "Product validation scope recorded.",
+            "message": "Product validation has two levels: live ISO review, then direct disk install/boot. Evidence belongs in BKC receipts and fragments.",
+        },
+        {
+            "name": "desktop-launch-audit-handoff",
+            "transport": "internal",
+            "kind": "event-note",
+            "active": "Recording desktop launch audit contract.",
+            "complete": "Desktop launch audit contract recorded.",
+            "message": "Audit keyboard, mouse, LightDM, E, terminal, browser, editor, Office apps, package status, E logs, and missing-library failures.",
+        },
+    ],
+    "complete_message": "AUZiX VM product validation lane completed.",
 }
 
 
@@ -8320,6 +8724,94 @@ def _run_folder_pipeline_review_stage(run_id: str, stage: dict) -> None:
     }
     append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
     _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Folder pipeline review stage completed.")))
+
+
+def _auzix_current_iso_context(run_id: str) -> tuple[dict, dict, dict]:
+    return _folder_pipeline_context("auzix-current-iso-esxi-launch-gate", _run_request_inputs(run_id))
+
+
+def _auzix_current_run_id(run_id: str, values: dict) -> str:
+    run_inputs = _run_request_inputs(run_id)
+    explicit = str(run_inputs.get("run_id") or values.get("run_id") or "").strip()
+    if explicit and "${" not in explicit:
+        return explicit
+    return time.strftime("current-live-%Y%m%dT%H%M%SZ", time.gmtime())
+
+
+def _auzix_current_iso_name(run_id: str, values: dict, *, desktop: bool) -> str:
+    current_run_id = _auzix_current_run_id(run_id, values)
+    if desktop:
+        extra = values.get("extra_iso_names")
+        if isinstance(extra, list) and extra:
+            template = str(extra[0])
+        elif str(extra or "").strip():
+            template = str(extra)
+        else:
+            template = "auzix-live-desktop-current-${run_id}.iso"
+    else:
+        template = str(values.get("primary_iso_name") or values.get("primary_iso_name_template") or "auzix-live-installer-current-${run_id}.iso")
+    return template.replace("${run_id}", current_run_id).replace("${inputs.run_id}", current_run_id)
+
+
+def _run_auzix_current_esxi_boot_smoke(run_id: str, stage_name: str, *, desktop: bool) -> None:
+    pipeline, _, values = _auzix_current_iso_context(run_id)
+    folder = _repo_pipeline_folder(pipeline)
+    script_path = folder / "scripts" / "esxi-boot-current-iso.sh"
+    if not script_path.exists():
+        raise PipelineExecutionError(f"AUZiX ESXi boot helper is missing: {script_path}")
+
+    esxi_host = str(values.get("esxi_host") or "10.20.0.114").strip()
+    esxi_user = str(values.get("esxi_username") or "root").strip() or "root"
+    esxi_password = _secret_ref_literal(values.get("esxi_password"), default="")
+    iso_name = _auzix_current_iso_name(run_id, values, desktop=desktop)
+    vm_name = str(values.get("esxi_reference_vm") or "auzix-esxi-workstation-media-01").strip()
+    datastore = str(values.get("esxi_datastore") or "datastore1").strip()
+    iso_dir = str(values.get("esxi_iso_dir") or f"/vmfs/volumes/{datastore}/auzix-isos").strip()
+
+    if not esxi_host or not vm_name or not iso_name:
+        raise PipelineExecutionError("AUZiX ESXi boot smoke requires esxi_host, esxi_reference_vm, and ISO name.")
+
+    remote_script = "/tmp/bkc-auzix-current-esxi-boot.sh"
+    upload_remote_bytes(
+        host=esxi_host,
+        user=esxi_user,
+        password=esxi_password,
+        remote_path=remote_script,
+        content=script_path.read_bytes(),
+        mode=0o755,
+        timeout=60,
+    )
+    command = (
+        f"{shlex.quote(remote_script)} "
+        f"{shlex.quote(iso_name)} "
+        f"{shlex.quote(vm_name)} "
+        f"{shlex.quote(datastore)} "
+        f"{shlex.quote(iso_dir)}"
+    )
+    output = run_remote_command(
+        host=esxi_host,
+        user=esxi_user,
+        password=esxi_password,
+        command=command,
+        timeout=120,
+    )
+    evidence = {
+        "mode": "executed",
+        "host": esxi_host,
+        "vm": vm_name,
+        "iso": iso_name,
+        "serial_tail_contains_squashfs": "squashfs" in output.lower(),
+        "serial_tail_contains_dhcp": "dhcp" in output.lower() or "10.20.0." in output,
+        "serial_tail_contains_display": "starting display" in output.lower() or "display" in output.lower(),
+        "serial_tail_contains_ssh_not_listening": "ssh tcp/22 not listening" in output.lower(),
+        "output_tail": output[-6000:],
+    }
+    _store_run_extra(run_id, {f"auzix_{'desktop' if desktop else 'installer'}_esxi_boot_smoke": evidence})
+    append_event(run_id, "info", stage_name, json.dumps(evidence, sort_keys=True))
+    detail = f"Booted {iso_name} on {vm_name}; serial evidence captured."
+    if evidence["serial_tail_contains_ssh_not_listening"]:
+        detail += " SSH not-listening remains an image-content blocker."
+    _set_stage(run_id, stage_name, "complete", detail)
 
 
 def _folder_pipeline_context(pipeline_id: str, run_inputs: dict | None = None) -> tuple[dict, dict, dict]:
@@ -14406,6 +14898,12 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
                 raise PipelineExecutionError(f"Stage {stage_name} is missing a local command.")
             cwd = str(stage.get("cwd", "")).strip() or None
             timeout = int(stage.get("timeout", stage.get("timeout_seconds", 120)))
+            env = os.environ.copy()
+            env["BKC_RUN_ID"] = run_id
+            for key, value in _run_request_inputs(run_id).items():
+                env_key = "BKC_INPUT_" + re.sub(r"[^A-Za-z0-9_]", "_", str(key)).upper()
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    env[env_key] = "" if value is None else str(value)
             result = subprocess.run(
                 command,
                 shell=True,
@@ -14413,6 +14911,7 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
                 text=True,
                 capture_output=True,
                 timeout=timeout,
+                env=env,
                 check=False,
             )
             output = "\n".join(part for part in [result.stdout, result.stderr] if part)
@@ -14427,6 +14926,14 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
 
         if kind == "folder-pipeline-review":
             _run_folder_pipeline_review_stage(run_id, stage)
+            continue
+
+        if kind == "auzix-current-esxi-installer-boot-smoke":
+            _run_auzix_current_esxi_boot_smoke(run_id, stage_name, desktop=False)
+            continue
+
+        if kind == "auzix-current-esxi-desktop-boot-smoke":
+            _run_auzix_current_esxi_boot_smoke(run_id, stage_name, desktop=True)
             continue
 
         video_runners = {
