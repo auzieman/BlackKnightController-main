@@ -5046,7 +5046,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
             "command": (
                 "bash -lc 'set -euo pipefail; "
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
-                "ssh lab-ai-worker \"AUZIX_TAG=$tag bash -s -- preflight\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag bash -s -- preflight\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 180,
@@ -5061,7 +5061,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "bash -lc 'set -euo pipefail; "
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
-                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- clone\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- clone\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 420,
@@ -5076,7 +5076,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "bash -lc 'set -euo pipefail; "
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
-                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- builder\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- builder\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 3600,
@@ -5089,7 +5089,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
             "complete": "Builder image has compiler tools and apt package candidates.",
             "command": (
                 "bash -lc 'set -euo pipefail; "
-                "ssh lab-ai-worker \"bash -s -- smoke\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"bash -s -- smoke\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 300,
@@ -5104,7 +5104,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "bash -lc 'set -euo pipefail; "
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
-                "ssh lab-ai-worker \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- start\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- start\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 420,
@@ -5119,7 +5119,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "bash -lc 'set -euo pipefail; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
                 "export AUZIX_RUN_ID=\"$run_id\"; "
-                "ssh lab-ai-worker \"AUZIX_RUN_ID=${AUZIX_RUN_ID:-} bash -s -- status\" "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RUN_ID=${AUZIX_RUN_ID:-} bash -s -- status\" "
                 "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh || true'"
             ),
             "timeout": 180,
@@ -5141,7 +5141,7 @@ WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
                 "bash -lc 'set -euo pipefail; "
                 "run_id=\"${BKC_INPUT_RUN_ID:?run_id is required}\"; "
                 "name=\"${BKC_INPUT_CONTAINER_NAME:-auzix-native-rebase-$run_id}\"; "
-                "ssh lab-ai-worker \"docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' $name; docker logs --tail 160 $name\"'"
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' $name; docker logs --tail 160 $name\"'"
             ),
             "timeout": 240,
         },
