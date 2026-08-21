@@ -11,6 +11,7 @@ Intent:
 - commits to `pipelines/` or `dictionaries/` become visible after a pull and
   catalog refresh/check.
 
-This is deliberately conservative: fetch, fast-forward only, validate JSON, then
-print the live catalog signature.
-
+This is deliberately conservative: maintain a localized git checkout under
+`/srv/bkc/git/BlackKnightController`, fast-forward only, validate JSON, sync hot
+pipeline folders into `/srv/bkc/runtime/pipelines`, update the mounted
+`pipeline_executor.py` overlay, then print the live catalog signature.

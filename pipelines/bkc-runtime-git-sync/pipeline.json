@@ -33,18 +33,14 @@
   },
   "stages": [
     {
-      "id": "fetch-runtime-repo",
-      "action": "git.fetch",
-      "transport": "bkc-runner",
-      "risk": "low",
-      "timeout_seconds": 180
-    },
-    {
-      "id": "fast-forward-runtime-repo",
-      "action": "git.pull_ff_only",
+      "id": "sync-runtime-checkout",
+      "action": "bkc.runtime_git.sync_checkout",
       "transport": "bkc-runner",
       "risk": "medium",
-      "timeout_seconds": 240
+      "timeout_seconds": 420,
+      "with": {
+        "script": "pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh"
+      }
     },
     {
       "id": "validate-pipeline-json",
@@ -63,4 +59,3 @@
   ],
   "notes": "Use after pushing pipeline/dictionary commits. BKC reads repo-folder pipeline JSON and dictionary files from disk on request; this lane makes the git pull/catalog proof visible."
 }
-

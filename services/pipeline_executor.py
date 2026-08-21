@@ -4978,35 +4978,22 @@ WORKFLOW_DEFINITIONS["bkc-runtime-git-sync"] = {
     "supports_undeploy": False,
     "stage_plan": [
         {
-            "name": "fetch-runtime-repo",
+            "name": "sync-runtime-checkout",
             "transport": "local",
             "kind": "local-command",
-            "active": "Fetching runtime repository refs for pipelines and dictionaries.",
-            "complete": "Runtime repository refs fetched.",
+            "active": "Fast-forwarding localized BKC git checkout and syncing hot runtime pipeline/dictionary overlays.",
+            "complete": "Runtime checkout synced and hot pipeline overlays updated.",
             "command": (
                 "bash -lc 'set -euo pipefail; "
-                "remote=\"${BKC_INPUT_REMOTE:-origin}\"; "
-                "git fetch --prune \"$remote\"; "
-                "git status --short --branch | sed -n \"1,20p\"'"
+                "if [ -x pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
+                "  pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
+                "elif [ -x /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
+                "  /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
+                "else "
+                "  echo sync script missing from runtime and localized checkout >&2; exit 1; "
+                "fi'"
             ),
-            "timeout": 180,
-        },
-        {
-            "name": "fast-forward-runtime-repo",
-            "transport": "local",
-            "kind": "local-command",
-            "active": "Fast-forwarding the runtime checkout without rebuilding the app.",
-            "complete": "Runtime checkout fast-forwarded or was already current.",
-            "command": (
-                "bash -lc 'set -euo pipefail; "
-                "remote=\"${BKC_INPUT_REMOTE:-origin}\"; "
-                "branch=\"${BKC_INPUT_BRANCH:-}\"; "
-                "if [ -z \"$branch\" ] || [ \"$branch\" = current ]; then branch=$(git branch --show-current); fi; "
-                "test -n \"$branch\"; "
-                "git pull --ff-only \"$remote\" \"$branch\"; "
-                "git rev-parse --short HEAD'"
-            ),
-            "timeout": 240,
+            "timeout": 600,
         },
         {
             "name": "validate-pipeline-json",
