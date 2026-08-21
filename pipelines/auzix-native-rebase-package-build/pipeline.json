@@ -26,7 +26,7 @@
   "inputs": {
     "auzix_tag": {
       "required": true,
-      "default": "auzix-alpha-base-lab-discovery-20260818-r3"
+      "default": "auzix-alpha-base-lab-discovery-20260818-r5"
     },
     "run_id": {
       "required": false,

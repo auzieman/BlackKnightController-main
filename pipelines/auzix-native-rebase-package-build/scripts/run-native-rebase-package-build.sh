@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r4}"
+AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r5}"
 RUN_ID="${AUZIX_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 MODE="${1:-all}"
 WORK_ROOT="${AUZIX_WORK_ROOT:-/var/lib/auzix-build/native-rebase-runs}"

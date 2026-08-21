@@ -20,7 +20,7 @@ that a build result.
 Default AUZiX tag:
 
 ```text
-auzix-alpha-base-lab-discovery-20260818-r4
+auzix-alpha-base-lab-discovery-20260818-r5
 ```
 
 ## Rendered package-bot contract
