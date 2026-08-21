@@ -27,6 +27,11 @@ services:
     volumes:
       - openwebui_data:/app/backend/data
       - ${OPENWEBUI_CONTEXT_CACHE_HOST_PATH:-/var/lib/ai-worker/openwebui-context-cache}:/workspace/openwebui-context-cache:ro
+      - ${COMPANY_MIND_SOURCE_ROOT:-/var/lib/company-mind/source}/bkc-channel:/workspace/company-mind/source/bkc-channel:ro
+      - ${COMPANY_MIND_SOURCE_ROOT:-/var/lib/company-mind/source}/ai_worker:/workspace/company-mind/source/ai_worker:ro
+      - ${COMPANY_MIND_SOURCE_ROOT:-/var/lib/company-mind/source}/BlackKnightController:/workspace/company-mind/source/BlackKnightController:ro
+      - ${COMPANY_MIND_SOURCE_ROOT:-/var/lib/company-mind/source}/AUZiX:/workspace/company-mind/source/AUZiX:ro
+      - ${COMPANY_MIND_PRESEED_HOST_PATH:-/var/lib/company-mind/preseed}:/workspace/company-mind/preseed:ro
     healthcheck:
       disable: true
     ports:

@@ -77,6 +77,78 @@ company-mind-preseed
 The cache is not automatically trusted as live state. It is a last-known
 workspace snapshot that should cite git/BKC/Kanboard/bkc-channel evidence.
 
+## Company mind workspace/source mounts
+
+OpenWebUI also receives read-only source mounts so the backend can literally
+stand inside the company-mind filesystem layout:
+
+```text
+/workspace/company-mind/source/bkc-channel
+/workspace/company-mind/source/ai_worker
+/workspace/company-mind/source/BlackKnightController
+/workspace/company-mind/source/AUZiX
+/workspace/company-mind/preseed
+```
+
+Default host-side source root:
+
+```text
+/var/lib/company-mind/source
+```
+
+Expected host-side shape:
+
+```text
+/var/lib/company-mind/source/
+  bkc-channel/
+  ai_worker/
+  BlackKnightController/
+  AUZiX/
+
+/var/lib/company-mind/preseed/
+  README.md
+  current-handoff.md
+  hardware-profile.md
+```
+
+These mounts are intentionally read-only in OpenWebUI. They let the service see
+the repo/cache shape, but they should not be treated as automatic Knowledge/RAG.
+The reliable RAG path is still:
+
+```text
+source mounts
+  -> ai_worker sanitized cache refresh
+  -> OpenWebUI file upload/process
+  -> OpenWebUI Knowledge collection
+  -> optional Workspace Model preset with that Knowledge attached
+```
+
+This split matters: raw mounts provide filesystem continuity, while Knowledge
+provides searchable/retrievable context.
+
+## Workspace setup target
+
+In OpenWebUI, create a Workspace Knowledge collection such as:
+
+```text
+Company Mind Standby
+```
+
+Attach it to a Workspace Model preset, for example:
+
+```text
+Company Mind Standby — Local
+```
+
+Recommended preset behavior:
+
+```text
+Base model: qwen2.5-coder:1.5b
+Pinned deeper model: qwen3.8:latest
+Knowledge: Company Mind Standby
+Instruction: answer from workspace/cache/git/BKC evidence; if live state is needed, say so.
+```
+
 Deploy:
 
 ```bash
