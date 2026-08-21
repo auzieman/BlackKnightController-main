@@ -1,0 +1,201 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-strict-root-container-build",
+  "name": "LEGACY \u2014 AUZIX LAB 10 \u2014 Strict Root Container Build",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-strict-root-container-build",
+  "resource_class": "standard",
+  "status": "retired",
+  "tags": [
+    "auzix",
+    "r730",
+    "container",
+    "chroot",
+    "ollama",
+    "build",
+    "strict-root",
+    "legacy",
+    "retired"
+  ],
+  "summary": "Build AuziX strict-root assets in an inner builder job, audit legacy Unix path assumptions, then import the validated root into an outer runnable container image.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "repo_host": "host:lab-build",
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "artifact": "image:auzix-strict:r730-candidate"
+  },
+  "inputs": {
+    "repo_host": {
+      "required": true,
+      "default": "lab-build"
+    },
+    "repo_host_path": {
+      "required": true,
+      "default": "/home/admin-deploy/src/AuziX"
+    },
+    "target_host": {
+      "required": true,
+      "default": "10.20.0.130"
+    },
+    "remote_source_path": {
+      "required": true,
+      "default": "/srv/bkc/auzix/src"
+    },
+    "asset_handoff_path": {
+      "required": true,
+      "default": "/mnt/ns1/auzix/handoff/strict-root"
+    },
+    "strict_image": {
+      "required": true,
+      "default": "auzix-strict:r730-candidate"
+    },
+    "enable_build": {
+      "required": false,
+      "default": false
+    },
+    "enable_container_import": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-r730-ai-worker",
+      "action": "ssh.probe",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "sync-auzix-source-from-lab-build",
+      "action": "repo.rsync.lab_build_to_target",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "render-build-manifest",
+      "action": "template.render",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    },
+    {
+      "id": "inner-build-strict-root-assets",
+      "action": "auzix.strict_root.inner_build",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_build",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "publish-assets-to-handoff",
+      "action": "auzix.strict_root.assets.publish_handoff",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "validate-handoff-artifacts",
+      "action": "auzix.strict_root.assets.validate_handoff",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "audit-source-path-assumptions",
+      "action": "auzix.strict_root.source_path_audit",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "audit-binary-runtime-links",
+      "action": "auzix.strict_root.binary_runtime_audit",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "audit-forbidden-root-paths",
+      "action": "auzix.strict_root.forbidden_path_audit",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600
+    },
+    {
+      "id": "outer-import-strict-root-container",
+      "action": "auzix.strict_root.outer_container_import",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_container_import",
+      "timeout_seconds": 1800
+    },
+    {
+      "id": "run-auzix-probe",
+      "action": "auzix.strict_root.probe",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "run-auzix-lua-validation-mode",
+      "action": "auzix.strict_root.lua_boot_validation",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "validate-non-gui-root-contract",
+      "action": "auzix.strict_root.non_gui_contract_validate",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300
+    },
+    {
+      "id": "generate-structured-drift-report",
+      "action": "auzix.strict_root.drift_report",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "ollama-triage-build-receipts",
+      "action": "ollama.receipts.triage",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 240
+    },
+    {
+      "id": "select-one-failed-check",
+      "action": "ollama.receipts.select_one_failed_check",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "render-root-layout-diagram",
+      "action": "auzix.strict_root.diagram.render",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "post-bkc-channel-progress",
+      "action": "bkc_channel.progress.post",
+      "transport": "internal",
+      "risk": "low",
+      "enabled_by": "enable_bkc_channel_post",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "record-auzix-build-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "Candidate scaffold. The first live run should keep enable_build=false and validate source sync plus audits against an existing root. Promote only after the R730 wrapper scripts have receipts.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
+}

@@ -1,11 +1,11 @@
 {
   "format": "bkc-pipeline-v1",
   "id": "auzix-package-repo-stripped-iso",
-  "name": "AUZIX LAB 13 — Package Repo Deploy + Stripped ISO Proof",
+  "name": "LEGACY \u2014 AUZIX LAB 13 \u2014 Package Repo Deploy + Stripped ISO Proof",
   "repo": "BlackKnightController",
   "workflow": "auzix-package-repo-stripped-iso",
   "resource_class": "slow",
-  "status": "candidate",
+  "status": "retired",
   "tags": [
     "auzix",
     "packages",
@@ -14,9 +14,11 @@
     "strict-root",
     "ollama",
     "lab-build",
-    "r730-ai-01"
+    "r730-ai-01",
+    "legacy",
+    "retired"
   ],
-  "summary": "Deploy the AUZiX package repository from strict-root receipts, let the Ollama worker review build/audit receipts, then validate that a rebuilt ISO can boot from AUZiX-native paths with classic Unix top-level directories absent unless declared as break-fix compatibility debt.",
+  "summary": "Rebuild/repack the AUZiX workstation package set on r730, enforce runtime/dependency audits, publish the repaired package repository, then leave stripped ISO work behind a separate gate.",
   "targets": {
     "tenant": "tenant:lab",
     "repo_host": "host:lab-build",
@@ -55,13 +57,33 @@
       "required": true,
       "default": "/srv/bkc/auzix/src/artifacts/auzix/auzix-strict-shell.iso"
     },
+    "iso_profile": {
+      "required": false,
+      "default": "live-installer-demo"
+    },
+    "iso_profile_file": {
+      "required": false,
+      "default": "packages/live-installer-demo.profile.json"
+    },
+    "iso_package_profile_file": {
+      "required": false,
+      "default": "profiles/packages/auzix-live-installer-demo.packages"
+    },
+    "build_target": {
+      "required": true,
+      "default": "workstation-packages"
+    },
+    "make_target": {
+      "required": true,
+      "default": "auzix-workstation-package-rebuild"
+    },
     "enable_package_build": {
       "required": false,
-      "default": false
+      "default": true
     },
     "enable_package_publish": {
       "required": false,
-      "default": false
+      "default": true
     },
     "enable_stripped_iso_build": {
       "required": false,
@@ -99,19 +121,35 @@
       "timeout_seconds": 240
     },
     {
-      "id": "build-base-package-batches",
-      "action": "auzix.packages.bot.run_base_batches",
-      "transport": "bkc-ssh",
+      "id": "run-workstation-package-rebuild-on-r730",
+      "action": "auzix.packages.workstation_rebuild",
+      "transport": "bkc-ssh+docker",
       "risk": "medium",
       "enabled_by": "enable_package_build",
-      "timeout_seconds": 7200
+      "timeout_seconds": 28800,
+      "with": {
+        "runner": "scripts/run-auzix-live-build-r730.sh",
+        "environment": {
+          "AUZIX_BUILD_TARGET": "${inputs.build_target}",
+          "AUZIX_PACKAGE_NORMALIZE_OWNERS": "0",
+          "AUZIX_PUBLISH_UNVALIDATED_DESKTOP_ENTRIES": "0"
+        }
+      },
+      "produces": [
+        "out/package-rebuild/workstation-package-rebuild-*.summary",
+        "out/package-bot/userspace-repair-*.json",
+        "out/package-bot/trixie-user-apps-*.json",
+        "artifacts/auzix/repo/index.json",
+        "artifacts/auzix/package-metadata-risk.json"
+      ]
     },
     {
-      "id": "build-package-repository",
-      "action": "auzix.package_repo.build_from_receipts",
+      "id": "runtime-audit-package-repository",
+      "action": "auzix.package_repo.runtime_dependency_audit",
       "transport": "bkc-ssh",
-      "risk": "medium",
-      "timeout_seconds": 1800
+      "risk": "low",
+      "timeout_seconds": 1800,
+      "notes": "Hard gate: fails if command-bearing packages lack loader/library validation or declared dependency receipts."
     },
     {
       "id": "validate-package-repository",
@@ -155,11 +193,22 @@
     },
     {
       "id": "build-stripped-install-iso",
-      "action": "auzix.iso.build_stripped_without_classic_dirs",
+      "action": "auzix.iso.build_live_installer_demo",
       "transport": "bkc-ssh",
       "risk": "medium",
       "enabled_by": "enable_stripped_iso_build",
-      "timeout_seconds": 7200
+      "timeout_seconds": 7200,
+      "with": {
+        "profile": "${inputs.iso_profile}",
+        "profile_file": "${inputs.iso_profile_file}",
+        "package_profile_file": "${inputs.iso_package_profile_file}",
+        "non_goals": [
+          "full workstation payload",
+          "office suite in ISO",
+          "Flatpak applications in ISO",
+          "Podman demo image payloads in ISO"
+        ]
+      }
     },
     {
       "id": "validate-iso-publication-contract",
@@ -199,5 +248,5 @@
       "timeout_seconds": 60
     }
   ],
-  "notes": "Candidate proof-first pipeline. Heavy build, publish, ISO rebuild, and VM135 install stages are disabled by default. Classic Unix top-level paths are a failing condition unless a break-fix fragment names the exact path, owner, reason, and removal condition."
+  "notes": "Package-factory pipeline. The default run rebuilds/repackages the workstation package set on r730, preserves ownership/modes, keeps unvalidated desktop launchers hidden, runs runtime dependency audits, and publishes the package repository. The ISO gate is now the live-installer-demo profile: graphical installer, xterm rescue terminal, browser, file manager, SSH, and debug/internet tools without embedding the full workstation. VM135 destructive validation and Auzietek/IONOS public mirroring remain separately gated.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
 }

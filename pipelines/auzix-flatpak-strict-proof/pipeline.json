@@ -1,18 +1,20 @@
 {
   "format": "bkc-pipeline-v1",
   "id": "auzix-flatpak-strict-proof",
-  "name": "AUZIX LAB 12 — Flatpak Strict Path Proof",
+  "name": "LEGACY \u2014 AUZIX LAB 12 \u2014 Flatpak Strict Path Proof",
   "repo": "BlackKnightController",
   "workflow": "auzix-flatpak-strict-proof",
   "resource_class": "standard",
-  "status": "candidate",
+  "status": "retired",
   "tags": [
     "auzix",
     "flatpak",
     "strict-root",
     "packages",
     "r730",
-    "iso-prep"
+    "iso-prep",
+    "legacy",
+    "retired"
   ],
   "summary": "Prepare the Flatpak package lane while proving AUZiX can run from real /Programs and /System paths without promoting donor /usr compatibility links into the base image.",
   "targets": {
@@ -135,5 +137,5 @@
       "timeout_seconds": 60
     }
   ],
-  "notes": "Keep the first run cheap: validate JSON and path policy, then run the pruned-container proof only when the current strict root exists. Flatpak package builds and ISO rebuilds remain explicit opt-in stages."
+  "notes": "Keep the first run cheap: validate JSON and path policy, then run the pruned-container proof only when the current strict root exists. Flatpak package builds and ISO rebuilds remain explicit opt-in stages.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
 }

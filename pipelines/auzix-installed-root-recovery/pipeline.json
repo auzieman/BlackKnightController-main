@@ -1,8 +1,8 @@
 {
   "format": "bkc-pipeline-v1",
   "id": "auzix-installed-root-recovery",
-  "name": "AuziX Installed Root Recovery",
-  "status": "scaffold",
+  "name": "LEGACY \u2014 AuziX Installed Root Recovery",
+  "status": "retired",
   "owner": "auzix",
   "summary": "Repeatable BKC lane for restoring installed-root permissions and validating GUI/browser/network state.",
   "targets": {
@@ -67,5 +67,9 @@
       }
     }
   ],
-  "notes": "Scaffold only. Keep direct VM repair as a fallback, not the normal path."
+  "notes": "Scaffold only. Keep direct VM repair as a fallback, not the normal path.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation.",
+  "tags": [
+    "legacy",
+    "retired"
+  ]
 }

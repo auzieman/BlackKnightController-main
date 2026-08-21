@@ -1,11 +1,11 @@
 {
   "format": "bkc-pipeline-v1",
   "id": "auzix-current-iso-esxi-launch-gate",
-  "name": "AUZiX LAB 14 — Current ISO ESXi + Repo Launch Gate",
+  "name": "LEGACY \u2014 AUZiX LAB 14 \u2014 Current ISO ESXi + Repo Launch Gate",
   "repo": "BlackKnightController",
   "workflow": "auzix-current-iso-esxi-launch-gate",
   "resource_class": "slow",
-  "status": "candidate",
+  "status": "retired",
   "tags": [
     "auzix",
     "current-live",
@@ -14,7 +14,9 @@
     "repo-quality",
     "desktop-launch",
     "r730-ai-01",
-    "semi-public-gate"
+    "semi-public-gate",
+    "legacy",
+    "retired"
   ],
   "summary": "Build the current AUZiX live ISO pair on r730, publish receipts, boot-test on ESXi, and gate package repository promotion on real install/run checks instead of archive-only success.",
   "targets": {
@@ -282,5 +284,5 @@
       }
     }
   ],
-  "notes": "This is the no-spiral gate for semi-public AUZiX work. It is allowed to build and boot lab candidates with warnings, but public package/repo/ISO payloads require a clean boot smoke and real app launch evidence. Failures become receipts/fragments; do not hand-fix indefinitely on the guest."
+  "notes": "This is the no-spiral gate for semi-public AUZiX work. It is allowed to build and boot lab candidates with warnings, but public package/repo/ISO payloads require a clean boot smoke and real app launch evidence. Failures become receipts/fragments; do not hand-fix indefinitely on the guest.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
 }

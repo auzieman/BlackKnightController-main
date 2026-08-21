@@ -1,12 +1,23 @@
 {
   "format": "bkc-pipeline-v1",
   "id": "auzix-live-media-build",
-  "name": "AUZIX 20 — Preserved Live Recovery Build",
+  "name": "LEGACY \u2014 AUZIX 20 \u2014 Preserved Live Recovery Build",
   "repo": "BlackKnightController",
   "workflow": "auzix-live-media-build",
   "resource_class": "slow",
-  "status": "candidate",
-  "tags": ["auzix", "live-media", "squashfs", "overlay", "recovery", "r730", "build", "receipt"],
+  "status": "retired",
+  "tags": [
+    "auzix",
+    "live-media",
+    "squashfs",
+    "overlay",
+    "recovery",
+    "r730",
+    "build",
+    "receipt",
+    "legacy",
+    "retired"
+  ],
   "summary": "Derive AuziX from the pinned bootable ISO's embedded SquashFS, applying only committed SSH and InstallerEFL deltas before VM135 validation.",
   "targets": {
     "controller": "host:ns1",
@@ -16,9 +27,27 @@
   },
   "inputs": {},
   "stages": [
-    {"id": "preflight-pinned-recovery-inputs", "action": "auzix.live_recovery.preflight", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 120},
-    {"id": "derive-and-validate-recovery-media", "action": "auzix.live_recovery.build", "transport": "bkc-ssh+docker", "risk": "medium", "timeout_seconds": 7200},
-    {"id": "publish-live-recovery-receipt", "action": "auzix.live_recovery.receipt.publish", "transport": "bkc-ssh", "risk": "low", "timeout_seconds": 120}
+    {
+      "id": "preflight-pinned-recovery-inputs",
+      "action": "auzix.live_recovery.preflight",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "derive-and-validate-recovery-media",
+      "action": "auzix.live_recovery.build",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "publish-live-recovery-receipt",
+      "action": "auzix.live_recovery.receipt.publish",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    }
   ],
-  "notes": "Executable recovery workflow. It pins the input ISO/SquashFS hashes and AuziX source commit, retains kernel 6.1.0-48 and the original boot map, and never rebuilds the Docker image or broad root. AUZIX 30 validates VM135 runtime behavior."
+  "notes": "Executable recovery workflow. It pins the input ISO/SquashFS hashes and AuziX source commit, retains kernel 6.1.0-48 and the original boot map, and never rebuilds the Docker image or broad root. AUZIX 30 validates VM135 runtime behavior.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
 }

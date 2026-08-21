@@ -1,0 +1,163 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-desktop-lifecycle-farming",
+  "name": "LEGACY \u2014 AUZIX LAB 14 \u2014 Desktop Lifecycle Farming",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-desktop-lifecycle-farming",
+  "resource_class": "slow",
+  "status": "retired",
+  "owner": "auzix",
+  "tags": [
+    "auzix",
+    "desktop",
+    "debian-source",
+    "package-lifecycle",
+    "r730-ai-01",
+    "bkc-visible",
+    "vmid135",
+    "legacy",
+    "retired"
+  ],
+  "summary": "Farm Debian source recipes and binary maintainer-script lifecycle state for AUZiX desktop/session packages, then emit AUZiX lifecycle fragments before refactoring package builders.",
+  "targets": {
+    "tenant": "tenant:lab",
+    "source_repo": "repo:AuziX",
+    "build_worker": "host:r730-ai-01",
+    "docker_context": "docker-context:bkc-auzix-r730",
+    "builder_image": "image:auzix/trixie-builder:lab",
+    "validation_target": "node:vm:auzix-vm135",
+    "paper_trail": "service:bkc-pipeline-runs"
+  },
+  "inputs": {
+    "auzix_repo_path": {
+      "required": true,
+      "default": "/home/auzieman/Projects/AuziX"
+    },
+    "queue_path": {
+      "required": true,
+      "default": "packages/desktop-lifecycle-farming.queue.json"
+    },
+    "docker_context": {
+      "required": true,
+      "default": "bkc-auzix-r730"
+    },
+    "builder_image": {
+      "required": true,
+      "default": "auzix/trixie-builder:lab"
+    },
+    "slice_filter": {
+      "required": false,
+      "default": "planned,captured"
+    },
+    "rerun_captured": {
+      "required": false,
+      "default": false
+    },
+    "copy_raw_archives": {
+      "required": false,
+      "default": false
+    },
+    "enable_vmid135_apply": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "operator-memory-and-runner-preflight",
+      "action": "bkc.operator_memory.preflight",
+      "transport": "bkc-cli",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "evidence": [
+        "docs/codex-lab-operator-memory.md",
+        "operator/bkc-cli-first.md",
+        "ops/lab-power.sh preflight"
+      ]
+    },
+    {
+      "id": "lab-health-gate",
+      "action": "lab.power.status",
+      "transport": "bkc-cli+ns1",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "evidence": [
+        "ops/lab-power.sh status"
+      ]
+    },
+    {
+      "id": "validate-farming-queue",
+      "action": "auzix.lifecycle_farming.queue.validate",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "artifacts": [
+        "packages/desktop-lifecycle-farming.queue.json"
+      ]
+    },
+    {
+      "id": "stage-builder-container",
+      "action": "auzix.lifecycle_farming.builder.stage",
+      "transport": "docker-context",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "with": {
+        "docker_context": "${inputs.docker_context}",
+        "builder_image": "${inputs.builder_image}"
+      }
+    },
+    {
+      "id": "farm-debian-lifecycle-slices",
+      "action": "auzix.lifecycle_farming.collect_slices",
+      "transport": "docker-context",
+      "risk": "medium",
+      "timeout_seconds": 14400,
+      "with": {
+        "queue": "${inputs.queue_path}",
+        "slice_filter": "${inputs.slice_filter}",
+        "rerun_captured": "${inputs.rerun_captured}"
+      },
+      "produces": [
+        "artifact:debian-source-guidebook",
+        "artifact:debian-binary-lifecycle-report",
+        "artifact:auzix-lifecycle-fragment",
+        "receipt:desktop-lifecycle-farming"
+      ]
+    },
+    {
+      "id": "summarize-debian-expected-state",
+      "action": "auzix.lifecycle_farming.summarize_expected_state",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "produces": [
+        "report:debian_expected_desktop_state"
+      ]
+    },
+    {
+      "id": "plan-auzix-package-contract-refactors",
+      "action": "auzix.lifecycle_farming.plan_package_refactors",
+      "transport": "filesystem",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "notes": "This stage turns fragments into planned package builder/install-hook changes. It does not spot-fix vmid135."
+    },
+    {
+      "id": "vmid135-apply-is-disabled",
+      "action": "auzix.vm135.apply_lifecycle_contracts",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "enabled_by": "enable_vmid135_apply",
+      "timeout_seconds": 2400,
+      "notes": "Disabled until source/lifecycle fragments name the exact AUZiX hooks to apply."
+    },
+    {
+      "id": "record-lifecycle-farming-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60
+    }
+  ],
+  "notes": "This pipeline exists to end brittle desktop state by farming Debian package lifecycle logic first. No more one-off Pulse/Efreet/LightDM fixes: package maintainer scripts and source recipes define the evidence; AUZiX contracts then map that state into /Programs, /System, /Services, /Users, and validation probes.\n\nRetired from the active AUZiX factory path; retained for history/reference. Use AUZIX 21-25 for current package build, ISO pack, VM stage/reload, disk install, and product validation."
+}
