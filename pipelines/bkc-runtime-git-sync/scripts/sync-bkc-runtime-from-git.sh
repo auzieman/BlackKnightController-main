@@ -30,7 +30,15 @@ require() {
 require git
 require python3
 
-export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+if [[ -z "${BKC_RUNTIME_GIT_KEY:-}" && -f /app/keys/bkc_id_rsa ]]; then
+  BKC_RUNTIME_GIT_KEY="/app/keys/bkc_id_rsa"
+fi
+
+if [[ -n "${BKC_RUNTIME_GIT_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -i ${BKC_RUNTIME_GIT_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+else
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+fi
 
 install -d -m 0755 "$(dirname "$CHECKOUT")" "$RUNTIME_ROOT/pipelines" "$RUNTIME_ROOT/services"
 
