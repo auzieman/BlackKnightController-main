@@ -5005,10 +5005,10 @@ WORKFLOW_DEFINITIONS["bkc-runtime-git-sync"] = {
             "complete": "Pipeline/dictionary JSON validation completed.",
             "command": (
                 "bash -lc 'set -euo pipefail; "
-                "paths=\"${BKC_PIPELINE_FOLDERS_PATH:-/app/runtime/pipelines} ${BKC_PIPELINE_DEFINITIONS_PATH:-/app/dictionaries/pipeline_definitions.local.json} /app/dictionaries/pipelines\"; "
-                "for path in $paths; do [ -e \"$path\" ] && printf \"%s\\0\" \"$path\"; done "
-                "| xargs -0 -r find -name \"*.json\" -type f -print0 "
-                "| xargs -0 -r -n1 python3 -m json.tool >/dev/null; "
+                "for path in \"${BKC_PIPELINE_FOLDERS_PATH:-/app/runtime/pipelines}\" \"${BKC_PIPELINE_DEFINITIONS_PATH:-/app/dictionaries/pipeline_definitions.local.json}\" /app/dictionaries/pipelines; do "
+                "  [ -e \"$path\" ] || continue; "
+                "  find \"$path\" -name \"*.json\" -type f -print0; "
+                "done | xargs -0 -r -n1 python3 -m json.tool >/dev/null; "
                 "echo json-ok'"
             ),
             "timeout": 180,
