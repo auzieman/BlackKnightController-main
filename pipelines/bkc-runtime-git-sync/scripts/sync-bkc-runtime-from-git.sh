@@ -82,5 +82,7 @@ elif [[ -f "$CHECKOUT/services/pipeline_executor.py" ]]; then
 fi
 
 log "runtime sync complete"
+chmod +x "$RUNTIME_ROOT/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh" 2>/dev/null || true
+chmod +x "$RUNTIME_ROOT/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh" 2>/dev/null || true
 git -C "$CHECKOUT" rev-parse --short HEAD
 find "$RUNTIME_ROOT/pipelines" -maxdepth 2 -name pipeline.json | wc -l

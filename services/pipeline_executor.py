@@ -4985,12 +4985,12 @@ WORKFLOW_DEFINITIONS["bkc-runtime-git-sync"] = {
             "complete": "Runtime checkout synced and hot pipeline overlays updated.",
             "command": (
                 "bash -lc 'set -euo pipefail; "
-                "if [ -x pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
-                "  pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
-                "elif [ -x /app/runtime/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
-                "  /app/runtime/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
-                "elif [ -x /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
-                "  /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
+                "if [ -f pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
+                "  bash pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
+                "elif [ -f /app/runtime/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
+                "  bash /app/runtime/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
+                "elif [ -f /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh ]; then "
+                "  bash /srv/bkc/git/BlackKnightController/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh; "
                 "else "
                 "  echo sync script missing from runtime and localized checkout >&2; exit 1; "
                 "fi'"
