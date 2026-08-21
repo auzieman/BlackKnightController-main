@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    environment:
+      OLLAMA_BASE_URL: "http://10.20.0.130:11434"
+      RAG_EMBEDDING_ENGINE: "ollama"
+      RAG_OLLAMA_BASE_URL: "http://10.20.0.130:11434"
+      RAG_EMBEDDING_MODEL: "nomic-embed-text:latest"
+      RAG_TOP_K: "5"
+      CHUNK_SIZE: "900"
+      CHUNK_OVERLAP: "120"
+      DEFAULT_MODELS: "qwen2.5-coder:1.5b"
+      DEFAULT_PINNED_MODELS: "qwen2.5-coder:1.5b,qwen3.8:latest"
+      MODEL_ORDER_LIST: "[\"qwen2.5-coder:1.5b\",\"qwen3.8:latest\",\"deepseek-v4-flash:cloud\"]"
+      WEBUI_URL: "https://openwebui.lab.auzietek.com"
+      CORS_ALLOW_ORIGIN: "https://openwebui.lab.auzietek.com"
+      FORWARDED_ALLOW_IPS: "*"
+      PORT: "8080"
+      OFFLINE_MODE: "true"
+      HF_HUB_OFFLINE: "1"
+      ENABLE_VERSION_UPDATE_CHECK: "false"
+      SCARF_NO_ANALYTICS: "true"
+      DO_NOT_TRACK: "true"
+      ENABLE_API_OUTLET_FILTERS: "true"
+    volumes:
+      - openwebui_data:/app/backend/data
+      - ${OPENWEBUI_CONTEXT_CACHE_HOST_PATH:-/var/lib/ai-worker/openwebui-context-cache}:/workspace/openwebui-context-cache:ro
+    healthcheck:
+      disable: true
+    ports:
+      - target: 8080
+        published: 8088
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == bkc-swarm-mgr-01
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      update_config:
+        order: start-first
+        parallelism: 1
+        failure_action: rollback
+
+volumes:
+  openwebui_data:
