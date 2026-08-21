@@ -3,6 +3,7 @@ set -euo pipefail
 
 REMOTE="${BKC_RUNTIME_GIT_REMOTE:-ssh://root@10.20.0.130/srv/auzix/git-remotes/BlackKnightController.git}"
 BRANCH="${BKC_RUNTIME_GIT_BRANCH:-${BKC_INPUT_BRANCH:-beta/company-mind-workbench-20260726}}"
+GIT_TIMEOUT_SECONDS="${BKC_RUNTIME_GIT_TIMEOUT_SECONDS:-45}"
 if [[ -d /srv/bkc/runtime ]]; then
   DEFAULT_RUNTIME_ROOT="/srv/bkc/runtime"
   DEFAULT_DICTIONARIES_ROOT="/srv/bkc/runtime/dictionaries"
@@ -35,22 +36,30 @@ if [[ -z "${BKC_RUNTIME_GIT_KEY:-}" && -f /app/keys/bkc_id_rsa ]]; then
 fi
 
 if [[ -n "${BKC_RUNTIME_GIT_KEY:-}" ]]; then
-  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -i ${BKC_RUNTIME_GIT_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -i ${BKC_RUNTIME_GIT_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=2}"
 else
-  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+  export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=2}"
 fi
+
+run_git() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${GIT_TIMEOUT_SECONDS}" git "$@"
+  else
+    git "$@"
+  fi
+}
 
 install -d -m 0755 "$(dirname "$CHECKOUT")" "$RUNTIME_ROOT/pipelines" "$RUNTIME_ROOT/services"
 
 if [[ -d "$CHECKOUT/.git" ]]; then
   log "updating checkout $CHECKOUT"
-  git -C "$CHECKOUT" remote set-url origin "$REMOTE" || true
-  git -C "$CHECKOUT" fetch --prune origin
-  git -C "$CHECKOUT" checkout "$BRANCH"
-  git -C "$CHECKOUT" pull --ff-only origin "$BRANCH"
+  run_git -C "$CHECKOUT" remote set-url origin "$REMOTE" || true
+  run_git -C "$CHECKOUT" fetch --prune origin
+  run_git -C "$CHECKOUT" checkout "$BRANCH"
+  run_git -C "$CHECKOUT" pull --ff-only origin "$BRANCH"
 else
   log "cloning $REMOTE#$BRANCH into $CHECKOUT"
-  git clone --branch "$BRANCH" "$REMOTE" "$CHECKOUT"
+  run_git clone --branch "$BRANCH" "$REMOTE" "$CHECKOUT"
 fi
 
 log "validating repo pipeline JSON"
@@ -84,5 +93,5 @@ fi
 log "runtime sync complete"
 chmod +x "$RUNTIME_ROOT/pipelines/bkc-runtime-git-sync/scripts/sync-bkc-runtime-from-git.sh" 2>/dev/null || true
 chmod +x "$RUNTIME_ROOT/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh" 2>/dev/null || true
-git -C "$CHECKOUT" rev-parse --short HEAD
+run_git -C "$CHECKOUT" rev-parse --short HEAD
 find "$RUNTIME_ROOT/pipelines" -maxdepth 2 -name pipeline.json | wc -l
