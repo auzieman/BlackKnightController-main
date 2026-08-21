@@ -30,6 +30,8 @@ require() {
 require git
 require python3
 
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts}"
+
 install -d -m 0755 "$(dirname "$CHECKOUT")" "$RUNTIME_ROOT/pipelines" "$RUNTIME_ROOT/services"
 
 if [[ -d "$CHECKOUT/.git" ]]; then
