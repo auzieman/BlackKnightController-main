@@ -5047,7 +5047,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "bash -lc 'set -euo pipefail; "
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag bash -s -- preflight\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 180,
         },
@@ -5062,7 +5062,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- clone\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 420,
         },
@@ -5077,7 +5077,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- builder\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 3600,
         },
@@ -5090,7 +5090,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
             "command": (
                 "bash -lc 'set -euo pipefail; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"bash -s -- smoke\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 300,
         },
@@ -5105,7 +5105,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r3}\"; "
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_TAG=$tag AUZIX_RUN_ID=$run_id bash -s -- start\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh'"
             ),
             "timeout": 420,
         },
@@ -5120,7 +5120,7 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
                 "run_id=\"${BKC_INPUT_RUN_ID:-$BKC_RUN_ID}\"; "
                 "export AUZIX_RUN_ID=\"$run_id\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RUN_ID=${AUZIX_RUN_ID:-} bash -s -- status\" "
-                "< pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh || true'"
+                "< /app/runtime/pipelines/auzix-native-rebase-package-build/scripts/run-native-rebase-package-build.sh || true'"
             ),
             "timeout": 180,
         },
