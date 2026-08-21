@@ -20,7 +20,7 @@ that a build result.
 Default AUZiX tag:
 
 ```text
-auzix-alpha-base-lab-discovery-20260818-r2
+auzix-alpha-base-lab-discovery-20260818-r3
 ```
 
 Watch a run:
