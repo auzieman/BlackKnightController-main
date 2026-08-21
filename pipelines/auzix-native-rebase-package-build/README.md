@@ -20,8 +20,31 @@ that a build result.
 Default AUZiX tag:
 
 ```text
-auzix-alpha-base-lab-discovery-20260818-r3
+auzix-alpha-base-lab-discovery-20260818-r4
 ```
+
+## Rendered package-bot contract
+
+Build planning checks should be rendered by BKC, staged on the worker, executed,
+captured, and removed like any other target artifact. The current static AUZiX
+script `scripts/test-auzix-package-bot.sh` is represented here as:
+
+- `templates/test-auzix-package-bot.sh.j2`
+- `defaults.package-bot-contract.json`
+
+The desired execution primitive is:
+
+```text
+JSON intent + Jinja template + target facts
+  -> render /tmp/bkc-runs/<run_id>/test-auzix-package-bot.sh
+  -> chmod 0755
+  -> execute in the checked-out AUZiX source root
+  -> attach stdout/stderr/status and rendered artifact checksum
+  -> cleanup unless the run requests artifact retention
+```
+
+This is the pattern future AUZiX package-bot checks should follow: BKC compiles
+the runnable file from intent, the target executes only the concrete artifact.
 
 Watch a run:
 

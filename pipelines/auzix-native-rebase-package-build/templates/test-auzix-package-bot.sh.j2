@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Rendered by BKC from AUZiX package-bot intent.
+# Source template:
+#   pipelines/auzix-native-rebase-package-build/templates/test-auzix-package-bot.sh.j2
+# Render target:
+#   {{ render.remote_path | default("/tmp/bkc-runs/" ~ run_id ~ "/test-auzix-package-bot.sh") }}
+
+ROOT_DIR="{{ auzix.root_dir | default('/workspace') }}"
+QUEUE_FILE="${ROOT_DIR}/{{ package_bot.queue_file | default('packages/installer-ui.queue.json') }}"
+SOURCE_CATALOG="${ROOT_DIR}/{{ package_bot.source_catalog | default('packages/installer-ui.sources.json') }}"
+ENLIGHTENMENT_BUILDER="${ROOT_DIR}/{{ package_bot.enlightenment_builder | default('scripts/build-auzix-host-enlightenment-package.sh') }}"
+
+log() {
+  printf '[auzix-package-bot-contract] %s\n' "$*"
+}
+
+require_file() {
+  local path="$1"
+  [[ -s "${path}" ]] || {
+    printf '[auzix-package-bot-contract] missing required file: %s\n' "${path}" >&2
+    exit 1
+  }
+}
+
+require_file "${QUEUE_FILE}"
+require_file "${SOURCE_CATALOG}"
+require_file "${ENLIGHTENMENT_BUILDER}"
+
+log "validating queue schema: ${QUEUE_FILE}"
+jq -e '
+  .format == "auzix-package-build-queue-v1"
+  and ([.batches[].id] | length == (unique | length))
+  and all(.batches[].packages[];
+    (.state == "planned" and (has("script") | not))
+    or
+    ((.state == "ready" or .state == "first-pass") and
+      (.script | test("^scripts/build-auzix-[a-z0-9-]+-package[.]sh$")))
+  )
+' "${QUEUE_FILE}" >/dev/null
+
+log "validating source catalog schema: ${SOURCE_CATALOG}"
+jq -e '
+  .format == "auzix-package-source-catalog-v1"
+  and ([.packages[].id] | length == (unique | length))
+  and all(.packages[];
+    (.build.script | test("^scripts/build-auzix-[a-z0-9-]+-package[.]sh$"))
+    and (.recipe.receipt_glob | endswith(".auzix.json"))
+    and (
+      .source.type != "debian-packages"
+      or ((.source.packages | type == "array") and (.source.packages | length > 0))
+    )
+  )
+' "${SOURCE_CATALOG}" >/dev/null
+
+{% for batch in package_bot.required_batches | default([]) %}
+log "validating required {{ batch.state | default('ready') }} packages for batch {{ batch.id }}"
+{{ batch.state | default('ready') }}_ids="$(jq -r --arg batch_id "{{ batch.id }}" --arg state "{{ batch.state | default('ready') }}" '
+  .batches[] | select(.id == $batch_id) | .packages[] | select(.state == $state) | .id
+' "${QUEUE_FILE}")"
+{% for required in batch.packages %}
+grep -Fx "{{ required }}" <<<"${ {{- batch.state | default('ready') -}}_ids}" >/dev/null
+{% if batch.state | default('ready') != 'planned' %}
+queue_script="$(jq -r --arg id "{{ required }}" '
+  .batches[].packages[] | select(.id == $id) | .script
+' "${QUEUE_FILE}")"
+catalog_script="$(jq -r --arg id "{{ required }}" '
+  .packages[] | select(.id == $id) | .build.script
+' "${SOURCE_CATALOG}")"
+[[ "${queue_script}" == "${catalog_script}" ]]
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+{% for check in package_bot.file_checks | default([]) %}
+log "validating file check: {{ check.id }}"
+{% if check.kind == "grep_count_at_least" %}
+[[ "$(grep -c {{ check.pattern | tojson }} "${ROOT_DIR}/{{ check.path }}")" -ge {{ check.count }} ]]
+{% elif check.kind == "grep_fixed" %}
+grep -F {{ check.pattern | tojson }} "${ROOT_DIR}/{{ check.path }}" >/dev/null
+{% endif %}
+{% endfor %}
+
+log "PASS"
+echo "AuziX package bot contract: PASS"

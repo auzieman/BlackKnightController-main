@@ -1,0 +1,91 @@
+{
+  "format": "bkc-render-intent-v1",
+  "run_id": "manual-preview",
+  "auzix": {
+    "root_dir": "/workspace"
+  },
+  "render": {
+    "remote_path": "/tmp/bkc-runs/${run_id}/test-auzix-package-bot.sh",
+    "mode": "0755",
+    "execute": true,
+    "cleanup": true
+  },
+  "package_bot": {
+    "queue_file": "packages/installer-ui.queue.json",
+    "source_catalog": "packages/installer-ui.sources.json",
+    "enlightenment_builder": "scripts/build-auzix-host-enlightenment-package.sh",
+    "required_batches": [
+      {
+        "id": "installer-ui-core",
+        "state": "ready",
+        "packages": [
+          "AuzixPackageTools",
+          "AuzixInstaller",
+          "Xorg",
+          "Enlightenment",
+          "Terminology",
+          "LightDM"
+        ]
+      },
+      {
+        "id": "installer-ui-next",
+        "state": "planned",
+        "packages": [
+          "GCC",
+          "Binutils",
+          "Make",
+          "PkgConfig",
+          "Gtk3Runtime",
+          "AuzixInstallerGtk"
+        ]
+      },
+      {
+        "id": "any",
+        "state": "first-pass",
+        "packages": [
+          "AuzixInstallerEfl",
+          "AuzixPackageManagerEfl"
+        ]
+      }
+    ],
+    "file_checks": [
+      {
+        "id": "enlightenment-builder-preserves-destinations",
+        "kind": "grep_count_at_least",
+        "path": "scripts/build-auzix-host-enlightenment-package.sh",
+        "pattern": "cp -f --remove-destination",
+        "count": 2
+      },
+      {
+        "id": "installer-exports-lua",
+        "kind": "grep_fixed",
+        "path": "scripts/build-auzix-installer-package.sh",
+        "pattern": "\"compatibility_exports\": [\"/System/Compatibility/bin/lua\"]"
+      },
+      {
+        "id": "installer-exports-dialog",
+        "kind": "grep_fixed",
+        "path": "scripts/build-auzix-installer-package.sh",
+        "pattern": "\"compatibility_exports\": [\"/System/Compatibility/bin/dialog\"]"
+      },
+      {
+        "id": "installer-gui-tool-present",
+        "kind": "grep_fixed",
+        "path": "scripts/build-auzix-installer-package.sh",
+        "pattern": "\"/System/Tools/auzix-installer-gui\""
+      },
+      {
+        "id": "package-setup-tool-present",
+        "kind": "grep_fixed",
+        "path": "scripts/build-auzix-installer-package.sh",
+        "pattern": "\"/System/Tools/auzix-package-setup\""
+      },
+      {
+        "id": "package-tools-select-latest-receipt",
+        "kind": "grep_fixed",
+        "path": "scripts/build-auzix-package-tools-package.sh",
+        "pattern": "| last // empty"
+      }
+    ]
+  }
+}
