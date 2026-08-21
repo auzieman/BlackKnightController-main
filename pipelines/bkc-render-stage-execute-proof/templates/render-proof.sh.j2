@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "message={{ message | default('BKC rendered artifact proof') }}"
+echo "run_id={{ run_id }}"
+echo "workflow={{ workflow }}"
+echo "stage={{ stage.name | default(stage.id | default('render-stage-execute-proof')) }}"
+echo "proof_items={{ proof_items | default([]) | join(',') }}"
+echo "BKC_RENDER_STAGE_EXECUTE=pass"

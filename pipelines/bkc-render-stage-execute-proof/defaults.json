@@ -1,0 +1,12 @@
+{
+  "message": "BKC rendered artifact proof",
+  "proof_items": [
+    "intent-json",
+    "jinja-template",
+    "server-side-render",
+    "stage",
+    "chmod",
+    "execute",
+    "record"
+  ]
+}

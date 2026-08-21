@@ -17,8 +17,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import b64decode, b64encode
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
+
+try:
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+except ImportError:  # pragma: no cover - runtime image dependent
+    Environment = None
+    FileSystemLoader = None
+    StrictUndefined = None
 
 from services.ansible import scan_ansible_controller
 from services.ansible_inventory import parse_ansible_hosts, sync_ansible_inventory_to_rules
@@ -5034,6 +5041,31 @@ WORKFLOW_DEFINITIONS["bkc-runtime-git-sync"] = {
     "complete_message": "BKC runtime git sync and catalog refresh completed.",
 }
 
+WORKFLOW_DEFINITIONS["bkc-render-stage-execute-proof"] = {
+    "supports_undeploy": False,
+    "settings_optional": True,
+    "stage_plan": [
+        {
+            "name": "render-stage-execute-proof",
+            "transport": "bkc-local",
+            "kind": "render-stage-execute",
+            "pipeline_id": "bkc-render-stage-execute-proof",
+            "active": "Rendering a BKC executable artifact from JSON/Jinja intent.",
+            "complete": "Rendered artifact was staged, chmodded, executed, and recorded.",
+            "timeout": 60,
+            "params": {
+                "template": "templates/render-proof.sh.j2",
+                "target": "local",
+                "remote_path": "/tmp/bkc-runs/${run_id}/render-proof.sh",
+                "mode": "0755",
+                "execute": True,
+                "cleanup": "${inputs.cleanup}",
+            },
+        },
+    ],
+    "complete_message": "BKC render/stage/execute proof completed.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
     "supports_undeploy": False,
     "stage_plan": [
@@ -9454,6 +9486,176 @@ def _run_request_inputs(run_id: str) -> dict:
         if key in payload and key not in merged:
             merged[key] = payload[key]
     return merged
+
+
+def _render_string_template(value: object, context: dict) -> object:
+    if not isinstance(value, str):
+        return value
+    rendered = value.replace("${run_id}", str(context.get("run_id", "")))
+    if Environment is None:
+        return rendered
+    env = Environment(undefined=StrictUndefined)
+    env.filters["shquote"] = lambda item: shlex.quote(str(item))
+    env.filters["tojson"] = lambda item: json.dumps(item)
+    return env.from_string(rendered).render(**context)
+
+
+def _deep_render_stage_values(value: object, context: dict) -> object:
+    if isinstance(value, dict):
+        return {str(k): _deep_render_stage_values(v, context) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_deep_render_stage_values(item, context) for item in value]
+    return _render_string_template(value, context)
+
+
+def _pipeline_source_folder_for_stage(workflow: str, stage: dict) -> Path:
+    pipeline_id = str(stage.get("pipeline_id") or workflow or "").strip()
+    pipeline = pipeline_by_id(pipeline_id)
+    if not pipeline:
+        raise PipelineExecutionError(f"Cannot resolve pipeline folder for {pipeline_id or workflow}.")
+    source_folder = str(pipeline.get("source_folder") or "").strip()
+    if not source_folder:
+        raise PipelineExecutionError(f"Pipeline {pipeline_id} does not expose a source_folder.")
+    return Path(source_folder)
+
+
+def _render_stage_artifact(
+    *,
+    run_id: str,
+    workflow: str,
+    stage: dict,
+    context: dict,
+) -> tuple[bytes, dict]:
+    if Environment is None or FileSystemLoader is None:
+        raise PipelineExecutionError("jinja2 is required for render-stage-execute pipeline stages.")
+
+    params = {}
+    if isinstance(stage.get("with"), dict):
+        params.update(stage["with"])
+    if isinstance(stage.get("params"), dict):
+        params.update(stage["params"])
+    template_name = str(params.get("template") or stage.get("template") or "").strip()
+    if not template_name:
+        raise PipelineExecutionError(f"Stage {stage.get('name')} is missing params.template.")
+
+    source_folder = _pipeline_source_folder_for_stage(workflow, stage)
+    template_path = source_folder / template_name
+    if not template_path.exists():
+        raise PipelineExecutionError(f"Template not found for stage {stage.get('name')}: {template_path}")
+
+    env = Environment(loader=FileSystemLoader(str(source_folder)), undefined=StrictUndefined)
+    env.filters["shquote"] = lambda item: shlex.quote(str(item))
+    env.filters["tojson"] = lambda item: json.dumps(item)
+    rendered = env.get_template(template_name).render(**context)
+    content = rendered.encode("utf-8")
+    checksum = hashlib.sha256(content).hexdigest()
+
+    artifacts_root = Path(os.environ.get("BKC_RUNTIME_ROOT", str(Path("dictionaries")))) / "artifacts" / run_id
+    artifacts_root.mkdir(parents=True, exist_ok=True)
+    safe_stage = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(stage.get("name") or "stage")).strip("-") or "stage"
+    artifact_name = f"{safe_stage}-{Path(template_name).name}"
+    artifact_path = artifacts_root / artifact_name
+    artifact_path.write_bytes(content)
+
+    metadata = {
+        "template": template_name,
+        "template_path": str(template_path),
+        "artifact_path": str(artifact_path),
+        "sha256": checksum,
+        "bytes": len(content),
+    }
+    return content, metadata
+
+
+def _run_render_stage_execute(run_id: str, workflow: str, stage: dict, settings: dict[str, str]) -> None:
+    stage_name = str(stage.get("name", "render-stage-execute"))
+    params = {}
+    if isinstance(stage.get("with"), dict):
+        params.update(stage["with"])
+    if isinstance(stage.get("params"), dict):
+        params.update(stage["params"])
+    run_inputs = _run_request_inputs(run_id)
+    pipeline = pipeline_by_id(str(stage.get("pipeline_id") or workflow))
+    dictionary = resolve_pipeline_dictionary(pipeline, run_inputs=run_inputs).get("values", {}) if pipeline else {}
+    intent = params.get("intent") if isinstance(params.get("intent"), dict) else {}
+    context = {
+        "run_id": run_id,
+        "workflow": workflow,
+        "stage": stage,
+        "inputs": run_inputs,
+        "dictionary": dictionary,
+        **dictionary,
+        **run_inputs,
+        **intent,
+    }
+    rendered_params = _deep_render_stage_values(params, context)
+    context.update({"params": rendered_params})
+
+    content, artifact = _render_stage_artifact(run_id=run_id, workflow=workflow, stage=stage, context=context)
+    append_event(run_id, "info", stage_name, "rendered_artifact=" + json.dumps(artifact, sort_keys=True))
+
+    target = str(rendered_params.get("target") or stage.get("target") or "manager").strip()
+    remote_path = str(rendered_params.get("remote_path") or "").strip()
+    if not remote_path:
+        remote_path = f"/tmp/bkc-runs/{run_id}/{Path(str(rendered_params.get('template') or stage.get('template') or 'artifact')).name}"
+    mode_text = str(rendered_params.get("mode") or "0755").strip()
+    try:
+        mode = int(mode_text, 8)
+    except ValueError as exc:
+        raise PipelineExecutionError(f"Invalid render-stage-execute mode {mode_text!r}.") from exc
+
+    execute = _truthy(rendered_params.get("execute", True))
+    cleanup = _truthy(rendered_params.get("cleanup", False))
+    timeout = int(stage.get("timeout", stage.get("timeout_seconds", rendered_params.get("timeout", 120))))
+    run_command = str(rendered_params.get("command") or remote_path).strip()
+
+    if target == "local":
+        Path(remote_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(remote_path).write_bytes(content)
+        os.chmod(remote_path, mode)
+        output = ""
+        if execute:
+            result = subprocess.run(run_command, shell=True, text=True, capture_output=True, timeout=timeout, check=False)
+            output = "\n".join(part for part in [result.stdout, result.stderr] if part)
+            if result.returncode != 0:
+                raise PipelineExecutionError(f"Stage {stage_name} failed with exit code {result.returncode}.")
+        if cleanup:
+            Path(remote_path).unlink(missing_ok=True)
+    else:
+        host, user, password = _command_target(settings, target)
+        mkdir_command = f"mkdir -p {shlex.quote(str(PurePosixPath(remote_path).parent))}"
+        run_remote_command(host=host, user=user, password=password, command=mkdir_command, timeout=30)
+        upload_remote_bytes(
+            host=host,
+            user=user,
+            password=password,
+            remote_path=remote_path,
+            content=content,
+            mode=mode,
+            timeout=60,
+        )
+        output = ""
+        if execute:
+            output = run_remote_command(host=host, user=user, password=password, command=run_command, timeout=timeout)
+        if cleanup:
+            cleanup_command = (
+                f"test -f {shlex.quote(remote_path)} && "
+                f"mv {shlex.quote(remote_path)} {shlex.quote(remote_path + '.bkc-ran')}"
+            )
+            run_remote_command(host=host, user=user, password=password, command=cleanup_command, timeout=30)
+
+    receipt = {
+        **artifact,
+        "remote_path": remote_path,
+        "target": target,
+        "mode": mode_text,
+        "execute": execute,
+        "cleanup": cleanup,
+    }
+    _store_run_extra(run_id, {"last_rendered_artifact": receipt})
+    if output:
+        append_event(run_id, "info", stage_name, output[-6000:])
+    _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Rendered artifact staged/executed.")))
 
 
 def _secret_ref_key(secret_ref: str) -> str:
@@ -14913,6 +15115,10 @@ def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, act
                     f"Stage {stage_name} failed with exit code {result.returncode}."
                 )
             _set_stage(run_id, stage_name, "complete", str(stage.get("complete", "Stage completed.")))
+            continue
+
+        if kind == "render-stage-execute":
+            _run_render_stage_execute(run_id, workflow, stage, settings)
             continue
 
         if kind == "folder-pipeline-review":

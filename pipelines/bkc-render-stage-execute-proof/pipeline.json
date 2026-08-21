@@ -1,0 +1,33 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "bkc-render-stage-execute-proof",
+  "name": "BKC 03 — Render Stage Execute Proof",
+  "status": "candidate",
+  "repo": "BlackKnightController",
+  "workflow": "bkc-render-stage-execute-proof",
+  "resource_class": "small",
+  "summary": "Prove BKC can render an executable artifact from JSON/Jinja intent, stage it, chmod it, run it, and record checksum metadata.",
+  "tags": ["bkc", "templates", "jinja", "render-stage-execute", "candidate"],
+  "inputs": {
+    "message": {"required": false, "default": "BKC rendered artifact proof"},
+    "cleanup": {"required": false, "default": false}
+  },
+  "stages": [
+    {
+      "id": "render-stage-execute-proof",
+      "action": "artifact.render_stage_execute",
+      "transport": "bkc-local",
+      "risk": "low",
+      "timeout_seconds": 60,
+      "with": {
+        "template": "templates/render-proof.sh.j2",
+        "target": "local",
+        "remote_path": "/tmp/bkc-runs/${run_id}/render-proof.sh",
+        "mode": "0755",
+        "execute": true,
+        "cleanup": "${inputs.cleanup}"
+      }
+    }
+  ],
+  "notes": "This is the minimal embedded BKC primitive proof: scripts are render targets, not monoliths. AUZiX package-bot and installer/build runners should consume this pattern next."
+}
