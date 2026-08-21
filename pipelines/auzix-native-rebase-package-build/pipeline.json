@@ -1,0 +1,127 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-native-rebase-package-build",
+  "name": "AUZIX 21 — Native Rebase Package Build",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-native-rebase-package-build",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "r730",
+    "native-rebase",
+    "package-factory",
+    "builder",
+    "receipt",
+    "ollama"
+  ],
+  "summary": "Run the locked AUZiX native rebase package/root/repo build from an exact git tag on lab-build/R730.",
+  "operator_rule": "This pipeline is the control point for native rebase package builds. Do not hand-run ad-hoc repairs against the target root; encode preflight/build/status/postmortem fixes here or in the AUZiX build scripts, then rerun from a tag.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "local_remote": "ssh://root@lab-ai-worker/srv/auzix/git-remotes/AuziX.git",
+    "artifact_store": "path:/var/lib/auzix-build/native-rebase-runs"
+  },
+  "inputs": {
+    "auzix_tag": {
+      "required": true,
+      "default": "auzix-alpha-base-lab-discovery-20260818-r2"
+    },
+    "run_id": {
+      "required": false,
+      "default": "auto-utc"
+    },
+    "worker_host": {
+      "required": true,
+      "default": "lab-ai-worker"
+    },
+    "enable_build": {
+      "required": false,
+      "default": true
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-r730-docker-git",
+      "action": "auzix.native_rebase.preflight_worker",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "preflight"
+      }
+    },
+    {
+      "id": "clone-auzix-tag-to-run-dir",
+      "action": "auzix.native_rebase.clone_tag",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "clone"
+      }
+    },
+    {
+      "id": "build-builder-image-with-apt-metadata",
+      "action": "auzix.native_rebase.builder_image_build",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "timeout_seconds": 3600,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "builder"
+      }
+    },
+    {
+      "id": "prove-builder-candidates",
+      "action": "auzix.native_rebase.builder_metadata_smoke",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "smoke"
+      }
+    },
+    {
+      "id": "start-locked-package-build",
+      "action": "auzix.native_rebase.package_build_start",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "enabled_by": "enable_build",
+      "timeout_seconds": 300,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "start"
+      }
+    },
+    {
+      "id": "capture-running-status",
+      "action": "auzix.native_rebase.status",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "params": {
+        "script": "scripts/run-native-rebase-package-build.sh",
+        "mode": "status"
+      }
+    },
+    {
+      "id": "ollama-triage-on-failure",
+      "action": "ollama.receipts.triage",
+      "transport": "http",
+      "risk": "low",
+      "timeout_seconds": 240
+    }
+  ],
+  "receipts": {
+    "worker_path": "/var/lib/auzix-build/receipts/native-rebase-<run_id>.receipt",
+    "source_run_path": "/var/lib/auzix-build/native-rebase-runs/<run_id>/src",
+    "container_name": "auzix-native-rebase-<run_id>"
+  },
+  "follow_up_pipeline": "auzix-post-build-iso-pack",
+  "notes": "This is the native rebase build centerline. It starts the long build container and records how to monitor it. Any troubleshooting lesson from a failed run should patch this pipeline or the AUZiX source, then rerun from a new tag."
+}

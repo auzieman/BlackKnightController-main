@@ -1,0 +1,192 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-vm-product-validation",
+  "name": "AUZiX 23 — VM Product Validation",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-vm-product-validation",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": [
+    "auzix",
+    "vm",
+    "live-iso",
+    "disk-install",
+    "product-gate",
+    "desktop",
+    "esxi",
+    "pve"
+  ],
+  "summary": "Validate AUZiX as a live ISO and as a direct disk install/boot in disposable lab VMs.",
+  "operator_rule": "The VM is the product proof. Do not hand-debug indefinitely; capture failures, patch packages/installer/pipelines, rebuild, and rerun.",
+  "targets": {
+    "live_iso_vm": "node:vm:auzix-live-review",
+    "disk_install_vm": "node:vm:auzix-installed-test",
+    "pve_reference": "node:vm:auzix-vm135",
+    "esxi_reference": "node:host:server3-esxi",
+    "trixie_reference": "node:vm:trixie-smoke-132",
+    "artifact_store": "path:/var/lib/auzix-build/published"
+  },
+  "inputs": {
+    "iso_path": {
+      "required": true,
+      "default": "/var/lib/auzix-build/published/auzix-live-installer-current.iso"
+    },
+    "target_level": {
+      "required": true,
+      "default": "both",
+      "allowed": [
+        "live-iso-review",
+        "disk-install-boot",
+        "both"
+      ]
+    },
+    "wipe_disk": {
+      "required": false,
+      "default": true
+    },
+    "package_profile": {
+      "required": false,
+      "default": "workstation-lite"
+    }
+  },
+  "stages": [
+    {
+      "id": "preflight-artifacts-and-lab",
+      "action": "auzix.vm_product.preflight",
+      "transport": "bkc",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "with": {
+        "requires": [
+          "lab-power-control:status",
+          "iso_path_exists",
+          "sha256_exists",
+          "test_vm_disposable"
+        ]
+      }
+    },
+    {
+      "id": "live-iso-review-boot",
+      "action": "auzix.vm_product.live_iso.boot_and_probe",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_when": "${inputs.target_level} in ['live-iso-review','both']",
+      "timeout_seconds": 1200,
+      "with": {
+        "iso_path": "${inputs.iso_path}",
+        "proof_points": [
+          "no-kernel-panic",
+          "dhcp-address",
+          "ssh-or-console-shell",
+          "x11-starts",
+          "lightdm-or-e-session",
+          "keyboard-input",
+          "pointer-input",
+          "installer-launches",
+          "terminal-launches",
+          "midori-or-firefox-launches",
+          "ca-certificates-valid"
+        ],
+        "collect_logs": [
+          "/Users/auzix/.e-log.log",
+          "/Users/auzix/.xsession-errors",
+          "/System/Logs/auzix-installer.log",
+          "/var/log/Xorg.0.log"
+        ]
+      }
+    },
+    {
+      "id": "direct-install-from-live-ui-or-runner",
+      "action": "auzix.vm_product.install_to_disk",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "high",
+      "enabled_when": "${inputs.target_level} in ['disk-install-boot','both']",
+      "timeout_seconds": 3600,
+      "with": {
+        "wipe_disk": "${inputs.wipe_disk}",
+        "package_profile": "${inputs.package_profile}",
+        "partition_contract": {
+          "root": "/",
+          "home": "/Home",
+          "work": "/Work",
+          "programs": "/Programs"
+        },
+        "install_contract": [
+          "install packages to mounted target root",
+          "preserve package permissions and ownership",
+          "preserve and run package pre/post scripts",
+          "seed central auzix-pkg receipts",
+          "install bootloader for detected firmware",
+          "prompt or receipt for unmount and reboot"
+        ]
+      }
+    },
+    {
+      "id": "boot-installed-disk",
+      "action": "auzix.vm_product.disk_boot",
+      "transport": "bkc-ssh-through-ns1",
+      "risk": "medium",
+      "enabled_when": "${inputs.target_level} in ['disk-install-boot','both']",
+      "timeout_seconds": 1200,
+      "with": {
+        "remove_iso_media": true,
+        "power_cycle": "hard-off-hard-on",
+        "expected": [
+          "bootloader-loads",
+          "kernel-boots",
+          "network-online",
+          "sshd-online",
+          "lightdm-online",
+          "enlightenment-session-online"
+        ]
+      }
+    },
+    {
+      "id": "installed-desktop-launch-audit",
+      "action": "auzix.vm_product.desktop_launch_audit",
+      "transport": "bkc-ssh+console",
+      "risk": "medium",
+      "enabled_when": "${inputs.target_level} in ['disk-install-boot','both']",
+      "timeout_seconds": 1800,
+      "with": {
+        "commands": [
+          "auzix-pkg status",
+          "env",
+          "ldd /Programs/Enlightenment/current/Commands/enlightenment || true",
+          "ldd /Programs/Terminology/current/Commands/terminology || true"
+        ],
+        "launchers": [
+          "terminal",
+          "midori",
+          "pluma",
+          "gedit",
+          "geany",
+          "libreoffice-writer",
+          "libreoffice-calc",
+          "libreoffice-impress",
+          "flatpak-firefox",
+          "flatpak-zed"
+        ],
+        "hard_fail_on": [
+          "missing-shared-library",
+          "command-not-found",
+          "efreet-cache-permission-error",
+          "glibc-reinstall-attempt",
+          "desktop-launcher-exits-immediately"
+        ]
+      }
+    },
+    {
+      "id": "record-product-validation-receipt",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "with": {
+        "summary": "Record live ISO boot proof, disk install proof, launch audit results, screenshots, logs, and required package/installer fixes."
+      }
+    }
+  ],
+  "notes": "This is the visible testing lane for filming and release confidence. The end product is a booted live VM or installed VM with evidence, not a pile of local repairs."
+}
+

@@ -1,0 +1,55 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-post-build-iso-pack",
+  "name": "AUZIX 22 — Post-Build ISO Pack",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-post-build-iso-pack",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": ["auzix", "iso", "post-build", "r730", "receipt"],
+  "summary": "Pack an ISO from a completed AUZiX native rebase package/root/repo run.",
+  "operator_rule": "This pipeline only packages media from a package build that already passed. It must not mask package-build failures by rebuilding or repairing the root.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "artifact_store": "path:/var/lib/auzix-build/native-rebase-runs"
+  },
+  "inputs": {
+    "run_id": {
+      "required": true,
+      "default": ""
+    },
+    "container_name": {
+      "required": true,
+      "default": "auzix-native-rebase-<run_id>"
+    },
+    "enable_iso_pack": {
+      "required": false,
+      "default": false
+    }
+  },
+  "stages": [
+    {
+      "id": "verify-package-container-passed",
+      "action": "auzix.iso_pack.verify_package_build",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 120
+    },
+    {
+      "id": "pack-iso-from-built-root",
+      "action": "auzix.iso_pack.build",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "enabled_by": "enable_iso_pack",
+      "timeout_seconds": 7200
+    },
+    {
+      "id": "publish-iso-receipt",
+      "action": "auzix.iso_pack.receipt_publish",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 120
+    }
+  ],
+  "notes": "Keep enable_iso_pack=false until the package build container exits cleanly and its repo/package audits pass."
+}

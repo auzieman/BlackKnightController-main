@@ -1,0 +1,70 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "lab-power-control",
+  "name": "LAB 01 — Power Control",
+  "repo": "BlackKnightController",
+  "workflow": "lab-power-control",
+  "resource_class": "small",
+  "status": "candidate",
+  "tags": [
+    "lab",
+    "power",
+    "ipmi",
+    "ns1",
+    "edge",
+    "operator"
+  ],
+  "summary": "BKC-visible start, stop, wait, and status lane for the lab using the existing ops/lab-power.sh contract.",
+  "operator_rule": "Use this pipeline or ops/lab-power.sh for lab lifecycle. IPMI actions are routed through ns1; do not rediscover BMC handling from scratch.",
+  "targets": {
+    "ns1": "node:ns1",
+    "edge": "node:swarm1",
+    "pve": "node:pve",
+    "server1": "node:host:r630-openstack-01",
+    "server2": "node:host:r630-vmware-01",
+    "r730_ai": "node:host:r730-ai-01"
+  },
+  "inputs": {
+    "action": {
+      "required": true,
+      "default": "status",
+      "allowed": [
+        "status",
+        "start",
+        "wait",
+        "park",
+        "preflight",
+        "check-autostart"
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "run-lab-power-action",
+      "action": "repo.script.run",
+      "transport": "bkc-runner",
+      "risk": "medium",
+      "timeout_seconds": 1200,
+      "with": {
+        "script": "ops/lab-power.sh",
+        "args": [
+          "${inputs.action}"
+        ],
+        "receipt": "memory/lab-power-${inputs.action}-${run_id}.json"
+      }
+    },
+    {
+      "id": "record-lab-power-fragment",
+      "action": "fragments.record",
+      "transport": "internal",
+      "risk": "low",
+      "timeout_seconds": 60,
+      "with": {
+        "memory_path": "memory/fragments.json",
+        "summary": "Record lab power action, reachable hosts, failed SSH/IPMI hops, and next operator step."
+      }
+    }
+  ],
+  "notes": "The underlying script already knows ns1, edge, BMC addresses, R730 password-file override, health checks, and parking behavior. This pipeline just makes those actions visible and repeatable from BKC."
+}
+
