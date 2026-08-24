@@ -1,0 +1,42 @@
+{
+  "format": "bkc-session-bootstrap-policy-v1",
+  "control_plane": {
+    "master": "bkc.lab.auzietek.com",
+    "fallback": "lab-edge",
+    "fallback_scope": ["bringup", "shutdown", "bootstrap", "diagnostics"]
+  },
+  "roles": {
+    "operator_workstation": "git workspace and tunnel/jump point; not a build host",
+    "ns1": "private routing, DHCP/PXE, IPMI execution, shared handoff and publication",
+    "lab-build": "AUZiX canonical build-control and file-work host",
+    "lab-ai-worker": "heavy containers, validation, Ollama and AI review",
+    "bkc-lab": "authoritative pipeline execution and receipts"
+  },
+  "intent_routes": {
+    "lab-review": "ops/lab-power.sh preflight",
+    "lab-power": "lab-power-control",
+    "lab-bringup": "lab-bringup-health-gate",
+    "auzix-build": "auzix-native-rebase-package-build",
+    "auzix-container-validation": "auzix-strict-root-container-build",
+    "auzix-vm-validation": "auzix-vm-product-validation",
+    "auzix-live-media": "auzix-live-media-build",
+    "auzix-disk-install": "auzix-vm-disk-install-boot",
+    "runtime-catalog-sync": "bkc-runtime-git-sync"
+  },
+  "rules": {
+    "pipeline_first": true,
+    "direct_read_only_diagnostics": true,
+    "direct_mutation_requires_exception_receipt": true,
+    "one_off_must_be_reconciled_into_pipeline": true,
+    "laptop_build_output": "forbidden",
+    "private_lab_access": "checked-in SSH aliases, tunnels, Docker contexts, BKC, or ns1",
+    "completion_without_pipeline_reconciliation": "forbidden"
+  },
+  "authority_order": [
+    "operator/session-bootstrap.policy.json",
+    "docs/codex-lab-operator-memory.md",
+    "docs/codex-lab-routing-cheatsheet.md",
+    "operator/bkc-cli-first.md",
+    "ops/lab-power.sh"
+  ]
+}
