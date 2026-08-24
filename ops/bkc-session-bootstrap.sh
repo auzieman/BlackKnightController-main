@@ -60,7 +60,12 @@ else
     exit 5
   }
   printf '  pipeline file: pipelines/%s/pipeline.json\n' "${pipeline}"
-  printf '  pipeline status: %s\n' "$(jq -r '.status // "unspecified"' "${pipeline_file}")"
+  pipeline_status="$(jq -r '.status // "unspecified"' "${pipeline_file}")"
+  printf '  pipeline status: %s\n' "${pipeline_status}"
+  if [[ "${pipeline_status}" == "retired" ]]; then
+    printf 'STOP: intent resolves to a retired pipeline; update the session policy before acting.\n' >&2
+    exit 6
+  fi
 fi
 
 if [[ -n "${EXCEPTION}" ]]; then

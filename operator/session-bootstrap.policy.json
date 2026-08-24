@@ -17,9 +17,9 @@
     "lab-power": "lab-power-control",
     "lab-bringup": "lab-bringup-health-gate",
     "auzix-build": "auzix-native-rebase-package-build",
-    "auzix-container-validation": "auzix-strict-root-container-build",
+    "auzix-container-validation": "auzix-native-rebase-package-build",
     "auzix-vm-validation": "auzix-vm-product-validation",
-    "auzix-live-media": "auzix-live-media-build",
+    "auzix-live-media": "auzix-post-build-iso-pack",
     "auzix-disk-install": "auzix-vm-disk-install-boot",
     "runtime-catalog-sync": "bkc-runtime-git-sync"
   },
