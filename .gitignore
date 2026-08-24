@@ -42,4 +42,12 @@ dictionaries/workflow_items.local.json
 
 node_modules/
 
+# Site-private versioned work belongs on an explicit private lab branch.
+# Unversioned runtime exports, credentials, and operator scratch stay here.
+.private/
+lab-private/
+
+# Office-suite editor lock files are transient, never project assets.
+**/.~lock.*#
+
 docker/bkc/known_hosts
