@@ -5160,6 +5160,65 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-package-build"] = {
     "complete_message": "AUZiX native rebase package build has been started through BKC.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-native-rebase-delta-finalize"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "verify-tag-base-root-and-delta",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Verifying the preserved AUZiX root and committed bounded delta.",
+            "complete": "AUZiX delta continuation inputs passed preflight.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r1}\"; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "delta=\"${BKC_INPUT_DELTA_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages}\"; "
+                "lock=\"${BKC_INPUT_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_TAG=$tag AUZIX_BASE_RUN_ID=$base AUZIX_DELTA_REL=$delta AUZIX_LOCK_REL=$lock bash -s -- preflight\" "
+                "< /app/runtime/pipelines/auzix-native-rebase-delta-finalize/scripts/run-native-rebase-delta-finalize.sh'"
+            ),
+            "timeout": 240,
+        },
+        {
+            "name": "start-bounded-delta-and-finalize",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Installing only the committed AUZiX delta and starting native finalization.",
+            "complete": "Bounded AUZiX delta/finalize container started with a receipt.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r1}\"; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-trixie-base-delta-20260825-r1}\"; "
+                "delta=\"${BKC_INPUT_DELTA_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages}\"; "
+                "lock=\"${BKC_INPUT_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_TAG=$tag AUZIX_BASE_RUN_ID=$base AUZIX_RUN_ID=$run_id AUZIX_DELTA_REL=$delta AUZIX_LOCK_REL=$lock bash -s -- start\" "
+                "< /app/runtime/pipelines/auzix-native-rebase-delta-finalize/scripts/run-native-rebase-delta-finalize.sh'"
+            ),
+            "timeout": 420,
+        },
+        {
+            "name": "capture-delta-finalize-status",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Capturing the bounded AUZiX continuation status.",
+            "complete": "AUZiX continuation status and log tail captured.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-trixie-base-delta-20260825-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RUN_ID=$run_id bash -s -- status\" "
+                "< /app/runtime/pipelines/auzix-native-rebase-delta-finalize/scripts/run-native-rebase-delta-finalize.sh || true'"
+            ),
+            "timeout": 180,
+        },
+    ],
+    "complete_message": "AUZiX bounded delta and native finalization started through BKC.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
     "supports_undeploy": False,
     "stage_plan": [
@@ -5173,7 +5232,13 @@ WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
                 "bash -lc 'set -euo pipefail; "
                 "run_id=\"${BKC_INPUT_RUN_ID:?run_id is required}\"; "
                 "name=\"${BKC_INPUT_CONTAINER_NAME:-auzix-native-rebase-$run_id}\"; "
-                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"docker inspect -f '{{.State.Status}}:{{.State.ExitCode}}' $name; docker logs --tail 160 $name\"'"
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \""
+                "state=\\$(docker inspect -f '{{.State.Status}}' $name); "
+                "exit_code=\\$(docker inspect -f '{{.State.ExitCode}}' $name); "
+                "echo \\\"container=$name state=\\$state exit_code=\\$exit_code\\\"; "
+                "docker logs --tail 160 $name; "
+                "test \\\"\\$state\\\" = exited; "
+                "test \\\"\\$exit_code\\\" = 0\"'"
             ),
             "timeout": 240,
         },
