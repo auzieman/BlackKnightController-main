@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r1}"
+AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r2}"
 BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 RUN_ID="${AUZIX_RUN_ID:-trixie-base-delta-20260825-r1}"
 DELTA_REL="${AUZIX_DELTA_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages}"
@@ -67,6 +67,9 @@ status() {
   exit_code="$(docker inspect -f '{{.State.ExitCode}}' "${CONTAINER_NAME}")"
   log "container=${CONTAINER_NAME} state=${state} exit_code=${exit_code}"
   docker logs --tail 160 "${CONTAINER_NAME}" || true
+  if [[ "${state}" == "exited" && "${exit_code}" != 0 ]]; then
+    fail "container exited unsuccessfully: ${CONTAINER_NAME} (${exit_code})"
+  fi
 }
 
 case "${MODE}" in
