@@ -1,0 +1,56 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-native-rebase-delta-finalize",
+  "name": "AUZIX 22 — Locked Delta + Native Finalize",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-native-rebase-delta-finalize",
+  "resource_class": "medium",
+  "status": "candidate",
+  "tags": ["auzix", "r730", "native-rebase", "delta", "finalize", "receipt"],
+  "summary": "Continue a completed AUZiX package root with only a committed delta, then run native post-stages without dependency discovery.",
+  "operator_rule": "Never replay the full package transaction here. Missing post-stage packages are a planning failure and must produce a new committed lock/delta.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "artifact_store": "path:/var/lib/auzix-build/native-rebase-runs"
+  },
+  "inputs": {
+    "auzix_tag": {"required": true, "default": "auzix-alpha-base-trixie-20260825-r1"},
+    "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
+    "delta_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages"},
+    "lock_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json"},
+    "run_id": {"required": false, "default": "trixie-base-delta-20260825-r1"},
+    "worker_host": {"required": true, "default": "lab-ai-worker"}
+  },
+  "stages": [
+    {
+      "id": "verify-tag-base-root-and-delta",
+      "action": "auzix.native_rebase_delta.preflight",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "params": {"script": "scripts/run-native-rebase-delta-finalize.sh", "mode": "preflight"}
+    },
+    {
+      "id": "start-bounded-delta-and-finalize",
+      "action": "auzix.native_rebase_delta.start",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "timeout_seconds": 300,
+      "params": {"script": "scripts/run-native-rebase-delta-finalize.sh", "mode": "start"}
+    },
+    {
+      "id": "capture-delta-finalize-status",
+      "action": "auzix.native_rebase_delta.status",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 120,
+      "params": {"script": "scripts/run-native-rebase-delta-finalize.sh", "mode": "status"}
+    }
+  ],
+  "receipts": {
+    "worker_path": "/var/lib/auzix-build/receipts/native-rebase-delta-<run_id>.receipt",
+    "container_name": "auzix-native-rebase-delta-<run_id>"
+  },
+  "follow_up_pipeline": "auzix-post-build-iso-pack"
+}
