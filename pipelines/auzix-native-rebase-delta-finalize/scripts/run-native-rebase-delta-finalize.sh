@@ -47,7 +47,7 @@ start() {
       scripts/auzix-session-bootstrap.sh --mode build --lock "${AUZIX_REBASE_LOCK}"
       ./scripts/run-auzix-trixie-intake.sh "${AUZIX_DELTA_PROFILE}" out/auzix-strict/AuzixRoot
       test -s out/auzix-strict/AuzixRoot/System/PackageDB/Libglib200t64-*.auzix.json
-      test -e out/auzix-strict/AuzixRoot/Programs/Libglib200t64/current/RootFS/usr/lib/x86_64-linux-gnu/libgio-2.0.so.0
+      chroot out/auzix-strict/AuzixRoot /Programs/BusyBox/current/Commands/busybox test -e /Programs/Libglib200t64/current/RootFS/usr/lib/x86_64-linux-gnu/libgio-2.0.so.0
       chroot out/auzix-strict/AuzixRoot /Programs/Flatpak/current/Commands/flatpak --version
       make auzix-strict-flatpak-runtime-support auzix-strict-flatpak-runtime auzix-strict-flatpak-adapters
       make auzix-strict-e-assets auzix-strict-desktop-assets-package auzix-strict-desktop-repo-packages
