@@ -26,7 +26,7 @@
   "inputs": {
     "auzix_tag": {
       "required": true,
-      "default": "auzix-alpha-base-trixie-20260824"
+      "default": "auzix-alpha-base-trixie-20260824-r2"
     },
     "lock_rel": {
       "required": true,

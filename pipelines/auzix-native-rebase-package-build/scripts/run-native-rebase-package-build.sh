@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260824}"
+AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260824-r2}"
 AUZIX_LOCK_REL="${AUZIX_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260824/build-tree.lock.json}"
 RUN_ID="${AUZIX_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 MODE="${1:-all}"
