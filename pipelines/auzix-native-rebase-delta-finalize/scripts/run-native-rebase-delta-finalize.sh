@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r2}"
+AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260825-r3}"
 BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 RUN_ID="${AUZIX_RUN_ID:-trixie-base-delta-20260825-r1}"
 DELTA_REL="${AUZIX_DELTA_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages}"
@@ -46,6 +46,9 @@ start() {
       set -euo pipefail
       scripts/auzix-session-bootstrap.sh --mode build --lock "${AUZIX_REBASE_LOCK}"
       ./scripts/run-auzix-trixie-intake.sh "${AUZIX_DELTA_PROFILE}" out/auzix-strict/AuzixRoot
+      test -s out/auzix-strict/AuzixRoot/System/PackageDB/Libglib200t64-*.auzix.json
+      test -e out/auzix-strict/AuzixRoot/Programs/Libglib200t64/current/RootFS/usr/lib/x86_64-linux-gnu/libgio-2.0.so.0
+      chroot out/auzix-strict/AuzixRoot /Programs/Flatpak/current/Commands/flatpak --version
       make auzix-strict-flatpak-runtime-support auzix-strict-flatpak-runtime auzix-strict-flatpak-adapters
       make auzix-strict-e-assets auzix-strict-desktop-assets-package auzix-strict-desktop-repo-packages
       make auzix-strict-desktop-integration auzix-strict-display-templates auzix-strict-user-defaults

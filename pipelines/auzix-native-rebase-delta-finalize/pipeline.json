@@ -15,7 +15,7 @@
     "artifact_store": "path:/var/lib/auzix-build/native-rebase-runs"
   },
   "inputs": {
-    "auzix_tag": {"required": true, "default": "auzix-alpha-base-trixie-20260825-r2"},
+    "auzix_tag": {"required": true, "default": "auzix-alpha-base-trixie-20260825-r3"},
     "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
     "delta_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-base-trixie-20260825-r1/delta-from-20260824-r3.packages"},
     "lock_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json"},
