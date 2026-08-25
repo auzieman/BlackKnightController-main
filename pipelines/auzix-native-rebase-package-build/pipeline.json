@@ -26,7 +26,11 @@
   "inputs": {
     "auzix_tag": {
       "required": true,
-      "default": "auzix-alpha-base-lab-discovery-20260818-r5"
+      "default": "auzix-alpha-base-trixie-20260824"
+    },
+    "lock_rel": {
+      "required": true,
+      "default": "packages/build-locks/auzix-alpha-base-trixie-20260824/build-tree.lock.json"
     },
     "run_id": {
       "required": false,

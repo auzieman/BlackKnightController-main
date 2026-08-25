@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-lab-discovery-20260818-r5}"
+AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-base-trixie-20260824}"
+AUZIX_LOCK_REL="${AUZIX_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260824/build-tree.lock.json}"
 RUN_ID="${AUZIX_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 MODE="${1:-all}"
 WORK_ROOT="${AUZIX_WORK_ROOT:-/var/lib/auzix-build/native-rebase-runs}"
@@ -52,7 +53,7 @@ clone_tag() {
   commit="$(git -C "${SRC_DIR}" rev-parse HEAD)"
   tag_check="$(git -C "${SRC_DIR}" describe --tags --exact-match 2>/dev/null || true)"
   [[ "${tag_check}" == "${AUZIX_TAG}" ]] || fail "tag checkout mismatch: expected ${AUZIX_TAG}, got ${tag_check:-none}"
-  lock_path="${SRC_DIR}/packages/build-locks/auzix-alpha-base-lab-discovery-20260818/build-tree.lock.json"
+  lock_path="${SRC_DIR}/${AUZIX_LOCK_REL}"
   [[ -s "${lock_path}" ]] || fail "missing native rebase lock: ${lock_path}"
 }
 
@@ -65,6 +66,7 @@ run_id=${RUN_ID}
 auzix_tag=${AUZIX_TAG}
 auzix_commit=${commit}
 source_dir=${SRC_DIR}
+lock_rel=${AUZIX_LOCK_REL}
 builder_image=${BUILDER_IMAGE}
 container_name=${CONTAINER_NAME}
 status=starting
@@ -103,9 +105,9 @@ start_build() {
       -w /workspace \
       -e AUZIX_RUN_ID="${RUN_ID}" \
       -e AUZIX_REBASE_OUT="/workspace/out/rebase/${RUN_ID}" \
-      -e AUZIX_REBASE_LOCK="/workspace/packages/build-locks/auzix-alpha-base-lab-discovery-20260818/build-tree.lock.json" \
+      -e AUZIX_REBASE_LOCK="/workspace/${AUZIX_LOCK_REL}" \
       "${BUILDER_IMAGE}" \
-      bash -lc 'set -euo pipefail; scripts/plan-auzix-native-rebase.sh; AUZIX_REBASE_LOCK=/workspace/packages/build-locks/auzix-alpha-base-lab-discovery-20260818/build-tree.lock.json make auzix-workstation-package-rebuild'
+      bash -lc 'set -euo pipefail; scripts/auzix-session-bootstrap.sh --mode build --lock "${AUZIX_REBASE_LOCK}"; make auzix-workstation-package-rebuild'
   )"
 
   cat >>"${RECEIPT}" <<EOF
