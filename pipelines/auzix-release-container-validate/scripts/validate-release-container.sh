@@ -18,6 +18,11 @@ log() { printf '[auzix-release-container] %s\n' "$*"; }
 fail() { log "FAIL: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
+selected_busybox_command() {
+  jq -er '.packages[] | select((.name | ascii_downcase) == "busybox") | .commands[0]' \
+    "${WORK}/selected-packages.json"
+}
+
 write_selection() {
   mkdir -p "${WORK}"
   if [[ -n "${SELECTION_FILE}" ]]; then
@@ -102,7 +107,11 @@ materialize() {
     [[ -n "${archive}" ]] || continue
     tar --numeric-owner -xzf "${REPO}/packages/${archive}" -C "${ROOT}"
   done <"${WORK}/install-order.txt"
-  [[ -x "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "fresh root lacks the BusyBox compatibility export"
+  local busybox_command
+  busybox_command="$(selected_busybox_command)"
+  [[ "${busybox_command}" == /Programs/* ]] || fail "invalid Busybox command in selected package metadata"
+  [[ -x "${ROOT}${busybox_command}" ]] || fail "fresh root lacks selected Busybox command: ${busybox_command}"
+  [[ -L "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "fresh root lacks the Busybox compatibility export"
   mkdir -p "${ROOT}/System/State/packages" "${ROOT}/Work/Temp" "${ROOT}/Users/auzix"
   jq '{format:"auzix-installed-v1",installed:[.packages[]|{name,version,kind,package,sha256,depends:(.depends//[]),commands:(.commands//[]),desktop_entries:(.desktop_entries//[]),hooks:(.hooks//{})}]}' \
     "${WORK}/selected-packages.json" >"${ROOT}/System/State/packages/installed.json"
@@ -144,7 +153,9 @@ PY
 }
 
 import_image() {
-  [[ -x "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "materialized root missing BusyBox"
+  local busybox_command
+  busybox_command="$(selected_busybox_command)"
+  [[ -x "${ROOT}${busybox_command}" ]] || fail "materialized root missing selected Busybox command"
   tar --numeric-owner -C "${ROOT}" -cf - . | docker import \
     --change 'WORKDIR /Work' \
     --change 'ENV HOME=/Users/root' \
