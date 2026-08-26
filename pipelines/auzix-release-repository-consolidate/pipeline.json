@@ -25,6 +25,14 @@
   },
   "stages": [
     {
+      "id": "reload-authoritative-guardrails",
+      "action": "bkc.guardrails.reload_and_hash",
+      "transport": "bkc-local+ssh",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "params": {"script": "scripts/reload-guardrails.sh"}
+    },
+    {
       "id": "preflight-recorded-artifact-lanes",
       "action": "auzix.release_repo.preflight",
       "transport": "bkc-ssh",

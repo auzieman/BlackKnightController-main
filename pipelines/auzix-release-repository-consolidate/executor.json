@@ -5,6 +5,15 @@
   "complete_message": "AUZiX release repository was consolidated from recorded artifacts without a rebuild.",
   "stage_plan": [
     {
+      "name": "reload-authoritative-guardrails",
+      "transport": "local+ssh",
+      "kind": "local-command",
+      "active": "Reloading AUZiX, BKC, and bkc-channel-derived guardrails before interpreting artifacts.",
+      "complete": "Required guardrails were present and their hashes were recorded in run history.",
+      "timeout": 300,
+      "command": "bash /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/reload-guardrails.sh"
+    },
+    {
       "name": "preflight-recorded-artifact-lanes",
       "transport": "local->ssh",
       "kind": "local-command",
