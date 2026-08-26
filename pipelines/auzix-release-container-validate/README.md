@@ -1,17 +1,16 @@
 # AUZiX fresh release container validation
 
-This stage consumes only the immutable repository and manifest emitted by
-`auzix-release-repository-consolidate`. It never copies or imports the mutable
-package-build root. It installs only the explicit dependency closure in
-`selection/first-boot-cli.json`; the repository catalog is not an install
-manifest. Preflight fails before extraction when a selected package or
-transitive dependency is absent.
+This stage produces three increasingly broad images from the prepared AUZiX
+root and frozen package repository:
 
-The package payloads are materialized into an empty root with numeric ownership
-preserved. Package receipts are recorded and declared post-install hooks are run
-in dependency order from the frozen index.
-The resulting root is imported as a disposable Docker image and checked as both
-root and UID/GID 1000.
+1. `auzix/service:zero-busybox-*` — canonical System substrate plus packaged BusyBox;
+2. `auzix/service:one-nginx-*` — image zero plus nginx's frozen dependency closure;
+3. `auzix/validation:pre-hdd-*` — the complete prepared root used by the HDD lane.
+
+All build contexts and Docker layers are created on R730 local storage. The
+laptop is only a Git/control/tunnel station. No dependency discovery or package
+compilation occurs here: the pipeline assembles already prepared artifacts,
+builds each Dockerfile, and validates the resulting running image.
 
 The receipt requires the canonical glibc layout, ncurses/terminfo, Python SSL
 and curses imports, Glances and htop under UID 1000, LibreOffice headless
