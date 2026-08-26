@@ -102,7 +102,7 @@ materialize() {
     [[ -n "${archive}" ]] || continue
     tar --numeric-owner -xzf "${REPO}/packages/${archive}" -C "${ROOT}"
   done <"${WORK}/install-order.txt"
-  [[ -x "${ROOT}/Programs/BusyBox/current/Commands/busybox" ]] || fail "fresh root lacks BusyBox"
+  [[ -x "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "fresh root lacks the BusyBox compatibility export"
   mkdir -p "${ROOT}/System/State/packages" "${ROOT}/Work/Temp" "${ROOT}/Users/auzix"
   jq '{format:"auzix-installed-v1",installed:[.packages[]|{name,version,kind,package,sha256,depends:(.depends//[]),commands:(.commands//[]),desktop_entries:(.desktop_entries//[]),hooks:(.hooks//{})}]}' \
     "${WORK}/selected-packages.json" >"${ROOT}/System/State/packages/installed.json"
@@ -144,14 +144,14 @@ PY
 }
 
 import_image() {
-  [[ -x "${ROOT}/Programs/BusyBox/current/Commands/busybox" ]] || fail "materialized root missing"
+  [[ -x "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "materialized root missing BusyBox"
   tar --numeric-owner -C "${ROOT}" -cf - . | docker import \
     --change 'WORKDIR /Work' \
     --change 'ENV HOME=/Users/root' \
     --change 'ENV TERM=xterm-256color' \
-    --change 'ENV PATH=/System/Compatibility/bin:/System/Compatibility/sbin:/Programs/BusyBox/current/Commands:/Programs/Glances/current/Commands:/Programs/Htop/current/Commands:/Programs/Flatpak/current/Commands' \
+    --change 'ENV PATH=/System/Compatibility/bin:/System/Compatibility/sbin:/Programs/Glances/current/Commands:/Programs/Htop/current/Commands:/Programs/Flatpak/current/Commands' \
     --change 'ENV SSL_CERT_FILE=/System/Compatibility/etc/ssl/certs/ca-certificates.crt' \
-    --change 'CMD ["/Programs/BusyBox/current/Commands/busybox","sh"]' \
+    --change 'CMD ["/System/Compatibility/bin/busybox","sh"]' \
     - "${IMAGE}"
   log "imported image=${IMAGE}"
 }
@@ -164,24 +164,29 @@ probe() {
     local label="$1"; shift
     if docker run --rm "$@"; then log "PASS ${label}"; else log "FAIL ${label}"; failures=$((failures + 1)); fi
   }
-  run_probe busybox "${IMAGE}" /Programs/BusyBox/current/Commands/busybox true
-  run_probe core-libc "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -x /System/Libraries/Runtime/glibc/libc.so.6
-  run_probe no-alternate-libc "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c '! test -e /Programs/Libc6/current'
-  run_probe normal-user --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -d /Users/auzix
-  run_probe ncurses-terminfo "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c 'test -n "$(find /Programs/NcursesBase /Programs/NcursesTerm -type f -name xterm-256color -print -quit 2>/dev/null)"'
-  run_probe python-ssl-curses "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c 'p=$(command -v python3 || command -v python3.13); test -n "$p"; "$p" -c "import curses,ssl,sqlite3; print(ssl.OPENSSL_VERSION)"'
+  run_probe busybox "${IMAGE}" /System/Compatibility/bin/busybox true
+  run_probe core-libc "${IMAGE}" /System/Compatibility/bin/busybox test -x /System/Libraries/Runtime/glibc/libc.so.6
+  run_probe no-alternate-libc "${IMAGE}" /System/Compatibility/bin/busybox sh -c '! test -e /Programs/Libc6/current'
+  run_probe normal-user --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /System/Compatibility/bin/busybox test -d /Users/auzix
+  run_probe ncurses-terminfo "${IMAGE}" /System/Compatibility/bin/busybox sh -c 'test -n "$(find /Programs/NcursesBase /Programs/NcursesTerm -type f -name xterm-256color -print -quit 2>/dev/null)"'
+  run_probe python-ssl-curses "${IMAGE}" /System/Compatibility/bin/busybox sh -c 'p=$(command -v python3 || command -v python3.13); test -n "$p"; "$p" -c "import curses,ssl,sqlite3; print(ssl.OPENSSL_VERSION)"'
   for spec in 'glances:/Programs/Glances/current/Commands/glances:--version' 'htop:/Programs/Htop/current/Commands/htop:--version'; do
     IFS=: read -r label command arg <<<"${spec}"
     run_probe "${label}-normal-user" --user 1000:1000 -e HOME=/Users/auzix -e TERM=xterm-256color "${IMAGE}" "${command}" "${arg}"
   done
-  run_probe libreoffice-headless-convert --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c \
+  run_probe libreoffice-headless-convert --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /System/Compatibility/bin/busybox sh -c \
     'mkdir -p /Work/lo-proof; printf "AUZiX conversion proof\n" >/Work/lo-proof/input.txt; loffice --headless --convert-to pdf --outdir /Work/lo-proof /Work/lo-proof/input.txt; test -s /Work/lo-proof/input.pdf'
-  run_probe desktop-launcher-contract "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -s /System/State/packages/installed.json
+  run_probe desktop-launcher-contract "${IMAGE}" /System/Compatibility/bin/busybox test -s /System/State/packages/installed.json
   jq -n --arg release_id "${RELEASE_ID}" --arg validation_id "${VALIDATION_ID}" --arg image "${IMAGE}" --argjson failures "${failures}" \
     '{format:"auzix-release-container-validation-v1",release_id:$release_id,validation_id:$validation_id,image:$image,failures:$failures,status:(if $failures==0 then "pass" else "fail" end)}' >"${report}"
   [[ "${failures}" == 0 ]] || fail "${failures} validation probes failed"
+  local container="auzix-release-validation-${VALIDATION_ID//[^a-zA-Z0-9_.-]/-}"
+  docker rm -f "${container}" >/dev/null 2>&1 || true
+  docker run -d --name "${container}" "${IMAGE}" /System/Compatibility/bin/busybox sh -c \
+    'while :; do sleep 3600; done' >/dev/null
   printf 'format=auzix-release-container-v1\nrelease_id=%s\nvalidation_id=%s\nimage=%s\nstatus=pass\nreport=%s\ncompleted_at=%s\n' \
     "${RELEASE_ID}" "${VALIDATION_ID}" "${IMAGE}" "${report}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${RECEIPT}"
+  printf 'container=%s\n' "${container}" >>"${RECEIPT}"
   log "validation passed receipt=${RECEIPT}"
 }
 
