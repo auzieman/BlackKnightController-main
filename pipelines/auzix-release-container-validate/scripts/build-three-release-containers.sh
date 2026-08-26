@@ -16,7 +16,9 @@ fail() { log "FAIL: $*" >&2; exit 1; }
   || fail "this stage must execute on R730"
 [[ -d "${BARE_REPO}" ]] || fail "missing AUZiX bare repository: ${BARE_REPO}"
 [[ -s "${RELEASE_ROOT}/repo/index.json" ]] || fail "missing frozen release: ${RELEASE_ID}"
-[[ -x "${PREPARED_ROOT}/Programs/Busybox/current/Commands/busybox" ]] \
+busybox_target="$(readlink "${PREPARED_ROOT}/Programs/Busybox/current" 2>/dev/null || true)"
+busybox_version="${busybox_target##*/}"
+[[ -n "${busybox_version}" && -x "${PREPARED_ROOT}/Programs/Busybox/${busybox_version}/Commands/busybox" ]] \
   || fail "prepared root lacks packaged Busybox"
 available_kib="$(df -Pk /var/lib/auzix-build | awk 'NR==2 {print $4}')"
 (( available_kib >= 25 * 1024 * 1024 )) || fail "R730 build filesystem has less than 25 GiB free"
