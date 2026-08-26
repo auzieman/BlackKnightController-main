@@ -5344,6 +5344,77 @@ WORKFLOW_DEFINITIONS["auzix-release-container-validate"] = {
     "complete_message": "Fresh AUZiX validation container passed the frozen repository gate.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-release-hdd-build-deploy"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "require-passing-container-receipt",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Requiring a passing fresh-container receipt before HDD assembly.",
+            "complete": "Validated root and passing container receipt are present.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; hdd=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd bash -s -- preflight\" "
+                "< /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
+            ),
+            "timeout": 300,
+        },
+        {
+            "name": "build-hdd-from-validated-root",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Building an HDD image from the exact root that passed container validation.",
+            "complete": "Validated AUZiX HDD image and hash were written on R730.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; hdd=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd bash -s -- build\" "
+                "< /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
+            ),
+            "timeout": 3600,
+        },
+        {
+            "name": "deploy-to-disposable-pve-vm",
+            "transport": "local->ssh-stream->pve",
+            "kind": "local-command",
+            "active": "Streaming the validated HDD image to disposable PVE VMID142.",
+            "complete": "Validated HDD image was attached disk-first to the disposable PVE VM.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "AUZIX_RELEASE_ID=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\" "
+                "AUZIX_HDD_ID=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\" "
+                "AUZIX_TARGET_VMID=\"${BKC_INPUT_TARGET_VMID:-142}\" "
+                "AUZIX_PVE_STORAGE=\"${BKC_INPUT_STORAGE:-local-lvm}\" "
+                "AUZIX_ALLOW_PROTECTED_VMID=\"${BKC_INPUT_ALLOW_PROTECTED_VMID:-false}\" "
+                "/app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/deploy-validated-hdd-pve.sh deploy'"
+            ),
+            "timeout": 1800,
+        },
+        {
+            "name": "hard-boot-and-firstboot-probe",
+            "transport": "local->pve+network",
+            "kind": "local-command",
+            "active": "Hard-starting the disposable VM and waiting for AUZiX network/SSH evidence.",
+            "complete": "PVE reports the VM running and AUZiX first-boot network evidence is reachable.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "AUZIX_RELEASE_ID=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\" "
+                "AUZIX_HDD_ID=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\" "
+                "AUZIX_TARGET_VMID=\"${BKC_INPUT_TARGET_VMID:-142}\" "
+                "AUZIX_TARGET_IP=\"${BKC_INPUT_TARGET_IP:-192.168.1.229}\" "
+                "AUZIX_ALLOW_PROTECTED_VMID=\"${BKC_INPUT_ALLOW_PROTECTED_VMID:-false}\" "
+                "/app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/deploy-validated-hdd-pve.sh boot'"
+            ),
+            "timeout": 900,
+        },
+    ],
+    "complete_message": "Validated AUZiX HDD image was built and booted on the disposable PVE target.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
     "supports_undeploy": False,
     "stage_plan": [
