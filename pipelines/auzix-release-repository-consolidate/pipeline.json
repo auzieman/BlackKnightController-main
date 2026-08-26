@@ -1,0 +1,59 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-release-repository-consolidate",
+  "name": "AUZiX 31 — Release Repository Consolidation",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-release-repository-consolidate",
+  "resource_class": "medium",
+  "status": "candidate",
+  "tags": ["auzix", "r730", "repository", "consolidate", "trixie", "immutable"],
+  "summary": "Merge the immutable 1,133-package Trixie repack spool with the recorded reusable substrate lane and approved delta artifacts; no compilation or dependency discovery.",
+  "operator_rule": "This is artifact consolidation, not package discovery. It must fail on suite drift, alternate glibc, duplicate identities, missing archives, bad hashes, or an implausible reusable-package count.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "artifact_store": "path:/var/lib/auzix-build/native-rebase-runs"
+  },
+  "inputs": {
+    "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
+    "legacy_run_id": {"required": true, "default": "52d2243d-89d8-4f08-a85f-4152850655ed"},
+    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
+    "expected_repack_count": {"required": true, "default": 1133},
+    "safe_count_min": {"required": true, "default": 300},
+    "safe_count_max": {"required": true, "default": 350},
+    "worker_host": {"required": true, "default": "lab-ai-worker"}
+  },
+  "stages": [
+    {
+      "id": "preflight-recorded-artifact-lanes",
+      "action": "auzix.release_repo.preflight",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 300,
+      "params": {"script": "scripts/consolidate-release-repository.sh", "mode": "preflight"}
+    },
+    {
+      "id": "consolidate-immutable-repository",
+      "action": "auzix.release_repo.consolidate",
+      "transport": "bkc-ssh",
+      "risk": "medium",
+      "timeout_seconds": 1800,
+      "params": {"script": "scripts/consolidate-release-repository.sh", "mode": "consolidate"}
+    },
+    {
+      "id": "verify-release-manifest-and-receipt",
+      "action": "auzix.release_repo.verify",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "params": {"script": "scripts/consolidate-release-repository.sh", "mode": "verify"}
+    }
+  ],
+  "outputs": {
+    "repository": "/var/lib/auzix-build/releases/<release_id>/repo",
+    "manifest": "/var/lib/auzix-build/releases/<release_id>/release-manifest.json",
+    "safe_manifest": "/var/lib/auzix-build/releases/<release_id>/safe-reuse.packages",
+    "receipt": "/var/lib/auzix-build/receipts/release-repository-<release_id>.receipt"
+  },
+  "follow_up_pipeline": "auzix-release-container-validate"
+}

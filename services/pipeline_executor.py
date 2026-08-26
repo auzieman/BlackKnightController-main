@@ -5219,6 +5219,64 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-delta-finalize"] = {
     "complete_message": "AUZiX bounded delta and native finalization started through BKC.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "preflight-recorded-artifact-lanes",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Checking the recorded 1,133 repacks and reusable Trixie repository lane.",
+            "complete": "Recorded repository lanes and bounded package counts passed preflight.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; "
+                "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release bash -s -- preflight\" "
+                "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+            ),
+            "timeout": 300,
+        },
+        {
+            "name": "consolidate-immutable-repository",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Merging recorded safe artifacts and immutable repacks without compilation or discovery.",
+            "complete": "Immutable consolidated AUZiX repository and manifest were written.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; "
+                "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- consolidate\" "
+                "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+            ),
+            "timeout": 1800,
+        },
+        {
+            "name": "verify-release-manifest-and-receipt",
+            "transport": "local->ssh",
+            "kind": "local-command",
+            "active": "Verifying the consolidated repository manifest, hashes, and archive count.",
+            "complete": "Consolidated AUZiX repository passed immutable artifact verification.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- verify\" "
+                "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+            ),
+            "timeout": 600,
+        },
+    ],
+    "complete_message": "AUZiX release repository was consolidated from recorded artifacts without a rebuild.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
     "supports_undeploy": False,
     "stage_plan": [
