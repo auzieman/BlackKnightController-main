@@ -5,7 +5,8 @@ This stage consumes only the immutable repository and manifest emitted by
 package-build root.
 
 The package payloads are materialized into an empty root with numeric ownership
-preserved. Package receipts and hooks are then evaluated from the frozen index.
+preserved. Package receipts are recorded and declared post-install hooks are run
+in dependency order from the frozen index.
 The resulting root is imported as a disposable Docker image and checked as both
 root and UID/GID 1000.
 

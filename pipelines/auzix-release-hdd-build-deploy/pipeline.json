@@ -19,6 +19,7 @@
     "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
     "validation_id": {"required": true, "default": "container-proof-r1"},
     "hdd_id": {"required": true, "default": "hdd-pve-r1"},
+    "hdd_builder_sha256": {"required": true, "description": "SHA-256 of the reviewed HDD builder in the pinned AUZiX source tree."},
     "target_vmid": {"required": true, "default": 142},
     "target_ip": {"required": false, "default": "192.168.1.229"},
     "storage": {"required": true, "default": "local-lvm"},

@@ -7,7 +7,7 @@
   "resource_class": "medium",
   "status": "candidate",
   "tags": ["auzix", "r730", "repository", "consolidate", "trixie", "immutable"],
-  "summary": "Merge the immutable 1,133-package Trixie repack spool with the recorded reusable substrate lane and approved delta artifacts; no compilation or dependency discovery.",
+  "summary": "Merge the immutable 1,133-package Trixie repack spool with the recorded reusable substrate lane, then reject any incomplete dependency closure; no compilation or dependency discovery.",
   "operator_rule": "This is artifact consolidation, not package discovery. It must fail on suite drift, alternate glibc, duplicate identities, missing archives, bad hashes, or an implausible reusable-package count.",
   "targets": {
     "worker": "host:r730-ai-01",
@@ -19,8 +19,8 @@
     "legacy_run_id": {"required": true, "default": "52d2243d-89d8-4f08-a85f-4152850655ed"},
     "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
     "expected_repack_count": {"required": true, "default": 1133},
-    "safe_count_min": {"required": true, "default": 300},
-    "safe_count_max": {"required": true, "default": 350},
+    "safe_count_min": {"required": true, "default": 450},
+    "safe_count_max": {"required": true, "default": 500},
     "worker_host": {"required": true, "default": "lab-ai-worker"}
   },
   "stages": [

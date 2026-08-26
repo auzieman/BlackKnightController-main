@@ -16,7 +16,7 @@ fail() { log "FAIL: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
 preflight() {
-  need docker; need python3; need jq; need tar; need sha256sum
+  need docker; need python3; need jq; need tar; need sha256sum; need chroot
   [[ -s "${RELEASE_ROOT}/release-manifest.json" && -s "${REPO}/index.json" ]] || fail "frozen release is missing"
   (cd "${RELEASE_ROOT}" && sha256sum -c SHA256SUMS)
   [[ ! -e "${WORK}" ]] || fail "validation output already exists: ${WORK}"
@@ -39,14 +39,19 @@ by_name = {str(x["name"]).casefold(): x for x in items}
 missing = sorted({str(d) for x in items for d in (x.get("depends") or []) if str(d).casefold() not in by_name})
 if missing:
     raise SystemExit("missing repository dependencies: " + ", ".join(missing[:80]))
-remaining = set(by_name); complete = set(); order = []
+remaining = set(by_name); complete = set(); order = []; ordered_items = []
 while remaining:
     ready = sorted(k for k in remaining if all(str(d).casefold() in complete or str(d).casefold() not in remaining for d in (by_name[k].get("depends") or [])))
     if not ready:  # Preserve deterministic SCC order; payloads precede all hook execution.
         ready = [min(remaining)]
     for key in ready:
-        order.append(str(by_name[key]["package"])); complete.add(key); remaining.remove(key)
+        order.append(str(by_name[key]["package"])); ordered_items.append(by_name[key]); complete.add(key); remaining.remove(key)
 order_path.write_text("".join(x + "\n" for x in order))
+(order_path.parent / "post-install-hooks.txt").write_text("".join(
+    str((item.get("hooks") or {}).get("post_install") or "").strip() + "\n"
+    for item in ordered_items
+    if str((item.get("hooks") or {}).get("post_install") or "").strip()
+))
 PY
   while IFS= read -r archive; do
     [[ -n "${archive}" ]] || continue
@@ -57,6 +62,12 @@ PY
   jq '{format:"auzix-installed-v1",installed:[.packages[]|{name,version,kind,package,sha256,depends:(.depends//[]),commands:(.commands//[]),desktop_entries:(.desktop_entries//[]),hooks:(.hooks//{})}]}' \
     "${REPO}/index.json" >"${ROOT}/System/State/packages/installed.json"
   chown 1000:1000 "${ROOT}/Users/auzix" 2>/dev/null || true
+  while IFS= read -r hook; do
+    [[ -n "${hook}" ]] || continue
+    read -r -a hook_argv <<<"${hook}"
+    [[ "${hook_argv[0]}" == /Programs/* ]] || fail "refusing post-install hook outside /Programs: ${hook}"
+    chroot "${ROOT}" "${hook_argv[@]}"
+  done <"${WORK}/post-install-hooks.txt"
   log "materialized root=${ROOT}"
 }
 

@@ -5233,8 +5233,9 @@ WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
                 "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
                 "legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; "
                 "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release bash -s -- preflight\" "
+                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- preflight\" "
                 "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
             ),
             "timeout": 300,
@@ -5250,9 +5251,9 @@ WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
                 "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
                 "legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; "
                 "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; "
+                "expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- consolidate\" "
+                "\"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- consolidate\" "
                 "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
             ),
             "timeout": 1800,
@@ -5266,7 +5267,7 @@ WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
             "command": (
                 "bash -lc 'set -euo pipefail; "
                 "release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; "
+                "low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
                 "\"AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- verify\" "
                 "< /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
@@ -5356,8 +5357,9 @@ WORKFLOW_DEFINITIONS["auzix-release-hdd-build-deploy"] = {
             "command": (
                 "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
                 "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; hdd=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\"; "
+                "builder_sha=\"${BKC_INPUT_HDD_BUILDER_SHA256:?hdd_builder_sha256 is required}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd bash -s -- preflight\" "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd AUZIX_HDD_BUILDER_SHA256=$builder_sha bash -s -- preflight\" "
                 "< /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
             ),
             "timeout": 300,
@@ -5371,8 +5373,9 @@ WORKFLOW_DEFINITIONS["auzix-release-hdd-build-deploy"] = {
             "command": (
                 "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
                 "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; hdd=\"${BKC_INPUT_HDD_ID:-hdd-pve-r1}\"; "
+                "builder_sha=\"${BKC_INPUT_HDD_BUILDER_SHA256:?hdd_builder_sha256 is required}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd bash -s -- build\" "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_HDD_ID=$hdd AUZIX_HDD_BUILDER_SHA256=$builder_sha bash -s -- build\" "
                 "< /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
             ),
             "timeout": 3600,

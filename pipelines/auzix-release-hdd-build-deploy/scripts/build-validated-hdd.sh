@@ -12,6 +12,7 @@ VALIDATION_ROOT="${RELEASE_ROOT}/validation/${VALIDATION_ID}/root"
 VALIDATION_RECEIPT="${AUZIX_RECEIPT_DIR:-/var/lib/auzix-build/receipts}/release-container-${VALIDATION_ID}.receipt"
 SOURCE="${WORK_ROOT}/${BASE_RUN_ID}/src"
 BUILDER="${SOURCE}/scripts/build-auzix-live-disk-image.sh"
+BUILDER_SHA256="${AUZIX_HDD_BUILDER_SHA256:-}"
 OUT="${RELEASE_ROOT}/hdd/${HDD_ID}"
 IMAGE="${OUT}/auzix-${HDD_ID}.img"
 RECEIPT="${AUZIX_RECEIPT_DIR:-/var/lib/auzix-build/receipts}/release-hdd-${HDD_ID}.receipt"
@@ -24,6 +25,8 @@ preflight() {
   grep -Fx 'status=pass' "${VALIDATION_RECEIPT}" >/dev/null || fail "validation receipt did not pass"
   [[ -d "${VALIDATION_ROOT}" ]] || fail "validated root missing: ${VALIDATION_ROOT}"
   [[ -x "${BUILDER}" ]] || fail "known HDD builder missing: ${BUILDER}"
+  [[ "${BUILDER_SHA256}" =~ ^[0-9a-f]{64}$ ]] || fail "AUZIX_HDD_BUILDER_SHA256 must pin the reviewed builder"
+  printf '%s  %s\n' "${BUILDER_SHA256}" "${BUILDER}" | sha256sum -c -
   [[ ! -e "${OUT}" ]] || fail "HDD output already exists: ${OUT}"
   log "preflight release=${RELEASE_ID} validation=${VALIDATION_ID} hdd=${HDD_ID}"
 }
