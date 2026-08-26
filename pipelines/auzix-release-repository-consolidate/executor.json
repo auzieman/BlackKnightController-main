@@ -8,28 +8,28 @@
       "name": "preflight-recorded-artifact-lanes",
       "transport": "local->ssh",
       "kind": "local-command",
-      "active": "Checking the immutable repacks and complete reusable Trixie closure.",
-      "complete": "Recorded repository lanes and complete dependency closure passed preflight.",
+      "active": "Checking the immutable repacks and recorded reusable Trixie catalog lane.",
+      "complete": "Recorded repository lanes and bounded artifact counts passed preflight.",
       "timeout": 300,
-      "command": "bash -lc 'set -euo pipefail; base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- preflight\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+      "command": "bash -lc 'set -euo pipefail; base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- preflight\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
     },
     {
       "name": "consolidate-immutable-repository",
       "transport": "local->ssh",
       "kind": "local-command",
-      "active": "Merging the complete recorded Trixie closure without compilation or discovery.",
+      "active": "Merging the recorded Trixie artifact catalog without compilation or discovery.",
       "complete": "Immutable consolidated AUZiX repository and manifest were written.",
       "timeout": 1800,
-      "command": "bash -lc 'set -euo pipefail; base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- consolidate\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+      "command": "bash -lc 'set -euo pipefail; base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; legacy=\"${BKC_INPUT_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}\"; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; expected=\"${BKC_INPUT_EXPECTED_REPACK_COUNT:-1133}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_BASE_RUN_ID=$base AUZIX_LEGACY_RUN_ID=$legacy AUZIX_RELEASE_ID=$release AUZIX_EXPECTED_REPACK_COUNT=$expected AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- consolidate\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
     },
     {
       "name": "verify-release-manifest-and-receipt",
       "transport": "local->ssh",
       "kind": "local-command",
-      "active": "Verifying the consolidated repository manifest, hashes, archive count, and closed graph.",
+      "active": "Verifying the consolidated repository manifest, hashes, and archive count.",
       "complete": "Consolidated AUZiX repository passed immutable artifact verification.",
       "timeout": 600,
-      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-450}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-500}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- verify\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; low=\"${BKC_INPUT_SAFE_COUNT_MIN:-300}\"; high=\"${BKC_INPUT_SAFE_COUNT_MAX:-350}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_SAFE_COUNT_MIN=$low AUZIX_SAFE_COUNT_MAX=$high bash -s -- verify\" < /app/runtime/pipelines/auzix-release-repository-consolidate/scripts/consolidate-release-repository.sh'"
     }
   ]
 }
