@@ -18,11 +18,6 @@ log() { printf '[auzix-release-container] %s\n' "$*"; }
 fail() { log "FAIL: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
-selected_busybox_command() {
-  jq -er '.packages[] | select((.name | ascii_downcase) == "busybox") | .commands[0]' \
-    "${WORK}/selected-packages.json"
-}
-
 write_selection() {
   mkdir -p "${WORK}"
   if [[ -n "${SELECTION_FILE}" ]]; then
@@ -86,7 +81,7 @@ PY
 }
 
 preflight() {
-  need docker; need python3; need jq; need tar; need sha256sum; need chroot
+  need docker; need python3; need jq; need tar; need sha256sum
   [[ -s "${RELEASE_ROOT}/release-manifest.json" && -s "${REPO}/index.json" ]] || fail "frozen release is missing"
   (cd "${RELEASE_ROOT}" && sha256sum -c SHA256SUMS)
   [[ ! -e "${ROOT}" ]] || fail "validation root already exists: ${ROOT}"
@@ -107,22 +102,23 @@ materialize() {
     [[ -n "${archive}" ]] || continue
     tar --numeric-owner -xzf "${REPO}/packages/${archive}" -C "${ROOT}"
   done <"${WORK}/install-order.txt"
-  local busybox_command
-  busybox_command="$(selected_busybox_command)"
-  [[ "${busybox_command}" == /Programs/* ]] || fail "invalid Busybox command in selected package metadata"
-  [[ -x "${ROOT}${busybox_command}" ]] || fail "fresh root lacks selected Busybox command: ${busybox_command}"
-  [[ -L "${ROOT}/System/Compatibility/bin/busybox" ]] || fail "fresh root lacks the Busybox compatibility export"
   mkdir -p "${ROOT}/System/State/packages" "${ROOT}/Work/Temp" "${ROOT}/Users/auzix"
   jq '{format:"auzix-installed-v1",installed:[.packages[]|{name,version,kind,package,sha256,depends:(.depends//[]),commands:(.commands//[]),desktop_entries:(.desktop_entries//[]),hooks:(.hooks//{})}]}' \
     "${WORK}/selected-packages.json" >"${ROOT}/System/State/packages/installed.json"
   chown 1000:1000 "${ROOT}/Users/auzix" 2>/dev/null || true
-  while IFS= read -r hook; do
-    [[ -n "${hook}" ]] || continue
-    read -r -a hook_argv <<<"${hook}"
-    [[ "${hook_argv[0]}" == /Programs/* ]] || fail "refusing post-install hook outside /Programs: ${hook}"
-    chroot "${ROOT}" "${hook_argv[@]}"
-  done <"${WORK}/post-install-hooks.txt"
-  python3 - "${WORK}/selected-packages.json" "${ROOT}" "${WORK}/desktop-launchers.json" <<'PY'
+  log "materialized root=${ROOT}; runtime validation deferred until after container import"
+}
+
+validate_desktop_launchers() {
+  local image_root="${WORK}/image-root"
+  local inspect_container="auzix-release-inspect-${VALIDATION_ID//[^a-zA-Z0-9_.-]/-}"
+  rm -rf "${image_root}"
+  mkdir -p "${image_root}"
+  docker rm -f "${inspect_container}" >/dev/null 2>&1 || true
+  docker create --name "${inspect_container}" "${IMAGE}" >/dev/null
+  docker export "${inspect_container}" | tar --numeric-owner -xf - -C "${image_root}"
+  docker rm "${inspect_container}" >/dev/null
+  python3 - "${WORK}/selected-packages.json" "${image_root}" "${WORK}/desktop-launchers.json" <<'PY'
 import json, re, shlex, sys
 from pathlib import Path
 selected, root, report = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
@@ -149,13 +145,9 @@ report.write_text(json.dumps({"format":"auzix-desktop-launcher-proof-v1","entrie
 if failures:
     raise SystemExit("; ".join(failures[:30]))
 PY
-  log "materialized root=${ROOT}"
 }
 
 import_image() {
-  local busybox_command
-  busybox_command="$(selected_busybox_command)"
-  [[ -x "${ROOT}${busybox_command}" ]] || fail "materialized root missing selected Busybox command"
   tar --numeric-owner -C "${ROOT}" -cf - . | docker import \
     --change 'WORKDIR /Work' \
     --change 'ENV HOME=/Users/root' \
@@ -164,6 +156,18 @@ import_image() {
     --change 'ENV SSL_CERT_FILE=/System/Compatibility/etc/ssl/certs/ca-certificates.crt' \
     --change 'CMD ["/System/Compatibility/bin/busybox","sh"]' \
     - "${IMAGE}"
+  local assembly_container="auzix-release-assembly-${VALIDATION_ID//[^a-zA-Z0-9_.-]/-}"
+  docker rm -f "${assembly_container}" >/dev/null 2>&1 || true
+  docker run -d --name "${assembly_container}" "${IMAGE}" /System/Compatibility/bin/busybox sh -c \
+    'while :; do sleep 3600; done' >/dev/null
+  while IFS= read -r hook; do
+    [[ -n "${hook}" ]] || continue
+    read -r -a hook_argv <<<"${hook}"
+    [[ "${hook_argv[0]}" == /Programs/* ]] || fail "refusing post-install hook outside /Programs: ${hook}"
+    docker exec "${assembly_container}" "${hook_argv[@]}"
+  done <"${WORK}/post-install-hooks.txt"
+  docker commit "${assembly_container}" "${IMAGE}" >/dev/null
+  docker rm -f "${assembly_container}" >/dev/null
   log "imported image=${IMAGE}"
 }
 
@@ -188,6 +192,7 @@ probe() {
   run_probe libreoffice-headless-convert --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /System/Compatibility/bin/busybox sh -c \
     'mkdir -p /Work/lo-proof; printf "AUZiX conversion proof\n" >/Work/lo-proof/input.txt; loffice --headless --convert-to pdf --outdir /Work/lo-proof /Work/lo-proof/input.txt; test -s /Work/lo-proof/input.pdf'
   run_probe desktop-launcher-contract "${IMAGE}" /System/Compatibility/bin/busybox test -s /System/State/packages/installed.json
+  if validate_desktop_launchers; then log "PASS desktop-launcher-resolution"; else log "FAIL desktop-launcher-resolution"; failures=$((failures + 1)); fi
   jq -n --arg release_id "${RELEASE_ID}" --arg validation_id "${VALIDATION_ID}" --arg image "${IMAGE}" --argjson failures "${failures}" \
     '{format:"auzix-release-container-validation-v1",release_id:$release_id,validation_id:$validation_id,image:$image,failures:$failures,status:(if $failures==0 then "pass" else "fail" end)}' >"${report}"
   [[ "${failures}" == 0 ]] || fail "${failures} validation probes failed"
