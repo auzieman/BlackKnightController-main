@@ -25,10 +25,23 @@ preflight() {
   [[ -s "${LEGACY_REPO}/index.json" ]] || fail "legacy index missing: ${LEGACY_REPO}/index.json"
   [[ -d "${LEGACY_REPO}/packages" ]] || fail "legacy package directory missing"
   [[ -d "${SPOOL}/entries" && -d "${SPOOL}/packages" ]] || fail "immutable spool missing: ${SPOOL}"
-  local count
+  local count safe_count
   count="$(find "${SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
   [[ "${count}" == "${EXPECTED_REPACK_COUNT}" ]] || fail "repack count ${count}, expected ${EXPECTED_REPACK_COUNT}"
-  log "preflight base=${BASE_RUN_ID} repacks=${count} legacy=${LEGACY_RUN_ID} release=${RELEASE_ID}"
+  safe_count="$(python3 - "${SPOOL}/entries" "${LEGACY_REPO}/index.json" <<'PY'
+import json, sys
+from pathlib import Path
+entries, legacy_index = Path(sys.argv[1]), Path(sys.argv[2])
+incoming = [json.loads(p.read_text()) for p in entries.glob("*.json")]
+incoming_names = {str(x.get("name") or "").casefold() for x in incoming}
+required = {str(dep).casefold() for x in incoming for dep in (x.get("depends") or []) if str(dep).strip()}
+legacy = {str(x.get("name") or "").casefold() for x in json.loads(legacy_index.read_text()).get("packages", [])}
+print(len((required - incoming_names) & legacy))
+PY
+)"
+  (( safe_count >= SAFE_COUNT_MIN && safe_count <= SAFE_COUNT_MAX )) ||
+    fail "safe reuse count ${safe_count} outside ${SAFE_COUNT_MIN}..${SAFE_COUNT_MAX}"
+  log "preflight base=${BASE_RUN_ID} repacks=${count} safe_reuse=${safe_count} legacy=${LEGACY_RUN_ID} release=${RELEASE_ID}"
 }
 
 consolidate() {
