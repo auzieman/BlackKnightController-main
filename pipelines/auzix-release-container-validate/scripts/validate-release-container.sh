@@ -58,12 +58,14 @@ def visit(name, parent="selection"):
     visiting.remove(key); seen.add(key); order.append(item)
 for root in roots: visit(root)
 missing = sorted(set(missing), key=lambda x: (x[0].casefold(), x[1].casefold()))
+missing_names = sorted({name for name,_ in missing}, key=str.casefold)
 (work / "missing-dependencies.tsv").write_text("".join(f"{n}\t{p}\n" for n,p in missing))
 (work / "dependency-cycles.tsv").write_text("".join(f"{n}\t{p}\n" for n,p in cycles))
 (work / "install-order.txt").write_text("".join(str(x["package"]) + "\n" for x in order))
 (work / "selected-packages.json").write_text(json.dumps({
     "format":"auzix-selected-closure-v1", "roots":roots,
-    "package_count":len(order), "missing_count":len(missing),
+    "package_count":len(order), "missing_count":len(missing_names),
+    "missing_edge_count":len(missing),
     "packages":order
 }, indent=2) + "\n")
 (work / "post-install-hooks.txt").write_text("".join(
@@ -71,7 +73,7 @@ missing = sorted(set(missing), key=lambda x: (x[0].casefold(), x[1].casefold()))
     for x in order if str((x.get("hooks") or {}).get("post_install") or "").strip()
 ))
 if missing:
-    print(f"selected closure is incomplete: {len(missing)} missing dependencies", file=sys.stderr)
+    print(f"selected closure is incomplete: {len(missing_names)} missing packages across {len(missing)} dependency edges", file=sys.stderr)
     for name,parent in missing[:80]: print(f"MISSING {name} required_by={parent}", file=sys.stderr)
     raise SystemExit(42)
 print(f"selected closure packages={len(order)} roots={len(roots)} cycles={len(cycles)}")
