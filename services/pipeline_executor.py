@@ -5524,8 +5524,26 @@ WORKFLOW_DEFINITIONS["auzix-vm-product-validation"] = {
 }
 
 
+def _workflow_config(workflow: str) -> dict:
+    """Load a filesystem workflow plan first, falling back to legacy Python definitions."""
+    normalized = (workflow or "").strip().lower()
+    pipeline_root = Path(os.environ.get("BKC_PIPELINE_FOLDERS_PATH", "/app/runtime/pipelines"))
+    plan_path = pipeline_root / normalized / "executor.json"
+    if plan_path.is_file():
+        try:
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PipelineExecutionError(f"Invalid dynamic workflow plan {plan_path}: {exc}") from exc
+        if str(plan.get("workflow") or "").strip().lower() != normalized:
+            raise PipelineExecutionError(f"Dynamic workflow identity mismatch in {plan_path}.")
+        if not isinstance(plan.get("stage_plan"), list) or not plan["stage_plan"]:
+            raise PipelineExecutionError(f"Dynamic workflow has no stages: {plan_path}.")
+        return plan
+    return WORKFLOW_DEFINITIONS.get(normalized, {})
+
+
 def workflow_is_supported(workflow: str) -> bool:
-    return (workflow or "").strip().lower() in WORKFLOW_DEFINITIONS
+    return bool(_workflow_config(workflow))
 
 
 def workflow_job_timeout(workflow: str, action_mode: str = "deploy") -> int:
@@ -5545,7 +5563,7 @@ def workflow_job_timeout(workflow: str, action_mode: str = "deploy") -> int:
 def workflow_stage_definitions(workflow: str, action_mode: str = "deploy") -> list[dict]:
     normalized = (workflow or "").strip().lower()
     mode = (action_mode or "deploy").strip().lower() or "deploy"
-    config = WORKFLOW_DEFINITIONS.get(normalized, {})
+    config = _workflow_config(normalized)
     if not config:
         return []
 
@@ -5649,7 +5667,7 @@ def workflow_stage_definitions(workflow: str, action_mode: str = "deploy") -> li
 
 
 def workflow_supports_undeploy(workflow: str) -> bool:
-    config = WORKFLOW_DEFINITIONS.get((workflow or "").strip().lower(), {})
+    config = _workflow_config(workflow)
     return bool(config.get("supports_undeploy"))
 
 
@@ -15306,7 +15324,7 @@ def _video_seed_validate(run_id: str, stage_name: str) -> None:
 
 
 def _run_stage_plan(run_id: str, workflow: str, settings: dict[str, str], *, action_mode: str = "deploy") -> None:
-    config = WORKFLOW_DEFINITIONS[workflow]
+    config = _workflow_config(workflow)
     stage_plan = workflow_stage_definitions(workflow, action_mode=action_mode)
     run = get_run(run_id) or {}
     extra = run.get("extra") if isinstance(run.get("extra"), dict) else {}
@@ -16608,7 +16626,7 @@ def execute_pipeline_run(run_id: str) -> dict:
         raise PipelineExecutionError(f"Run {run_id} not found.")
 
     workflow = str(run.get("workflow", "")).strip().lower()
-    config = WORKFLOW_DEFINITIONS.get(workflow)
+    config = _workflow_config(workflow)
     if not config:
         raise PipelineExecutionError(f"No executor implemented for workflow '{workflow}'.")
 
