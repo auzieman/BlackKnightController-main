@@ -5277,6 +5277,73 @@ WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
     "complete_message": "AUZiX release repository was consolidated from recorded artifacts without a rebuild.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-release-container-validate"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "preflight-frozen-release",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Verifying the immutable AUZiX repository before fresh-root construction.",
+            "complete": "Frozen release manifest, hashes, index, and archives passed preflight.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- preflight\" "
+                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+            ),
+            "timeout": 300,
+        },
+        {
+            "name": "materialize-fresh-root",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Materializing an empty AUZiX root from the frozen repository package transaction.",
+            "complete": "Fresh AUZiX validation root was materialized without the mutable build root.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- materialize\" "
+                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+            ),
+            "timeout": 3600,
+        },
+        {
+            "name": "import-validation-image",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Importing the fresh AUZiX root as a disposable validation image.",
+            "complete": "Fresh AUZiX validation image was imported.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- import\" "
+                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+            ),
+            "timeout": 1800,
+        },
+        {
+            "name": "run-root-and-user-probes",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Running core ABI, package, CLI, and normal-user probes in the validation image.",
+            "complete": "Fresh AUZiX validation image passed and wrote a release-gate receipt.",
+            "command": (
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
+                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- probe\" "
+                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+            ),
+            "timeout": 1800,
+        },
+    ],
+    "complete_message": "Fresh AUZiX validation container passed the frozen repository gate.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-post-build-iso-pack"] = {
     "supports_undeploy": False,
     "stage_plan": [

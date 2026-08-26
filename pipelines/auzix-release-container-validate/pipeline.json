@@ -1,0 +1,35 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-release-container-validate",
+  "name": "AUZiX 32 — Fresh Release Container Validation",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-release-container-validate",
+  "resource_class": "slow",
+  "status": "candidate",
+  "tags": ["auzix", "r730", "container", "validation", "release-gate"],
+  "summary": "Materialize a fresh AUZiX root solely from a frozen release repository, import it as an OCI image, and run root/non-root runtime probes.",
+  "operator_rule": "Never reuse the mutable build root. The repository manifest and SHA-256 receipt from AUZiX 31 are the only package inputs.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "repository": "artifact:auzix-consolidated-release",
+    "artifact_store": "path:/var/lib/auzix-build/releases"
+  },
+  "inputs": {
+    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
+    "validation_id": {"required": true, "default": "container-proof-r1"},
+    "image": {"required": true, "default": "auzix/release-validation:trixie-r1"},
+    "worker_host": {"required": true, "default": "lab-ai-worker"}
+  },
+  "stages": [
+    {"id":"preflight-frozen-release","action":"auzix.release_container.preflight","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300,"params":{"script":"scripts/validate-release-container.sh","mode":"preflight"}},
+    {"id":"materialize-fresh-root","action":"auzix.release_container.materialize","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":3600,"params":{"script":"scripts/validate-release-container.sh","mode":"materialize"}},
+    {"id":"import-validation-image","action":"auzix.release_container.import","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":1800,"params":{"script":"scripts/validate-release-container.sh","mode":"import"}},
+    {"id":"run-root-and-user-probes","action":"auzix.release_container.probe","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":1800,"params":{"script":"scripts/validate-release-container.sh","mode":"probe"}}
+  ],
+  "outputs": {
+    "root": "/var/lib/auzix-build/releases/<release_id>/validation/<validation_id>/root",
+    "report": "/var/lib/auzix-build/releases/<release_id>/validation/<validation_id>/validation-report.json",
+    "receipt": "/var/lib/auzix-build/receipts/release-container-<validation_id>.receipt"
+  },
+  "follow_up_pipeline": "auzix-release-hdd-build-deploy"
+}
