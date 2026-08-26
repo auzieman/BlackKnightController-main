@@ -17,10 +17,10 @@
   "inputs": {
     "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
     "legacy_run_id": {"required": true, "default": "52d2243d-89d8-4f08-a85f-4152850655ed"},
-    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r2"},
+    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r3"},
     "expected_repack_count": {"required": true, "default": 1133},
-    "safe_count_min": {"required": true, "default": 469},
-    "safe_count_max": {"required": true, "default": 469},
+    "safe_count_min": {"required": true, "default": 488},
+    "safe_count_max": {"required": true, "default": 488},
     "worker_host": {"required": true, "default": "lab-ai-worker"}
   },
   "stages": [

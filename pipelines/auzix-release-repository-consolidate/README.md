@@ -12,7 +12,9 @@ alternate glibc provider.
 The output is a new immutable repository directory. Existing repositories,
 spools, roots, images, and the known-good PVE media are read-only inputs.
 
-The recursively closed reusable set is locked at 469 packages. Direct
+The recursively closed reusable set is locked at 488 packages. Direct
 dependencies alone are not a valid closure. One preserved receipt-backed
 payload, `LibreOfficeCoreNogui`, is repacked as an explicit supplement before
-consolidation. Any count drift stops the pipeline.
+consolidation. `Glances` is an explicit release root because leaf applications
+cannot be discovered by walking dependencies. Any count drift stops the
+pipeline.

@@ -5,10 +5,11 @@ MODE="${1:-preflight}"
 WORK_ROOT="${AUZIX_WORK_ROOT:-/var/lib/auzix-build/native-rebase-runs}"
 BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 LEGACY_RUN_ID="${AUZIX_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}"
-RELEASE_ID="${AUZIX_RELEASE_ID:-trixie-consolidated-20260826-r2}"
+RELEASE_ID="${AUZIX_RELEASE_ID:-trixie-consolidated-20260826-r3}"
+RELEASE_ROOTS="${AUZIX_RELEASE_ROOTS:-Glances}"
 EXPECTED_REPACK_COUNT="${AUZIX_EXPECTED_REPACK_COUNT:-1133}"
-SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-469}"
-SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-469}"
+SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-488}"
+SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-488}"
 BASE_SRC="${WORK_ROOT}/${BASE_RUN_ID}/src"
 SPOOL="${BASE_SRC}/artifacts/auzix/package-spool-${BASE_RUN_ID}"
 LEGACY_REPO="${WORK_ROOT}/${LEGACY_RUN_ID}/src/artifacts/auzix/repo"
@@ -30,14 +31,18 @@ preflight() {
   local count safe_count
   count="$(find "${SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
   [[ "${count}" == "${EXPECTED_REPACK_COUNT}" ]] || fail "repack count ${count}, expected ${EXPECTED_REPACK_COUNT}"
-  safe_count="$(python3 - "${SPOOL}/entries" "${LEGACY_REPO}/index.json" <<'PY'
+  safe_count="$(python3 - "${SPOOL}/entries" "${LEGACY_REPO}/index.json" "${RELEASE_ROOTS}" <<'PY'
 import json, sys
 from pathlib import Path
-entries, legacy_index = Path(sys.argv[1]), Path(sys.argv[2])
+entries, legacy_index, release_roots = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3].split()
 incoming = [json.loads(p.read_text()) for p in entries.glob("*.json")]
 incoming_names = {str(x.get("name") or "").casefold() for x in incoming}
 legacy = {str(x.get("name") or "").casefold(): x for x in json.loads(legacy_index.read_text()).get("packages", [])}
 selected=set(incoming_names); queue=list(incoming)
+for name in release_roots:
+    key=name.casefold()
+    if key not in legacy: raise SystemExit(f"release root absent from legacy repository: {name}")
+    if key not in selected: selected.add(key); queue.append(legacy[key])
 while queue:
     item=queue.pop()
     for dep in item.get("depends") or []:
@@ -70,12 +75,13 @@ consolidate() {
   [[ ! -e "${RELEASE_ROOT}" ]] || fail "release output already exists: ${RELEASE_ROOT}"
   mkdir -p "${REPO}/packages" "$(dirname "${RECEIPT}")"
   [[ -d "${SUPPLEMENT_SPOOL}/entries" && -d "${SUPPLEMENT_SPOOL}/packages" ]] || fail "supplement spool missing"
-  python3 - "${SPOOL}" "${SUPPLEMENT_SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" <<'PY'
+  python3 - "${SPOOL}" "${SUPPLEMENT_SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" "${RELEASE_ROOTS}" <<'PY'
 import hashlib, json, os, shutil, sys
 from pathlib import Path
 
 spool, supplement, legacy, release = map(Path, sys.argv[1:5])
 safe_min, safe_max = map(int, sys.argv[5:7])
+release_roots = sys.argv[7].split()
 repo = release / "repo"
 
 def load_entries(directory):
@@ -104,6 +110,12 @@ provided = dict(incoming)
 provided.update(supplements)
 selected_keys = set(provided)
 queue = [item for item, _ in provided.values()]
+for name in release_roots:
+    key = name.casefold()
+    if key not in legacy_by_name:
+        raise SystemExit(f"release root absent from legacy repository: {name}")
+    if key not in selected_keys:
+        selected_keys.add(key); queue.append(legacy_by_name[key])
 while queue:
     item = queue.pop()
     for dep in item.get("depends") or []:
@@ -175,6 +187,7 @@ manifest = {
     "format":"auzix-consolidated-release-v1", "release_id":release.name,
     "repacked_count":len(incoming), "safe_reuse_count":len(safe_keys),
     "supplement_count":len(supplements),
+    "release_roots":release_roots,
     "package_count":len(packages),
     "unresolved_catalog_edge_count":len(unresolved_catalog_edges),
     "closure_rule":"Enforce closure against an explicit install/profile selection, not the complete repository catalog.",
