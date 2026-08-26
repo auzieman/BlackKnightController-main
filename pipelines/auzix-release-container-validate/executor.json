@@ -1,0 +1,53 @@
+{
+  "format": "bkc-dynamic-workflow-v1",
+  "workflow": "auzix-release-container-validate",
+  "supports_undeploy": false,
+  "complete_message": "AUZiX selected first-boot package closure passed root and normal-user container validation.",
+  "stage_plan": [
+    {
+      "name": "reload-authoritative-guardrails",
+      "transport": "local+ssh",
+      "kind": "local-command",
+      "active": "Reloading AUZiX and BKC guardrails before selecting packages.",
+      "complete": "Required guardrails were present and hashed into run history.",
+      "timeout": 300,
+      "command": "bash /app/runtime/pipelines/auzix-release-container-validate/scripts/reload-guardrails.sh"
+    },
+    {
+      "name": "preflight-selected-closure",
+      "transport": "local->ssh",
+      "kind": "local-command",
+      "active": "Resolving the explicit first-boot validation closure without discovery.",
+      "complete": "Every selected dependency exists in the frozen repository.",
+      "timeout": 300,
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r2}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r2}\"; selection=$(base64 -w0 /app/runtime/pipelines/auzix-release-container-validate/selection/first-boot-cli.json); ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image AUZIX_SELECTION_B64=$selection bash -s -- preflight\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+    },
+    {
+      "name": "materialize-selected-root",
+      "transport": "local->ssh",
+      "kind": "local-command",
+      "active": "Installing the selected closure and lifecycle hooks into a fresh root.",
+      "complete": "Selected packages, receipts, hooks, and desktop metadata were materialized.",
+      "timeout": 3600,
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r2}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- materialize\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+    },
+    {
+      "name": "import-validation-image",
+      "transport": "local->ssh",
+      "kind": "local-command",
+      "active": "Importing the package-built root as a fresh validation image.",
+      "complete": "Fresh AUZiX validation image was imported.",
+      "timeout": 1800,
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r2}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- import\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+    },
+    {
+      "name": "run-required-first-boot-probes",
+      "transport": "local->ssh",
+      "kind": "local-command",
+      "active": "Testing canonical libraries, terminals, Python, Glances, htop, LibreOffice conversion, and launchers.",
+      "complete": "All required root and normal-user first-boot probes passed.",
+      "timeout": 1800,
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r2}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- probe\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+    }
+  ]
+}

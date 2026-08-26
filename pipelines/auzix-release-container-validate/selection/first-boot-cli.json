@@ -1,0 +1,21 @@
+{
+  "format": "auzix-validation-selection-v1",
+  "purpose": "First-boot CLI and library coherence proof; this is not a workstation install manifest.",
+  "roots": [
+    "Busybox",
+    "NcursesBase",
+    "NcursesTerm",
+    "Python3",
+    "Glances",
+    "Htop",
+    "LibreOfficeWriter"
+  ],
+  "required_probes": [
+    "canonical-glibc",
+    "ncurses-terminfo",
+    "python-ssl-curses",
+    "glances-normal-user",
+    "htop-normal-user",
+    "libreoffice-headless-convert"
+  ]
+}

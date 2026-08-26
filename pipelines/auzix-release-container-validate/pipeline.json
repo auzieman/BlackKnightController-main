@@ -18,9 +18,11 @@
     "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
     "validation_id": {"required": true, "default": "container-proof-r1"},
     "image": {"required": true, "default": "auzix/release-validation:trixie-r1"},
-    "worker_host": {"required": true, "default": "lab-ai-worker"}
+    "worker_host": {"required": true, "default": "lab-ai-worker"},
+    "selection": {"required": true, "default": "first-boot-cli"}
   },
   "stages": [
+    {"id":"reload-authoritative-guardrails","action":"auzix.guardrails.reload","transport":"bkc-ssh","risk":"low","timeout_seconds":300},
     {"id":"preflight-frozen-release","action":"auzix.release_container.preflight","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300,"params":{"script":"scripts/validate-release-container.sh","mode":"preflight"}},
     {"id":"materialize-fresh-root","action":"auzix.release_container.materialize","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":3600,"params":{"script":"scripts/validate-release-container.sh","mode":"materialize"}},
     {"id":"import-validation-image","action":"auzix.release_container.import","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":1800,"params":{"script":"scripts/validate-release-container.sh","mode":"import"}},

@@ -10,49 +10,92 @@ REPO="${RELEASE_ROOT}/repo"
 WORK="${RELEASE_ROOT}/validation/${VALIDATION_ID}"
 ROOT="${WORK}/root"
 RECEIPT="${AUZIX_RECEIPT_DIR:-/var/lib/auzix-build/receipts}/release-container-${VALIDATION_ID}.receipt"
+SELECTION_FILE="${AUZIX_SELECTION_FILE:-}"
+SELECTION_JSON="${AUZIX_SELECTION_JSON:-}"
+SELECTION_B64="${AUZIX_SELECTION_B64:-}"
 
 log() { printf '[auzix-release-container] %s\n' "$*"; }
 fail() { log "FAIL: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
+write_selection() {
+  mkdir -p "${WORK}"
+  if [[ -n "${SELECTION_FILE}" ]]; then
+    [[ -s "${SELECTION_FILE}" ]] || fail "selection file missing: ${SELECTION_FILE}"
+    cp "${SELECTION_FILE}" "${WORK}/selection.json"
+  elif [[ -n "${SELECTION_B64}" ]]; then
+    printf '%s' "${SELECTION_B64}" | base64 -d >"${WORK}/selection.json"
+  elif [[ -n "${SELECTION_JSON}" ]]; then
+    printf '%s\n' "${SELECTION_JSON}" >"${WORK}/selection.json"
+  else
+    fail "an explicit validation selection is required"
+  fi
+  jq -e '.format == "auzix-validation-selection-v1" and (.roots | length > 0)' "${WORK}/selection.json" >/dev/null \
+    || fail "invalid validation selection"
+}
+
+plan_selection() {
+  write_selection
+  python3 - "${REPO}/index.json" "${WORK}/selection.json" "${WORK}" <<'PY'
+import json, sys
+from pathlib import Path
+index_path, selection_path, work = map(Path, sys.argv[1:])
+items = json.loads(index_path.read_text()).get("packages", [])
+roots = json.loads(selection_path.read_text()).get("roots", [])
+by_name = {str(x["name"]).casefold(): x for x in items}
+seen, visiting, order, missing, cycles = set(), set(), [], [], []
+def visit(name, parent="selection"):
+    key = str(name).casefold()
+    if key in seen: return
+    if key in visiting:
+        cycles.append((str(name), parent)); return
+    item = by_name.get(key)
+    if item is None:
+        missing.append((str(name), parent)); return
+    visiting.add(key)
+    for dep in item.get("depends") or []:
+        visit(dep, str(item["name"]))
+    visiting.remove(key); seen.add(key); order.append(item)
+for root in roots: visit(root)
+missing = sorted(set(missing), key=lambda x: (x[0].casefold(), x[1].casefold()))
+(work / "missing-dependencies.tsv").write_text("".join(f"{n}\t{p}\n" for n,p in missing))
+(work / "dependency-cycles.tsv").write_text("".join(f"{n}\t{p}\n" for n,p in cycles))
+(work / "install-order.txt").write_text("".join(str(x["package"]) + "\n" for x in order))
+(work / "selected-packages.json").write_text(json.dumps({
+    "format":"auzix-selected-closure-v1", "roots":roots,
+    "package_count":len(order), "missing_count":len(missing),
+    "packages":order
+}, indent=2) + "\n")
+(work / "post-install-hooks.txt").write_text("".join(
+    str((x.get("hooks") or {}).get("post_install") or "").strip() + "\n"
+    for x in order if str((x.get("hooks") or {}).get("post_install") or "").strip()
+))
+if missing:
+    print(f"selected closure is incomplete: {len(missing)} missing dependencies", file=sys.stderr)
+    for name,parent in missing[:80]: print(f"MISSING {name} required_by={parent}", file=sys.stderr)
+    raise SystemExit(42)
+print(f"selected closure packages={len(order)} roots={len(roots)} cycles={len(cycles)}")
+PY
+}
+
 preflight() {
   need docker; need python3; need jq; need tar; need sha256sum; need chroot
   [[ -s "${RELEASE_ROOT}/release-manifest.json" && -s "${REPO}/index.json" ]] || fail "frozen release is missing"
   (cd "${RELEASE_ROOT}" && sha256sum -c SHA256SUMS)
-  [[ ! -e "${WORK}" ]] || fail "validation output already exists: ${WORK}"
+  [[ ! -e "${ROOT}" ]] || fail "validation root already exists: ${ROOT}"
   local indexed archives
   indexed="$(jq '.packages | length' "${REPO}/index.json")"
   archives="$(find "${REPO}/packages" -maxdepth 1 -type f -name '*.auzix.tar.gz' | wc -l | tr -d ' ')"
   [[ "${indexed}" == "${archives}" ]] || fail "index/archive mismatch ${indexed}/${archives}"
-  log "preflight release=${RELEASE_ID} packages=${indexed} image=${IMAGE}"
+  plan_selection
+  log "preflight release=${RELEASE_ID} catalog_packages=${indexed} selected_packages=$(jq -r .package_count "${WORK}/selected-packages.json") image=${IMAGE}"
 }
 
 materialize() {
-  preflight
+  [[ -s "${WORK}/selected-packages.json" && -s "${WORK}/install-order.txt" ]] || fail "preflight selection receipt is missing"
+  [[ "$(jq -r .missing_count "${WORK}/selected-packages.json")" == 0 ]] || fail "selected closure is incomplete"
+  [[ ! -e "${ROOT}" ]] || fail "validation root already exists: ${ROOT}"
   mkdir -p "${ROOT}" "$(dirname "${RECEIPT}")"
-  python3 - "${REPO}/index.json" "${REPO}/packages" "${WORK}/install-order.txt" <<'PY'
-import json, sys
-from pathlib import Path
-index, package_dir, order_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-items = json.loads(index.read_text()).get("packages", [])
-by_name = {str(x["name"]).casefold(): x for x in items}
-missing = sorted({str(d) for x in items for d in (x.get("depends") or []) if str(d).casefold() not in by_name})
-if missing:
-    raise SystemExit("missing repository dependencies: " + ", ".join(missing[:80]))
-remaining = set(by_name); complete = set(); order = []; ordered_items = []
-while remaining:
-    ready = sorted(k for k in remaining if all(str(d).casefold() in complete or str(d).casefold() not in remaining for d in (by_name[k].get("depends") or [])))
-    if not ready:  # Preserve deterministic SCC order; payloads precede all hook execution.
-        ready = [min(remaining)]
-    for key in ready:
-        order.append(str(by_name[key]["package"])); ordered_items.append(by_name[key]); complete.add(key); remaining.remove(key)
-order_path.write_text("".join(x + "\n" for x in order))
-(order_path.parent / "post-install-hooks.txt").write_text("".join(
-    str((item.get("hooks") or {}).get("post_install") or "").strip() + "\n"
-    for item in ordered_items
-    if str((item.get("hooks") or {}).get("post_install") or "").strip()
-))
-PY
   while IFS= read -r archive; do
     [[ -n "${archive}" ]] || continue
     tar --numeric-owner -xzf "${REPO}/packages/${archive}" -C "${ROOT}"
@@ -60,7 +103,7 @@ PY
   [[ -x "${ROOT}/Programs/BusyBox/current/Commands/busybox" ]] || fail "fresh root lacks BusyBox"
   mkdir -p "${ROOT}/System/State/packages" "${ROOT}/Work/Temp" "${ROOT}/Users/auzix"
   jq '{format:"auzix-installed-v1",installed:[.packages[]|{name,version,kind,package,sha256,depends:(.depends//[]),commands:(.commands//[]),desktop_entries:(.desktop_entries//[]),hooks:(.hooks//{})}]}' \
-    "${REPO}/index.json" >"${ROOT}/System/State/packages/installed.json"
+    "${WORK}/selected-packages.json" >"${ROOT}/System/State/packages/installed.json"
   chown 1000:1000 "${ROOT}/Users/auzix" 2>/dev/null || true
   while IFS= read -r hook; do
     [[ -n "${hook}" ]] || continue
@@ -68,6 +111,33 @@ PY
     [[ "${hook_argv[0]}" == /Programs/* ]] || fail "refusing post-install hook outside /Programs: ${hook}"
     chroot "${ROOT}" "${hook_argv[@]}"
   done <"${WORK}/post-install-hooks.txt"
+  python3 - "${WORK}/selected-packages.json" "${ROOT}" "${WORK}/desktop-launchers.json" <<'PY'
+import json, re, shlex, sys
+from pathlib import Path
+selected, root, report = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+items = json.loads(selected.read_text()).get("packages", [])
+declared = sorted({str(p) for x in items for p in (x.get("desktop_entries") or [])})
+rows, failures = [], []
+for rel in declared:
+    path = root / rel.lstrip("/")
+    row = {"path": rel, "exists": path.is_file(), "exec": None, "resolved": False}
+    if not path.is_file():
+        failures.append(f"missing desktop file {rel}"); rows.append(row); continue
+    match = re.search(r"(?m)^Exec=(.+)$", path.read_text(errors="replace"))
+    if not match:
+        failures.append(f"desktop file lacks Exec {rel}"); rows.append(row); continue
+    command = shlex.split(re.sub(r"%[fFuUdDnNickvm]", "", match.group(1).strip()))[0]
+    row["exec"] = command
+    candidates = [root / command.lstrip("/")] if command.startswith("/") else []
+    candidates += list(root.glob(f"Programs/*/current/Commands/{command}"))
+    candidates += list(root.glob(f"Programs/*/*/Commands/{command}"))
+    row["resolved"] = any(p.exists() for p in candidates)
+    if not row["resolved"]: failures.append(f"unresolved desktop Exec {rel}: {command}")
+    rows.append(row)
+report.write_text(json.dumps({"format":"auzix-desktop-launcher-proof-v1","entries":rows,"failures":failures},indent=2)+"\n")
+if failures:
+    raise SystemExit("; ".join(failures[:30]))
+PY
   log "materialized root=${ROOT}"
 }
 
@@ -96,14 +166,15 @@ probe() {
   run_probe core-libc "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -x /System/Libraries/Runtime/glibc/libc.so.6
   run_probe no-alternate-libc "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c '! test -e /Programs/Libc6/current'
   run_probe normal-user --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -d /Users/auzix
-  for spec in 'glances:/Programs/Glances/current/Commands/glances:--version' 'htop:/Programs/Htop/current/Commands/htop:--version' 'flatpak:/Programs/Flatpak/current/Commands/flatpak:--version'; do
+  run_probe ncurses-terminfo "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c 'test -n "$(find /Programs/NcursesBase /Programs/NcursesTerm -type f -name xterm-256color -print -quit 2>/dev/null)"'
+  run_probe python-ssl-curses "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c 'p=$(command -v python3 || command -v python3.13); test -n "$p"; "$p" -c "import curses,ssl,sqlite3; print(ssl.OPENSSL_VERSION)"'
+  for spec in 'glances:/Programs/Glances/current/Commands/glances:--version' 'htop:/Programs/Htop/current/Commands/htop:--version'; do
     IFS=: read -r label command arg <<<"${spec}"
-    if docker run --rm "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -x "${command}"; then
-      run_probe "${label}" "${IMAGE}" "${command}" "${arg}"
-    else
-      log "WARN ${label} not selected in this release"
-    fi
+    run_probe "${label}-normal-user" --user 1000:1000 -e HOME=/Users/auzix -e TERM=xterm-256color "${IMAGE}" "${command}" "${arg}"
   done
+  run_probe libreoffice-headless-convert --user 1000:1000 -e HOME=/Users/auzix "${IMAGE}" /Programs/BusyBox/current/Commands/busybox sh -c \
+    'mkdir -p /Work/lo-proof; printf "AUZiX conversion proof\n" >/Work/lo-proof/input.txt; loffice --headless --convert-to pdf --outdir /Work/lo-proof /Work/lo-proof/input.txt; test -s /Work/lo-proof/input.pdf'
+  run_probe desktop-launcher-contract "${IMAGE}" /Programs/BusyBox/current/Commands/busybox test -s /System/State/packages/installed.json
   jq -n --arg release_id "${RELEASE_ID}" --arg validation_id "${VALIDATION_ID}" --arg image "${IMAGE}" --argjson failures "${failures}" \
     '{format:"auzix-release-container-validation-v1",release_id:$release_id,validation_id:$validation_id,image:$image,failures:$failures,status:(if $failures==0 then "pass" else "fail" end)}' >"${report}"
   [[ "${failures}" == 0 ]] || fail "${failures} validation probes failed"
