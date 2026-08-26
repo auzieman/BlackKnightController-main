@@ -1,0 +1,23 @@
+{
+  "format": "bkc-session-bootstrap-policy-v1",
+  "control_plane": {
+    "master": "bkc.lab.auzietek.com",
+    "fallback": "lab-edge",
+    "fallback_scope": ["bringup", "shutdown", "bootstrap", "diagnostics"]
+  },
+  "roles": {
+    "operator_workstation": "git workspace and tunnel/jump point; not a build host",
+    "ns1": "private routing, DHCP/PXE, IPMI execution, shared handoff and publication",
+    "lab-build": "AUZiX canonical build-control and file-work host",
+    "lab-ai-worker": "heavy containers, validation, Ollama and AI review",
+    "bkc-lab": "authoritative pipeline execution and receipts"
+  },
+  "rules": {
+    "pipeline_first": true,
+    "direct_read_only_diagnostics": true,
+    "direct_mutation_requires_exception_receipt": true,
+    "one_off_must_be_reconciled_into_pipeline": true,
+    "laptop_build_output": "forbidden",
+    "completion_without_pipeline_reconciliation": "forbidden"
+  }
+}
