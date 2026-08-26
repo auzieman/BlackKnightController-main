@@ -5,13 +5,15 @@ MODE="${1:-preflight}"
 WORK_ROOT="${AUZIX_WORK_ROOT:-/var/lib/auzix-build/native-rebase-runs}"
 BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 LEGACY_RUN_ID="${AUZIX_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}"
-RELEASE_ID="${AUZIX_RELEASE_ID:-trixie-consolidated-20260826-r1}"
+RELEASE_ID="${AUZIX_RELEASE_ID:-trixie-consolidated-20260826-r2}"
 EXPECTED_REPACK_COUNT="${AUZIX_EXPECTED_REPACK_COUNT:-1133}"
-SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-300}"
-SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-350}"
+SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-469}"
+SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-469}"
 BASE_SRC="${WORK_ROOT}/${BASE_RUN_ID}/src"
 SPOOL="${BASE_SRC}/artifacts/auzix/package-spool-${BASE_RUN_ID}"
 LEGACY_REPO="${WORK_ROOT}/${LEGACY_RUN_ID}/src/artifacts/auzix/repo"
+LEGACY_ROOT="${WORK_ROOT}/${LEGACY_RUN_ID}/src/out/auzix-strict/AuzixRoot"
+SUPPLEMENT_SPOOL="${BASE_SRC}/artifacts/auzix/package-spool-release-supplement-${RELEASE_ID}"
 RELEASE_ROOT="${AUZIX_RELEASE_ROOT:-/var/lib/auzix-build/releases/${RELEASE_ID}}"
 REPO="${RELEASE_ROOT}/repo"
 RECEIPT="${AUZIX_RECEIPT_DIR:-/var/lib/auzix-build/receipts}/release-repository-${RELEASE_ID}.receipt"
@@ -34,9 +36,15 @@ from pathlib import Path
 entries, legacy_index = Path(sys.argv[1]), Path(sys.argv[2])
 incoming = [json.loads(p.read_text()) for p in entries.glob("*.json")]
 incoming_names = {str(x.get("name") or "").casefold() for x in incoming}
-required = {str(dep).casefold() for x in incoming for dep in (x.get("depends") or []) if str(dep).strip()}
-legacy = {str(x.get("name") or "").casefold() for x in json.loads(legacy_index.read_text()).get("packages", [])}
-print(len((required - incoming_names) & legacy))
+legacy = {str(x.get("name") or "").casefold(): x for x in json.loads(legacy_index.read_text()).get("packages", [])}
+selected=set(incoming_names); queue=list(incoming)
+while queue:
+    item=queue.pop()
+    for dep in item.get("depends") or []:
+        key=str(dep).casefold()
+        if key in selected or key not in legacy: continue
+        selected.add(key); queue.append(legacy[key])
+print(len(selected - incoming_names))
 PY
 )"
   (( safe_count >= SAFE_COUNT_MIN && safe_count <= SAFE_COUNT_MAX )) ||
@@ -44,16 +52,30 @@ PY
   log "preflight base=${BASE_RUN_ID} repacks=${count} safe_reuse=${safe_count} legacy=${LEGACY_RUN_ID} release=${RELEASE_ID}"
 }
 
+supplement() {
+  need jq; need tar; need sha256sum
+  local receipt
+  receipt="$(find "${LEGACY_ROOT}/System/PackageDB" -maxdepth 1 -type f -name 'LibreOfficeCoreNogui-*.auzix.json' -print -quit)"
+  [[ -n "${receipt}" ]] || fail "LibreOfficeCoreNogui receipt missing"
+  rm -rf "${SUPPLEMENT_SPOOL}"
+  AUZIX_PACKAGE_NORMALIZE_OWNERS=0 AUZIX_REPO_REJECT_ALT_GLIBC=1 \
+    "${BASE_SRC}/scripts/package-auzix-receipt-archive.sh" "${LEGACY_ROOT}" "${receipt}" "${SUPPLEMENT_SPOOL}"
+  [[ "$(find "${SUPPLEMENT_SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" == 1 ]] ||
+    fail "supplement spool did not produce exactly one entry"
+  log "supplemented LibreOfficeCoreNogui from preserved receipt and payload"
+}
+
 consolidate() {
   preflight
   [[ ! -e "${RELEASE_ROOT}" ]] || fail "release output already exists: ${RELEASE_ROOT}"
   mkdir -p "${REPO}/packages" "$(dirname "${RECEIPT}")"
-  python3 - "${SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" <<'PY'
+  [[ -d "${SUPPLEMENT_SPOOL}/entries" && -d "${SUPPLEMENT_SPOOL}/packages" ]] || fail "supplement spool missing"
+  python3 - "${SPOOL}" "${SUPPLEMENT_SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" <<'PY'
 import hashlib, json, os, shutil, sys
 from pathlib import Path
 
-spool, legacy, release = map(Path, sys.argv[1:4])
-safe_min, safe_max = map(int, sys.argv[4:6])
+spool, supplement, legacy, release = map(Path, sys.argv[1:5])
+safe_min, safe_max = map(int, sys.argv[5:7])
 repo = release / "repo"
 
 def load_entries(directory):
@@ -70,6 +92,7 @@ def load_entries(directory):
     return result
 
 incoming = load_entries(spool / "entries")
+supplements = load_entries(supplement / "entries")
 legacy_index = json.loads((legacy / "index.json").read_text())
 legacy_by_name = {}
 for item in legacy_index.get("packages", []):
@@ -77,13 +100,19 @@ for item in legacy_index.get("packages", []):
     if name:
         legacy_by_name[name.casefold()] = item
 
-required = {
-    str(dep).casefold()
-    for item, _ in incoming.values()
-    for dep in (item.get("depends") or [])
-    if str(dep).strip()
-}
-safe_keys = sorted((required - set(incoming)) & set(legacy_by_name))
+provided = dict(incoming)
+provided.update(supplements)
+selected_keys = set(provided)
+queue = [item for item, _ in provided.values()]
+while queue:
+    item = queue.pop()
+    for dep in item.get("depends") or []:
+        key = str(dep).casefold()
+        if key in selected_keys or key not in legacy_by_name:
+            continue
+        selected_keys.add(key)
+        queue.append(legacy_by_name[key])
+safe_keys = sorted(selected_keys - set(provided))
 if not safe_min <= len(safe_keys) <= safe_max:
     raise SystemExit(f"safe reuse count {len(safe_keys)} outside {safe_min}..{safe_max}")
 
@@ -122,6 +151,12 @@ for item, entry_path in incoming.values():
         os.link(metadata, mt) if metadata.stat().st_dev == mt.parent.stat().st_dev else shutil.copy2(metadata, mt)
     selected.append(dict(item, sha256=digest))
 
+for item, entry_path in supplements.values():
+    source, digest = archive_for(item, supplement / "packages")
+    target = repo / "packages" / source.name
+    os.link(source, target) if source.stat().st_dev == target.parent.stat().st_dev else shutil.copy2(source, target)
+    selected.append(dict(item, sha256=digest))
+
 by_name = {}
 for item in selected:
     key = str(item["name"]).casefold()
@@ -139,6 +174,7 @@ index = {"format":"auzix-repo-v1", "release_id":release.name, "packages":package
 manifest = {
     "format":"auzix-consolidated-release-v1", "release_id":release.name,
     "repacked_count":len(incoming), "safe_reuse_count":len(safe_keys),
+    "supplement_count":len(supplements),
     "package_count":len(packages),
     "unresolved_catalog_edge_count":len(unresolved_catalog_edges),
     "closure_rule":"Enforce closure against an explicit install/profile selection, not the complete repository catalog.",
@@ -156,7 +192,7 @@ verify() {
   [[ -s "${RELEASE_ROOT}/release-manifest.json" && -s "${REPO}/index.json" ]] || fail "release manifest/index missing"
   (cd "${RELEASE_ROOT}" && sha256sum -c SHA256SUMS)
   jq -e --argjson low "${SAFE_COUNT_MIN}" --argjson high "${SAFE_COUNT_MAX}" \
-    '.repacked_count == 1133 and (.safe_reuse_count >= $low and .safe_reuse_count <= $high) and .package_count == (.repacked_count + .safe_reuse_count)' \
+    '.repacked_count == 1133 and .supplement_count == 1 and (.safe_reuse_count >= $low and .safe_reuse_count <= $high) and .package_count == (.repacked_count + .safe_reuse_count + .supplement_count)' \
     "${RELEASE_ROOT}/release-manifest.json" >/dev/null || fail "manifest count gate failed"
   local indexed archives
   indexed="$(jq '.packages | length' "${REPO}/index.json")"
@@ -167,6 +203,7 @@ verify() {
 
 case "${MODE}" in
   preflight) preflight ;;
+  supplement) supplement ;;
   consolidate) consolidate ;;
   verify) verify ;;
   *) fail "unknown mode: ${MODE}" ;;

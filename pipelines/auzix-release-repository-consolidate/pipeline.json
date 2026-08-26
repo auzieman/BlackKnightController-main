@@ -17,10 +17,10 @@
   "inputs": {
     "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
     "legacy_run_id": {"required": true, "default": "52d2243d-89d8-4f08-a85f-4152850655ed"},
-    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
+    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r2"},
     "expected_repack_count": {"required": true, "default": 1133},
-    "safe_count_min": {"required": true, "default": 300},
-    "safe_count_max": {"required": true, "default": 350},
+    "safe_count_min": {"required": true, "default": 469},
+    "safe_count_max": {"required": true, "default": 469},
     "worker_host": {"required": true, "default": "lab-ai-worker"}
   },
   "stages": [
@@ -39,6 +39,14 @@
       "risk": "low",
       "timeout_seconds": 300,
       "params": {"script": "scripts/consolidate-release-repository.sh", "mode": "preflight"}
+    },
+    {
+      "id": "repack-receipt-backed-supplement",
+      "action": "auzix.release_repo.supplement",
+      "transport": "bkc-ssh",
+      "risk": "low",
+      "timeout_seconds": 600,
+      "params": {"script": "scripts/consolidate-release-repository.sh", "mode": "supplement"}
     },
     {
       "id": "consolidate-immutable-repository",

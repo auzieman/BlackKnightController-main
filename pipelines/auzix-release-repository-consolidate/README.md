@@ -12,5 +12,7 @@ alternate glibc provider.
 The output is a new immutable repository directory. Existing repositories,
 spools, roots, images, and the known-good PVE media are read-only inputs.
 
-The expected reusable set is deliberately bounded at 300–350 packages. A count
-outside that range is evidence of lineage drift and stops the pipeline.
+The recursively closed reusable set is locked at 469 packages. Direct
+dependencies alone are not a valid closure. One preserved receipt-backed
+payload, `LibreOfficeCoreNogui`, is repacked as an explicit supplement before
+consolidation. Any count drift stops the pipeline.
