@@ -14,7 +14,7 @@ spools, roots, images, and the known-good PVE media are read-only inputs.
 
 The recursively closed reusable set is locked at 488 packages. Direct
 dependencies alone are not a valid closure. One preserved receipt-backed
-payload, `LibreOfficeCoreNogui`, is repacked as an explicit supplement before
-consolidation. `Glances` is an explicit release root because leaf applications
-cannot be discovered by walking dependencies. Any count drift stops the
-pipeline.
+payload, `LibreOfficeCoreNogui`, and the corrected `Glances` payload are
+repacked as explicit supplements before consolidation. Glances must never fall
+back to the older repository archive: its working front-door wrapper was
+produced after that archive was cut. Any count drift stops the pipeline.

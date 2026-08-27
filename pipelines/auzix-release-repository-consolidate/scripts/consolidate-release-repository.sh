@@ -7,9 +7,13 @@ BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 LEGACY_RUN_ID="${AUZIX_LEGACY_RUN_ID:-52d2243d-89d8-4f08-a85f-4152850655ed}"
 RELEASE_ID="${AUZIX_RELEASE_ID:-trixie-consolidated-20260826-r3}"
 RELEASE_ROOTS="${AUZIX_RELEASE_ROOTS:-Glances}"
+# Runtime proof packages must come from a current, explicitly reviewed spool.
+# Glances was repaired in the preserved proof root after the old repository
+# archive was cut, so it must be re-archived as a supplement, never safe-reused.
+REQUIRED_FRESH_PACKAGES="${AUZIX_REQUIRED_FRESH_PACKAGES:-Glances}"
 EXPECTED_REPACK_COUNT="${AUZIX_EXPECTED_REPACK_COUNT:-1133}"
-SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-488}"
-SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-488}"
+SAFE_COUNT_MIN="${AUZIX_SAFE_COUNT_MIN:-487}"
+SAFE_COUNT_MAX="${AUZIX_SAFE_COUNT_MAX:-487}"
 BASE_SRC="${WORK_ROOT}/${BASE_RUN_ID}/src"
 SPOOL="${BASE_SRC}/artifacts/auzix/package-spool-${BASE_RUN_ID}"
 LEGACY_REPO="${WORK_ROOT}/${LEGACY_RUN_ID}/src/artifacts/auzix/repo"
@@ -31,10 +35,12 @@ preflight() {
   local count safe_count
   count="$(find "${SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')"
   [[ "${count}" == "${EXPECTED_REPACK_COUNT}" ]] || fail "repack count ${count}, expected ${EXPECTED_REPACK_COUNT}"
-  safe_count="$(python3 - "${SPOOL}/entries" "${LEGACY_REPO}/index.json" "${RELEASE_ROOTS}" <<'PY'
+  safe_count="$(python3 - "${SPOOL}/entries" "${LEGACY_REPO}/index.json" "${RELEASE_ROOTS}" "${REQUIRED_FRESH_PACKAGES}" <<'PY'
 import json, sys
 from pathlib import Path
-entries, legacy_index, release_roots = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3].split()
+entries, legacy_index = Path(sys.argv[1]), Path(sys.argv[2])
+release_roots = sys.argv[3].split()
+required_fresh = {name.casefold() for name in sys.argv[4].split()}
 incoming = [json.loads(p.read_text()) for p in entries.glob("*.json")]
 incoming_names = {str(x.get("name") or "").casefold() for x in incoming}
 legacy = {str(x.get("name") or "").casefold(): x for x in json.loads(legacy_index.read_text()).get("packages", [])}
@@ -42,7 +48,11 @@ selected=set(incoming_names); queue=list(incoming)
 for name in release_roots:
     key=name.casefold()
     if key not in legacy: raise SystemExit(f"release root absent from legacy repository: {name}")
-    if key not in selected: selected.add(key); queue.append(legacy[key])
+    if key not in selected:
+        # Walk dependencies from the preserved metadata, but do not count a
+        # required-fresh root itself as reusable.
+        if key not in required_fresh: selected.add(key)
+        queue.append(legacy[key])
 while queue:
     item=queue.pop()
     for dep in item.get("depends") or []:
@@ -59,15 +69,17 @@ PY
 
 supplement() {
   need jq; need tar; need sha256sum
-  local receipt
-  receipt="$(find "${LEGACY_ROOT}/System/PackageDB" -maxdepth 1 -type f -name 'LibreOfficeCoreNogui-*.auzix.json' -print -quit)"
-  [[ -n "${receipt}" ]] || fail "LibreOfficeCoreNogui receipt missing"
   rm -rf "${SUPPLEMENT_SPOOL}"
-  AUZIX_PACKAGE_NORMALIZE_OWNERS=0 AUZIX_REPO_REJECT_ALT_GLIBC=1 \
-    "${BASE_SRC}/scripts/package-auzix-receipt-archive.sh" "${LEGACY_ROOT}" "${receipt}" "${SUPPLEMENT_SPOOL}"
-  [[ "$(find "${SUPPLEMENT_SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" == 1 ]] ||
-    fail "supplement spool did not produce exactly one entry"
-  log "supplemented LibreOfficeCoreNogui from preserved receipt and payload"
+  local package receipt
+  for package in LibreOfficeCoreNogui Glances; do
+    receipt="$(find "${LEGACY_ROOT}/System/PackageDB" -maxdepth 1 -type f -name "${package}-*.auzix.json" -print -quit)"
+    [[ -n "${receipt}" ]] || fail "${package} receipt missing"
+    AUZIX_PACKAGE_NORMALIZE_OWNERS=0 AUZIX_REPO_REJECT_ALT_GLIBC=1 \
+      "${BASE_SRC}/scripts/package-auzix-receipt-archive.sh" "${LEGACY_ROOT}" "${receipt}" "${SUPPLEMENT_SPOOL}"
+  done
+  [[ "$(find "${SUPPLEMENT_SPOOL}/entries" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" == 2 ]] ||
+    fail "supplement spool did not produce exactly two entries"
+  log "supplemented LibreOfficeCoreNogui and corrected Glances from preserved receipts and payloads"
 }
 
 consolidate() {
@@ -75,13 +87,14 @@ consolidate() {
   [[ ! -e "${RELEASE_ROOT}" ]] || fail "release output already exists: ${RELEASE_ROOT}"
   mkdir -p "${REPO}/packages" "$(dirname "${RECEIPT}")"
   [[ -d "${SUPPLEMENT_SPOOL}/entries" && -d "${SUPPLEMENT_SPOOL}/packages" ]] || fail "supplement spool missing"
-  python3 - "${SPOOL}" "${SUPPLEMENT_SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" "${RELEASE_ROOTS}" <<'PY'
+  python3 - "${SPOOL}" "${SUPPLEMENT_SPOOL}" "${LEGACY_REPO}" "${RELEASE_ROOT}" "${SAFE_COUNT_MIN}" "${SAFE_COUNT_MAX}" "${RELEASE_ROOTS}" "${REQUIRED_FRESH_PACKAGES}" <<'PY'
 import hashlib, json, os, shutil, sys
 from pathlib import Path
 
 spool, supplement, legacy, release = map(Path, sys.argv[1:5])
 safe_min, safe_max = map(int, sys.argv[5:7])
 release_roots = sys.argv[7].split()
+required_fresh = sys.argv[8].split()
 repo = release / "repo"
 
 def load_entries(directory):
@@ -108,6 +121,12 @@ for item in legacy_index.get("packages", []):
 
 provided = dict(incoming)
 provided.update(supplements)
+missing_fresh = [name for name in required_fresh if name.casefold() not in provided]
+if missing_fresh:
+    raise SystemExit(
+        "required fresh runtime packages would fall back to legacy safe reuse: "
+        + " ".join(missing_fresh)
+    )
 selected_keys = set(provided)
 queue = [item for item, _ in provided.values()]
 for name in release_roots:
@@ -205,7 +224,7 @@ verify() {
   [[ -s "${RELEASE_ROOT}/release-manifest.json" && -s "${REPO}/index.json" ]] || fail "release manifest/index missing"
   (cd "${RELEASE_ROOT}" && sha256sum -c SHA256SUMS)
   jq -e --argjson low "${SAFE_COUNT_MIN}" --argjson high "${SAFE_COUNT_MAX}" \
-    '.repacked_count == 1133 and .supplement_count == 1 and (.safe_reuse_count >= $low and .safe_reuse_count <= $high) and .package_count == (.repacked_count + .safe_reuse_count + .supplement_count)' \
+    '.repacked_count == 1133 and .supplement_count == 2 and (.safe_reuse_count >= $low and .safe_reuse_count <= $high) and .package_count == (.repacked_count + .safe_reuse_count + .supplement_count)' \
     "${RELEASE_ROOT}/release-manifest.json" >/dev/null || fail "manifest count gate failed"
   local indexed archives
   indexed="$(jq '.packages | length' "${REPO}/index.json")"
