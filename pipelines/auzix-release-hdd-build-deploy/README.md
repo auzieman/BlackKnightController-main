@@ -17,3 +17,19 @@ protected-target override is enabled.
 The pipeline records the image hash, PVE configuration, power-cycle result, and
 network/SSH reachability. Desktop and launcher evidence remains a follow-on
 product gate after the machine is reachable.
+
+## Operator monitoring shells
+
+Run these from the BKC repository in separate Terminology panes. The dashboard
+distinguishes a running build, a receipted build, and a stopped build; a quiet
+tail alone is not proof that a build is still running.
+
+```sh
+pipelines/auzix-release-hdd-build-deploy/scripts/monitor-hdd-build.sh desktop-main-20260828-r8 dashboard
+pipelines/auzix-release-hdd-build-deploy/scripts/monitor-hdd-build.sh desktop-main-20260828-r8 log
+pipelines/auzix-release-hdd-build-deploy/scripts/monitor-hdd-build.sh desktop-main-20260828-r8 progress
+pipelines/auzix-release-hdd-build-deploy/scripts/monitor-hdd-build.sh desktop-main-20260828-r8 health
+```
+
+The first argument is always the immutable run ID. `AUZIX_LAB_HOST` defaults to
+the remembered SSH alias `lab-ai-worker`.
