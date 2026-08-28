@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r1}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r2}"
 SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
@@ -129,7 +129,7 @@ build() {
   python3 -m http.server "${REPO_PORT}" --bind 127.0.0.1 --directory "${WORK}/repo" >"${WORK}/repo-server.log" 2>&1 & SERVER_PID=$!
   chroot "${SEED_ROOT}" /Programs/BusyBox/1.36.1/Commands/busybox env \
     AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_LINK_MODE=strict \
-    /workspace/scripts/auzix-install-root-from-repo-profile.sh --force \
+    /Programs/BusyBox/1.36.1/Commands/busybox sh /workspace/scripts/auzix-install-root-from-repo-profile.sh --force \
     --repo "http://127.0.0.1:${REPO_PORT}" --profile /run/auzix-hdd/desktop-main.packages "${LOOP_DEV}" \
     >"${WORK}/installer.log" 2>&1
   cleanup_mounts; trap - EXIT
