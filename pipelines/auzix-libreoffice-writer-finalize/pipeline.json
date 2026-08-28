@@ -1,0 +1,26 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-libreoffice-writer-finalize",
+  "name": "AUZiX 33 — LibreOffice Writer Runtime Finalization",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-libreoffice-writer-finalize",
+  "resource_class": "medium",
+  "status": "candidate",
+  "tags": ["auzix", "r730", "libreoffice", "targeted", "runtime-metadata"],
+  "summary": "Rebuild only LibreOfficeWriter from the reviewed lock, require its recursive frozen-repository runtime ladder, and publish a new immutable release.",
+  "operator_rule": "Dependency discovery and workstation-wave replay are forbidden. Candidate publication is unreachable until the unchanged release-validation preflight accepts the rebuilt metadata.",
+  "inputs": {
+    "auzix_tag": {"required": true, "default": "auzix-alpha-libreoffice-writer-finalize-20260828-r1"},
+    "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
+    "lock_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-libreoffice-writer-finalize-20260828-r1/build-tree.lock.json"},
+    "source_release_id": {"required": true, "default": "trixie-consolidated-20260828-r5"},
+    "target_release_id": {"required": true, "default": "trixie-consolidated-20260828-r6"},
+    "run_id": {"required": true, "default": "libreoffice-writer-finalize-20260828-r1"}
+  },
+  "stages": [
+    {"id":"preflight-writer-finalization","action":"auzix.writer_finalize.preflight","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300},
+    {"id":"start-one-package-finalization","action":"auzix.writer_finalize.start","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":600},
+    {"id":"capture-finalization-status","action":"auzix.writer_finalize.status","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300}
+  ],
+  "follow_up_pipeline": "auzix-release-container-validate"
+}
