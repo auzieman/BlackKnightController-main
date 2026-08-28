@@ -32,11 +32,13 @@ preflight() {
   command -v git >/dev/null || fail "git is required"
   command -v jq >/dev/null || fail "jq is required"
   [[ -d "${ROOT}/System/PackageDB" ]] || fail "preserved build root is missing"
-  [[ -s "${LOCK}" ]] || fail "reviewed build lock is missing: ${LOCK_REL}"
   [[ -s "${SOURCE_RELEASE}/repo/index.json" ]] || fail "source release is missing"
   [[ ! -e "${TARGET_RELEASE}" ]] || fail "target release already exists: ${TARGET_RELEASE}"
   [[ ! -e "${REPAIR_DIR}" ]] || fail "repair run already exists: ${REPAIR_DIR}"
   git --git-dir="${REMOTE_REPO}" rev-parse "${AUZIX_TAG}^{commit}" >/dev/null
+  git -C "${SRC_DIR}" fetch "${REMOTE_REPO}" "refs/tags/${AUZIX_TAG}:refs/tags/${AUZIX_TAG}"
+  git -C "${SRC_DIR}" checkout --detach "${AUZIX_TAG}"
+  [[ -s "${LOCK}" ]] || fail "reviewed build lock is absent from repair tag: ${LOCK_REL}"
   grep -F $'base-c-abi\tbase-runtime\tLibgccS1\t14.2.0-19\tselected-provider' \
     "${SRC_DIR}/packages/build-locks/auzix-alpha-base-trixie-20260825-r1/substrate-provider-lock.tsv" >/dev/null ||
     fail "reviewed LibgccS1 provider is not selected"
