@@ -7,8 +7,8 @@
   "resource_class": "slow",
   "status": "candidate",
   "tags": ["auzix", "r730", "hdd-image", "pve", "vm142", "release-gate"],
-  "summary": "Build an AUZiX HDD image from the root that passed AUZiX 32, deploy it to a disposable PVE VM, hard boot, and capture first-boot evidence.",
-  "operator_rule": "The validation receipt is mandatory. VMID135 and its known-good media are protected; the default destructive target is VMID142.",
+  "summary": "Resolve the bounded desktop package profile, install it into a sparse HDD through the existing AUZiX package-profile installer, and emit an immutable image receipt.",
+  "operator_rule": "The full repository catalog must never become the HDD payload. Seed-runtime copying is disabled; package closure, archive size, hashes, and immutable source are mandatory gates.",
   "targets": {
     "worker": "host:r730-ai-01",
     "hypervisor": "host:pve",
@@ -16,23 +16,19 @@
     "protected_reference": "node:vm:135"
   },
   "inputs": {
-    "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
-    "validation_id": {"required": true, "default": "container-proof-r1"},
-    "hdd_id": {"required": true, "default": "hdd-pve-r1"},
-    "hdd_builder_sha256": {"required": true, "description": "SHA-256 of the reviewed HDD builder in the pinned AUZiX source tree."},
+    "hdd_id": {"required": true, "default": "desktop-main-20260828-r1"},
+    "source_ref": {"required": true, "default": "auzix-alpha-package-profile-hdd-20260828-r1"},
     "target_vmid": {"required": true, "default": 142},
     "target_ip": {"required": false, "default": "192.168.1.229"},
     "storage": {"required": true, "default": "local-lvm"},
     "allow_protected_vmid": {"required": false, "default": false}
   },
   "stages": [
-    {"id":"require-passing-container-receipt","action":"auzix.release_hdd.preflight","transport":"bkc-ssh","risk":"low","timeout_seconds":300,"params":{"script":"scripts/build-validated-hdd.sh","mode":"preflight"}},
-    {"id":"build-hdd-from-validated-root","action":"auzix.release_hdd.build","transport":"bkc-ssh","risk":"medium","timeout_seconds":3600,"params":{"script":"scripts/build-validated-hdd.sh","mode":"build"}},
-    {"id":"deploy-to-disposable-pve-vm","action":"auzix.release_hdd.deploy","transport":"bkc-ssh-through-ns1","risk":"high","timeout_seconds":1800,"with":{"protected_vmids":[135]}},
-    {"id":"hard-boot-and-firstboot-probe","action":"auzix.release_hdd.boot_probe","transport":"bkc-ssh+console","risk":"medium","timeout_seconds":1800}
+    {"id":"resolve-profile-and-preflight-seed","action":"auzix.release_hdd.preflight","transport":"bkc-ssh","risk":"low","timeout_seconds":300,"params":{"script":"scripts/build-validated-hdd.sh","mode":"preflight"}},
+    {"id":"install-profile-into-sparse-hdd","action":"auzix.release_hdd.build","transport":"bkc-ssh","risk":"medium","timeout_seconds":7200,"params":{"script":"scripts/build-validated-hdd.sh","mode":"build"}}
   ],
   "outputs": {
-    "image": "/var/lib/auzix-build/releases/<release_id>/hdd/<hdd_id>/auzix-<hdd_id>.img",
+    "image": "/var/lib/auzix-build/hdd-images/<hdd_id>/auzix-<hdd_id>.img",
     "receipt": "/var/lib/auzix-build/receipts/release-hdd-<hdd_id>.receipt",
     "target": "pve:vmid142"
   }
