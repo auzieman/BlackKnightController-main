@@ -5219,6 +5219,68 @@ WORKFLOW_DEFINITIONS["auzix-native-rebase-delta-finalize"] = {
     "complete_message": "AUZiX bounded delta and native finalization started through BKC.",
 }
 
+WORKFLOW_DEFINITIONS["auzix-base-runtime-repair"] = {
+    "supports_undeploy": False,
+    "stage_plan": [
+        {
+            "name": "verify-reviewed-base-provider-contract",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Verifying the reviewed GCC14Base and LibgccS1 provider contract and frozen source release.",
+            "complete": "Targeted base-runtime repair inputs passed preflight.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-runtime-repair-20260828-r1}\"; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "lock=\"${BKC_INPUT_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json}\"; "
+                "source=\"${BKC_INPUT_SOURCE_RELEASE_ID:-trixie-consolidated-20260826-r4}\"; "
+                "target=\"${BKC_INPUT_TARGET_RELEASE_ID:-trixie-consolidated-20260828-r5}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-base-runtime-libgcc-20260828-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_TAG=$tag AUZIX_BASE_RUN_ID=$base AUZIX_LOCK_REL=$lock AUZIX_SOURCE_RELEASE_ID=$source AUZIX_TARGET_RELEASE_ID=$target AUZIX_RUN_ID=$run_id bash -s -- preflight\" "
+                "< /app/runtime/pipelines/auzix-base-runtime-repair/scripts/run-base-runtime-repair.sh'"
+            ),
+            "timeout": 240,
+        },
+        {
+            "name": "start-targeted-provider-build-and-release-merge",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Building only GCC14Base and LibgccS1, then preparing a new immutable release.",
+            "complete": "Targeted base-runtime repair container started with a receipt.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "tag=\"${BKC_INPUT_AUZIX_TAG:-auzix-alpha-base-runtime-repair-20260828-r1}\"; "
+                "base=\"${BKC_INPUT_BASE_RUN_ID:-trixie-base-20260824-r3}\"; "
+                "lock=\"${BKC_INPUT_LOCK_REL:-packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json}\"; "
+                "source=\"${BKC_INPUT_SOURCE_RELEASE_ID:-trixie-consolidated-20260826-r4}\"; "
+                "target=\"${BKC_INPUT_TARGET_RELEASE_ID:-trixie-consolidated-20260828-r5}\"; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-base-runtime-libgcc-20260828-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_TAG=$tag AUZIX_BASE_RUN_ID=$base AUZIX_LOCK_REL=$lock AUZIX_SOURCE_RELEASE_ID=$source AUZIX_TARGET_RELEASE_ID=$target AUZIX_RUN_ID=$run_id bash -s -- start\" "
+                "< /app/runtime/pipelines/auzix-base-runtime-repair/scripts/run-base-runtime-repair.sh'"
+            ),
+            "timeout": 420,
+        },
+        {
+            "name": "capture-targeted-repair-status",
+            "transport": "local->ssh+docker",
+            "kind": "local-command",
+            "active": "Capturing targeted provider build, repository merge, and clean-root proof status.",
+            "complete": "Targeted base-runtime repair status and log tail captured.",
+            "command": (
+                "bash -lc 'set -euo pipefail; "
+                "run_id=\"${BKC_INPUT_RUN_ID:-base-runtime-libgcc-20260828-r1}\"; "
+                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
+                "\"AUZIX_RUN_ID=$run_id bash -s -- status\" "
+                "< /app/runtime/pipelines/auzix-base-runtime-repair/scripts/run-base-runtime-repair.sh || true'"
+            ),
+            "timeout": 240,
+        },
+    ],
+    "complete_message": "AUZiX targeted base-runtime repair started through BKC.",
+}
+
 WORKFLOW_DEFINITIONS["auzix-release-repository-consolidate"] = {
     "supports_undeploy": False,
     "stage_plan": [

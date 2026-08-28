@@ -1,0 +1,58 @@
+{
+  "format": "bkc-pipeline-v1",
+  "id": "auzix-base-runtime-repair",
+  "name": "AUZIX 32 — Targeted Base Runtime Repair",
+  "repo": "BlackKnightController",
+  "workflow": "auzix-base-runtime-repair",
+  "resource_class": "medium",
+  "status": "candidate",
+  "tags": ["auzix", "r730", "base-runtime", "libgcc", "targeted", "repository"],
+  "summary": "Build only GCC14Base and LibgccS1 from the reviewed lock, merge them into a new immutable release, and prove the repaired runtime from repository artifacts.",
+  "operator_rule": "Never replay the workstation transaction or patch an image with host libraries. This lane may build only gcc-14-base and libgcc-s1 with dependency discovery disabled, and it must write a new release.",
+  "targets": {
+    "worker": "host:r730-ai-01",
+    "source_repo": "repo:AuziX",
+    "artifact_store": "path:/var/lib/auzix-build"
+  },
+  "inputs": {
+    "auzix_tag": {"required": true, "default": "auzix-alpha-base-runtime-repair-20260828-r1"},
+    "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
+    "lock_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-base-trixie-20260825-r1/build-tree.lock.json"},
+    "source_release_id": {"required": true, "default": "trixie-consolidated-20260826-r4"},
+    "target_release_id": {"required": true, "default": "trixie-consolidated-20260828-r5"},
+    "run_id": {"required": false, "default": "base-runtime-libgcc-20260828-r1"},
+    "worker_host": {"required": true, "default": "lab-ai-worker"}
+  },
+  "stages": [
+    {
+      "id": "verify-reviewed-base-provider-contract",
+      "action": "auzix.base_runtime_repair.preflight",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "params": {"script": "scripts/run-base-runtime-repair.sh", "mode": "preflight"}
+    },
+    {
+      "id": "start-targeted-provider-build-and-release-merge",
+      "action": "auzix.base_runtime_repair.start",
+      "transport": "bkc-ssh+docker",
+      "risk": "medium",
+      "timeout_seconds": 300,
+      "params": {"script": "scripts/run-base-runtime-repair.sh", "mode": "start"}
+    },
+    {
+      "id": "capture-targeted-repair-status",
+      "action": "auzix.base_runtime_repair.status",
+      "transport": "bkc-ssh+docker",
+      "risk": "low",
+      "timeout_seconds": 180,
+      "params": {"script": "scripts/run-base-runtime-repair.sh", "mode": "status"}
+    }
+  ],
+  "receipts": {
+    "worker_path": "/var/lib/auzix-build/receipts/base-runtime-repair-<run_id>.receipt",
+    "container_name": "auzix-base-runtime-repair-<run_id>",
+    "release_path": "/var/lib/auzix-build/releases/<target_release_id>"
+  },
+  "follow_up_pipeline": "auzix-release-container-validate"
+}
