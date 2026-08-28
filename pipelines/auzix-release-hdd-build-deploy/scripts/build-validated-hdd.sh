@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r6}"
-SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r3}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r7}"
+SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r4}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
 OUT="${BUILD_ROOT}/hdd-images/${HDD_ID}"
