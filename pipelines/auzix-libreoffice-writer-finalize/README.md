@@ -5,7 +5,8 @@ AUZiX tag. Dependency discovery is disabled. The existing r5 release and locked
 build root provide all inputs.
 
 The rebuilt archive is merged into a private candidate directory. Publication
-as r6 occurs only after the shared release-assembly preflight proves that
+as a new immutable release occurs only after the shared release-assembly
+preflight proves that both release identities match the requested target,
 Writer's embedded runtime ladder equals the recursive frozen-repository closure
 and the archive wrapper contains the formerly missing transitive provider.
 

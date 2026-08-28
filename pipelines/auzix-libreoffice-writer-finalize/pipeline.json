@@ -14,8 +14,8 @@
     "base_run_id": {"required": true, "default": "trixie-base-20260824-r3"},
     "lock_rel": {"required": true, "default": "packages/build-locks/auzix-alpha-libreoffice-writer-finalize-20260828-r1/build-tree.lock.json"},
     "source_release_id": {"required": true, "default": "trixie-consolidated-20260828-r5"},
-    "target_release_id": {"required": true, "default": "trixie-consolidated-20260828-r6"},
-    "run_id": {"required": true, "default": "libreoffice-writer-finalize-20260828-r1"}
+    "target_release_id": {"required": true, "default": "trixie-consolidated-20260828-r7"},
+    "run_id": {"required": true, "default": "libreoffice-writer-finalize-20260828-r2"}
   },
   "stages": [
     {"id":"preflight-writer-finalization","action":"auzix.writer_finalize.preflight","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300},

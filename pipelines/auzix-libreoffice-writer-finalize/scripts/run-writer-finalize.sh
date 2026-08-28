@@ -5,8 +5,8 @@ AUZIX_TAG="${AUZIX_TAG:-auzix-alpha-libreoffice-writer-finalize-20260828-r1}"
 BASE_RUN_ID="${AUZIX_BASE_RUN_ID:-trixie-base-20260824-r3}"
 LOCK_REL="${AUZIX_LOCK_REL:-packages/build-locks/auzix-alpha-libreoffice-writer-finalize-20260828-r1/build-tree.lock.json}"
 SOURCE_RELEASE_ID="${AUZIX_SOURCE_RELEASE_ID:-trixie-consolidated-20260828-r5}"
-TARGET_RELEASE_ID="${AUZIX_TARGET_RELEASE_ID:-trixie-consolidated-20260828-r6}"
-RUN_ID="${AUZIX_RUN_ID:-libreoffice-writer-finalize-20260828-r1}"
+TARGET_RELEASE_ID="${AUZIX_TARGET_RELEASE_ID:-trixie-consolidated-20260828-r7}"
+RUN_ID="${AUZIX_RUN_ID:-libreoffice-writer-finalize-20260828-r2}"
 WORK_ROOT="${AUZIX_WORK_ROOT:-/var/lib/auzix-build/native-rebase-runs}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 REMOTE_REPO="${AUZIX_REMOTE_REPO:-/srv/auzix/git-remotes/AuziX.git}"
@@ -97,10 +97,10 @@ start() {
       test "$(find "${AUZIX_FINALIZE_SPOOL}/entries" -maxdepth 1 -type f -name "*.json" | wc -l)" -eq 1
       entry="$(find "${AUZIX_FINALIZE_SPOOL}/entries" -maxdepth 1 -type f -name "*.json" -print -quit)"
       jq -e ".name == \"LibreOfficeWriter\"" "${entry}" >/dev/null
-      python3 - "${AUZIX_SOURCE_RELEASE}" "${AUZIX_FINALIZE_SPOOL}" "${AUZIX_CANDIDATE_RELEASE}" <<"PY"
+      python3 - "${AUZIX_SOURCE_RELEASE}" "${AUZIX_FINALIZE_SPOOL}" "${AUZIX_CANDIDATE_RELEASE}" "${AUZIX_TARGET_RELEASE_ID}" <<"PY"
 import hashlib,json,os,shutil,sys
 from pathlib import Path
-source,spool,target=map(Path,sys.argv[1:]); repo=target/"repo"; (repo/"packages").mkdir(parents=True)
+source,spool,target=map(Path,sys.argv[1:4]); release_id=sys.argv[4]; repo=target/"repo"; (repo/"packages").mkdir(parents=True)
 base=json.loads((source/"repo/index.json").read_text()); items={x["name"].casefold():x for x in base["packages"]}
 for path in spool.joinpath("entries").glob("*.json"):
     item=json.loads(path.read_text()); items[item["name"].casefold()]=item
@@ -112,10 +112,12 @@ for item in items.values():
     destination=repo/"packages"/name
     os.link(origin,destination) if origin.stat().st_dev==destination.parent.stat().st_dev else shutil.copy2(origin,destination)
 packages=sorted(items.values(),key=lambda x:x["name"].casefold())
-(repo/"index.json").write_text(json.dumps({"format":"auzix-repo-v1","release_id":target.name,"packages":packages},indent=2)+"\n")
-(target/"release-manifest.json").write_text(json.dumps({"format":"auzix-leaf-runtime-finalized-release-v1","release_id":target.name,"source_release_id":source.name,"finalized_packages":["LibreOfficeWriter"],"package_count":len(packages),"repository_index":"repo/index.json"},indent=2)+"\n")
+(repo/"index.json").write_text(json.dumps({"format":"auzix-repo-v1","release_id":release_id,"packages":packages},indent=2)+"\n")
+(target/"release-manifest.json").write_text(json.dumps({"format":"auzix-leaf-runtime-finalized-release-v1","release_id":release_id,"source_release_id":source.name,"finalized_packages":["LibreOfficeWriter"],"package_count":len(packages),"repository_index":"repo/index.json"},indent=2)+"\n")
 PY
       python3 "${AUZIX_RELEASE_VALIDATOR}" "${AUZIX_CANDIDATE_RELEASE}/repo/index.json"
+      jq -e --arg release "${AUZIX_TARGET_RELEASE_ID}" ".release_id == \$release" "${AUZIX_CANDIDATE_RELEASE}/repo/index.json" >/dev/null
+      jq -e --arg release "${AUZIX_TARGET_RELEASE_ID}" ".release_id == \$release" "${AUZIX_CANDIDATE_RELEASE}/release-manifest.json" >/dev/null
       archive="$(find "${AUZIX_FINALIZE_SPOOL}/packages" -maxdepth 1 -type f -name "LibreOfficeWriter-*.auzix.tar.gz" -print -quit)"
       wrapper="$(tar -tzf "${archive}" | grep "/Commands/lowriter$" | head -n1)"
       tar -xOzf "${archive}" "${wrapper}" | grep "^runtime_packages=" | grep -F "Libnghttp39" >/dev/null
