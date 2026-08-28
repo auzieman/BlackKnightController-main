@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r2}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r3}"
 SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
@@ -127,11 +127,22 @@ build() {
   mount -t proc proc "${SEED_ROOT}/proc"
   mount --rbind /sys "${SEED_ROOT}/sys"; mount --make-rslave "${SEED_ROOT}/sys"
   python3 -m http.server "${REPO_PORT}" --bind 127.0.0.1 --directory "${WORK}/repo" >"${WORK}/repo-server.log" 2>&1 & SERVER_PID=$!
+  python3 - "${REPO_PORT}" <<'PY'
+import socket, sys, time
+port = int(sys.argv[1])
+for _ in range(100):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+            raise SystemExit(0)
+    except OSError:
+        time.sleep(0.1)
+raise SystemExit(f"repository server did not become ready on 127.0.0.1:{port}")
+PY
   chroot "${SEED_ROOT}" /Programs/BusyBox/1.36.1/Commands/busybox env \
     AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_LINK_MODE=strict \
     /Programs/BusyBox/1.36.1/Commands/busybox sh /workspace/scripts/auzix-install-root-from-repo-profile.sh --force \
     --repo "http://127.0.0.1:${REPO_PORT}" --profile /run/auzix-hdd/desktop-main.packages "${LOOP_DEV}" \
-    >"${WORK}/installer.log" 2>&1
+    2>&1 | tee "${WORK}/installer.log"
   cleanup_mounts; trap - EXIT
   sha256sum "${IMAGE}" >"${IMAGE}.sha256"
   allocated="$(du -B1 "${IMAGE}" | awk '{print $1}')"
