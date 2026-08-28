@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r5}"
-SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r2}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r6}"
+SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r3}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
 OUT="${BUILD_ROOT}/hdd-images/${HDD_ID}"
@@ -26,7 +26,7 @@ log() { printf '[auzix-profile-hdd] %s\n' "$*"; }
 fail() { log "FAIL: $*" >&2; exit 1; }
 
 check_inputs() {
-  for command in python3 jq sha256sum tar truncate losetup mount umount chroot git; do
+  for command in python3 jq sha256sum tar truncate losetup parted partprobe partx mkfs.ext4 mount umount chroot git; do
     command -v "${command}" >/dev/null || fail "missing command: ${command}"
   done
   [[ "$(hostname -s)" == lab-ai-worker || "$(hostname -s)" == r730-ai-01 ]] || fail "must run on lab-build"
@@ -132,6 +132,18 @@ EOF
   truncate -s "${IMAGE_SIZE}" "${IMAGE}"
   trap cleanup_mounts EXIT
   LOOP_DEV="$(losetup --find --show --partscan "${IMAGE}")"
+  parted -s "${LOOP_DEV}" mklabel msdos
+  parted -s "${LOOP_DEV}" mkpart primary ext4 1MiB 60%
+  parted -s "${LOOP_DEV}" mkpart primary ext4 60% 80%
+  parted -s "${LOOP_DEV}" mkpart primary ext4 80% 100%
+  parted -s "${LOOP_DEV}" set 1 boot on
+  partprobe "${LOOP_DEV}" 2>/dev/null || true
+  partx -u "${LOOP_DEV}" 2>/dev/null || partx -a "${LOOP_DEV}" 2>/dev/null || true
+  for _ in $(seq 1 50); do [[ -b "${LOOP_DEV}p3" ]] && break; sleep 0.1; done
+  [[ -b "${LOOP_DEV}p1" && -b "${LOOP_DEV}p2" && -b "${LOOP_DEV}p3" ]] || fail "sparse image partition nodes did not appear"
+  mkfs.ext4 -q -F -L AUZIXROOT "${LOOP_DEV}p1"
+  mkfs.ext4 -q -F -L AUZIXHOME "${LOOP_DEV}p2"
+  mkfs.ext4 -q -F -L AUZIXWORK "${LOOP_DEV}p3"
   mkdir -p "${SEED_ROOT}/workspace" "${SEED_ROOT}/boot" "${SEED_ROOT}/run/auzix-hdd"
   mount --bind "${WORK}/source" "${SEED_ROOT}/workspace"
   mount --bind "${WORK}/boot" "${SEED_ROOT}/boot"
@@ -152,7 +164,8 @@ for _ in range(100):
 raise SystemExit(f"repository server did not become ready on 127.0.0.1:{port}")
 PY
   chroot "${SEED_ROOT}" /Programs/BusyBox/1.36.1/Commands/busybox env \
-    AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_INSTALL_JQ=/run/auzix-hdd/host-jq AUZIX_LINK_MODE=strict \
+    AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_INSTALL_PREPARED_TARGET=1 \
+    AUZIX_INSTALL_JQ=/run/auzix-hdd/host-jq AUZIX_LINK_MODE=strict \
     /Programs/BusyBox/1.36.1/Commands/busybox sh /workspace/scripts/auzix-install-root-from-repo-profile.sh --force \
     --repo "http://127.0.0.1:${REPO_PORT}" --profile /run/auzix-hdd/desktop-main.packages "${LOOP_DEV}" \
     2>&1 | tee "${WORK}/installer.log"
