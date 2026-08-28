@@ -119,7 +119,8 @@ PY
         archive="$(jq -r --arg name "${package}" ".packages[] | select(.name == \$name) | .package" "${AUZIX_TARGET_RELEASE}/repo/index.json")"
         tar --numeric-owner -xzf "${AUZIX_TARGET_RELEASE}/repo/packages/${archive}" -C "${AUZIX_PROOF_ROOT}"
       done
-      test -e "${AUZIX_PROOF_ROOT}/Programs/LibgccS1/current/RootFS/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+      test -L "${AUZIX_PROOF_ROOT}/Programs/LibgccS1/current"
+      test -s "$(find "${AUZIX_PROOF_ROOT}/Programs/LibgccS1" -mindepth 6 -maxdepth 6 -path "*/RootFS/usr/lib/x86_64-linux-gnu/libgcc_s.so.1" -print -quit)"
       test -s "${AUZIX_PROOF_ROOT}/System/Libraries/Runtime/glibc/libgcc_s.so.1"
       (cd "${AUZIX_TARGET_RELEASE}" && sha256sum repo/index.json release-manifest.json >SHA256SUMS && sha256sum -c SHA256SUMS)
     ')"
