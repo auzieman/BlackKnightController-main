@@ -14,13 +14,13 @@
       "command": "bash /app/runtime/pipelines/auzix-release-container-validate/scripts/reload-guardrails.sh"
     },
     {
-      "name": "build-and-validate-three-release-images",
+      "name": "preflight-build-and-validate-release-images",
       "transport": "local->ssh",
       "kind": "local-command",
-      "active": "Building BusyBox, nginx, and complete pre-HDD images from prepared AUZiX roots on R730.",
+      "active": "Preflighting immutable source, base providers, and recursive runtime metadata before building release images.",
       "complete": "All three images passed their scope-specific container probes.",
       "timeout": 7200,
-      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r3}\"; run=\"${BKC_INPUT_VALIDATION_ID:-three-containers-r1}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_CONTAINER_RUN_ID=$run bash -s\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/build-three-release-containers.sh'"
+      "command": "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260828-r5}\"; run=\"${BKC_INPUT_VALIDATION_ID:-three-containers-r12}\"; source_ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-base-runtime-repair-20260828-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_RELEASE_ID=$release AUZIX_CONTAINER_RUN_ID=$run AUZIX_SOURCE_REF=$source_ref bash -s\" < /app/runtime/pipelines/auzix-release-container-validate/scripts/build-three-release-containers.sh'"
     }
   ]
 }

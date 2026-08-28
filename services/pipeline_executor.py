@@ -5344,67 +5344,32 @@ WORKFLOW_DEFINITIONS["auzix-release-container-validate"] = {
     "supports_undeploy": False,
     "stage_plan": [
         {
-            "name": "preflight-frozen-release",
-            "transport": "local->ssh+docker",
+            "name": "reload-authoritative-guardrails",
+            "transport": "local+ssh",
             "kind": "local-command",
-            "active": "Verifying the immutable AUZiX repository before fresh-root construction.",
-            "complete": "Frozen release manifest, hashes, index, and archives passed preflight.",
-            "command": (
-                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
-                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- preflight\" "
-                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
-            ),
+            "active": "Reloading AUZiX and BKC guardrails before selecting artifacts.",
+            "complete": "Required guardrails were present and recorded.",
+            "command": "bash /app/runtime/pipelines/auzix-release-container-validate/scripts/reload-guardrails.sh",
             "timeout": 300,
         },
         {
-            "name": "materialize-fresh-root",
-            "transport": "local->ssh+docker",
+            "name": "preflight-build-and-validate-release-images",
+            "transport": "local->ssh",
             "kind": "local-command",
-            "active": "Materializing an empty AUZiX root from the frozen repository package transaction.",
-            "complete": "Fresh AUZiX validation root was materialized without the mutable build root.",
+            "active": "Preflighting immutable source, base providers, and recursive runtime metadata before building release images.",
+            "complete": "The preflighted BusyBox, nginx, and pre-HDD images passed their probes.",
             "command": (
-                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
+                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260828-r5}\"; "
+                "run=\"${BKC_INPUT_VALIDATION_ID:-three-containers-r12}\"; "
+                "source_ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-base-runtime-repair-20260828-r2}\"; "
                 "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- materialize\" "
-                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
+                "\"AUZIX_RELEASE_ID=$release AUZIX_CONTAINER_RUN_ID=$run AUZIX_SOURCE_REF=$source_ref bash -s\" "
+                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/build-three-release-containers.sh'"
             ),
-            "timeout": 3600,
-        },
-        {
-            "name": "import-validation-image",
-            "transport": "local->ssh+docker",
-            "kind": "local-command",
-            "active": "Importing the fresh AUZiX root as a disposable validation image.",
-            "complete": "Fresh AUZiX validation image was imported.",
-            "command": (
-                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
-                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- import\" "
-                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
-            ),
-            "timeout": 1800,
-        },
-        {
-            "name": "run-root-and-user-probes",
-            "transport": "local->ssh+docker",
-            "kind": "local-command",
-            "active": "Running core ABI, package, CLI, and normal-user probes in the validation image.",
-            "complete": "Fresh AUZiX validation image passed and wrote a release-gate receipt.",
-            "command": (
-                "bash -lc 'set -euo pipefail; release=\"${BKC_INPUT_RELEASE_ID:-trixie-consolidated-20260826-r1}\"; "
-                "validation=\"${BKC_INPUT_VALIDATION_ID:-container-proof-r1}\"; image=\"${BKC_INPUT_IMAGE:-auzix/release-validation:trixie-r1}\"; "
-                "ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 "
-                "\"AUZIX_RELEASE_ID=$release AUZIX_VALIDATION_ID=$validation AUZIX_VALIDATION_IMAGE=$image bash -s -- probe\" "
-                "< /app/runtime/pipelines/auzix-release-container-validate/scripts/validate-release-container.sh'"
-            ),
-            "timeout": 1800,
+            "timeout": 7200,
         },
     ],
-    "complete_message": "Fresh AUZiX validation container passed the frozen repository gate.",
+    "complete_message": "AUZiX release images passed immutable-source, provider, closure, and runtime validation gates.",
 }
 
 WORKFLOW_DEFINITIONS["auzix-release-hdd-build-deploy"] = {

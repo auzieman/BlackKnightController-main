@@ -7,8 +7,8 @@
   "resource_class": "slow",
   "status": "candidate",
   "tags": ["auzix", "r730", "container", "validation", "release-gate"],
-  "summary": "Materialize a fresh AUZiX root solely from a frozen release repository, import it as an OCI image, and run root/non-root runtime probes.",
-  "operator_rule": "Never reuse the mutable build root. The repository manifest and SHA-256 receipt from AUZiX 31 are the only package inputs.",
+  "summary": "Validate a frozen AUZiX release against an explicitly tagged source and a proved canonical base before building staged service and pre-HDD images.",
+  "operator_rule": "Never use a mutable source ref or begin image construction until release hashes, canonical libc/libgcc surfaces, selected dependency closure, and embedded application runtime metadata pass preflight.",
   "targets": {
     "worker": "host:r730-ai-01",
     "repository": "artifact:auzix-consolidated-release",
@@ -18,15 +18,13 @@
     "release_id": {"required": true, "default": "trixie-consolidated-20260826-r1"},
     "validation_id": {"required": true, "default": "container-proof-r1"},
     "image": {"required": true, "default": "auzix/release-validation:trixie-r1"},
+    "source_ref": {"required": true, "default": "auzix-alpha-base-runtime-repair-20260828-r2"},
     "worker_host": {"required": true, "default": "lab-ai-worker"},
     "selection": {"required": true, "default": "first-boot-cli"}
   },
   "stages": [
     {"id":"reload-authoritative-guardrails","action":"auzix.guardrails.reload","transport":"bkc-ssh","risk":"low","timeout_seconds":300},
-    {"id":"preflight-frozen-release","action":"auzix.release_container.preflight","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":300,"params":{"script":"scripts/validate-release-container.sh","mode":"preflight"}},
-    {"id":"materialize-fresh-root","action":"auzix.release_container.materialize","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":3600,"params":{"script":"scripts/validate-release-container.sh","mode":"materialize"}},
-    {"id":"import-validation-image","action":"auzix.release_container.import","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":1800,"params":{"script":"scripts/validate-release-container.sh","mode":"import"}},
-    {"id":"run-root-and-user-probes","action":"auzix.release_container.probe","transport":"bkc-ssh+docker","risk":"low","timeout_seconds":1800,"params":{"script":"scripts/validate-release-container.sh","mode":"probe"}}
+    {"id":"preflight-build-and-validate-release-images","action":"auzix.release_container.build_and_validate","transport":"bkc-ssh+docker","risk":"medium","timeout_seconds":7200,"params":{"script":"scripts/build-three-release-containers.sh"}}
   ],
   "outputs": {
     "root": "/var/lib/auzix-build/releases/<release_id>/validation/<validation_id>/root",

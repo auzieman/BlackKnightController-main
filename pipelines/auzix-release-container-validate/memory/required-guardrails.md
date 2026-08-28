@@ -6,6 +6,12 @@
 - Missing dependencies are repository-stage failures; never discover or fetch them here.
 - Install through preserved package payloads and lifecycle hooks in dependency order.
 - `/System/Libraries/Runtime/glibc` is the only core glibc provider.
+- Only `Libc6` may resolve as an external canonical provider during repository
+  closure planning. `LibgccS1` and `GCC14Base` must remain published release
+  packages, and canonical libgcc must be present before image work begins.
+- Embedded leaf runtime metadata must equal the recursive frozen-repository
+  closure before image construction; direct-dependency-only ladders fail
+  preflight.
 - Python, ncurses/terminfo, Glances, htop, and LibreOffice headless conversion are required first-boot probes.
 - A package named as a release/runtime proof must come from a current reviewed
   spool. It may not be silently selected from the legacy `safe_reuse` set.
