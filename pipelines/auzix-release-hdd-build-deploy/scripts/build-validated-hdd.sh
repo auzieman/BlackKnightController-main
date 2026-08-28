@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r3}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r4}"
 SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
@@ -90,7 +90,8 @@ if not low <= archive_bytes <= high: raise SystemExit(f"selected archive bytes {
 receipt = {"format":"auzix-hdd-selection-v1","roots":roots,"root_count":len(roots),"package_count":len(selected),"archive_bytes":archive_bytes,"sources":source_counts,"packages":selected}
 print(f"profile roots={len(roots)} closure={len(selected)} archive_bytes={archive_bytes} sources={source_counts}")
 if str(destination) != "-":
-    (destination / "index.json").write_text(json.dumps({"format":"auzix-repo-v1","release_id":destination.parent.name,"packages":selected}, indent=2)+"\n")
+    install_index = [{key: item[key] for key in ("name", "version", "package", "sha256", "depends", "hooks") if key in item} for item in selected]
+    (destination / "index.json").write_text(json.dumps({"format":"auzix-repo-v1","release_id":destination.parent.name,"packages":install_index}, separators=(",", ":"))+"\n")
     (destination.parent / "selection-receipt.json").write_text(json.dumps(receipt, indent=2)+"\n")
 PY
 }
