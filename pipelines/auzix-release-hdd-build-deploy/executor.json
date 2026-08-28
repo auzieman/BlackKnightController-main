@@ -11,7 +11,7 @@
       "active": "Resolving the bounded desktop package closure and validating immutable inputs.",
       "complete": "Package closure, archive hashes, size bounds, installer seed, and source tag passed.",
       "timeout": 300,
-      "command": "bash -lc 'set -euo pipefail; hdd=\"${BKC_INPUT_HDD_ID:-desktop-main-20260828-r4}\"; ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_HDD_ID=$hdd AUZIX_SOURCE_REF=$ref bash -s -- preflight\" < /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
+      "command": "bash -lc 'set -euo pipefail; hdd=\"${BKC_INPUT_HDD_ID:-desktop-main-20260828-r5}\"; ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_HDD_ID=$hdd AUZIX_SOURCE_REF=$ref bash -s -- preflight\" < /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
     },
     {
       "name": "install-profile-into-sparse-hdd",
@@ -20,7 +20,7 @@
       "active": "Installing the selected AUZiX package profile into a fresh sparse HDD.",
       "complete": "Sparse HDD image, checksum, selection receipt, and build receipt were written.",
       "timeout": 7200,
-      "command": "bash -lc 'set -euo pipefail; hdd=\"${BKC_INPUT_HDD_ID:-desktop-main-20260828-r4}\"; ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_HDD_ID=$hdd AUZIX_SOURCE_REF=$ref bash -s -- build\" < /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
+      "command": "bash -lc 'set -euo pipefail; hdd=\"${BKC_INPUT_HDD_ID:-desktop-main-20260828-r5}\"; ref=\"${BKC_INPUT_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r2}\"; ssh -i /app/keys/bkc_id_rsa -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/app/runtime/known_hosts root@10.20.0.130 \"AUZIX_HDD_ID=$hdd AUZIX_SOURCE_REF=$ref bash -s -- build\" < /app/runtime/pipelines/auzix-release-hdd-build-deploy/scripts/build-validated-hdd.sh'"
     }
   ]
 }

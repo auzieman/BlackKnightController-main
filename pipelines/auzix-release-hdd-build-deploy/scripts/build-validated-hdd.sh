@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:-preflight}"
-HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r4}"
-SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r1}"
+HDD_ID="${AUZIX_HDD_ID:-desktop-main-20260828-r5}"
+SOURCE_REF="${AUZIX_SOURCE_REF:-auzix-alpha-package-profile-hdd-20260828-r2}"
 BUILD_ROOT="${AUZIX_BUILD_ROOT:-/var/lib/auzix-build}"
 WORK="${BUILD_ROOT}/hdd-runs/${HDD_ID}"
 OUT="${BUILD_ROOT}/hdd-images/${HDD_ID}"
@@ -115,6 +115,18 @@ build() {
   resolve_catalog "${WORK}/repo"
   cp "${PROFILE_SOURCE}" "${WORK}/desktop-main.packages"
   cp -p "${BOOT_SOURCE}/vmlinuz" "${BOOT_SOURCE}/initramfs.cpio.gz" "${WORK}/boot/"
+  mkdir -p "${WORK}/host-jq-libs"
+  cp -L /usr/bin/jq "${WORK}/host-jq.real"
+  cp -L /lib64/ld-linux-x86-64.so.2 "${WORK}/host-jq-loader"
+  ldd /usr/bin/jq | awk '{for (i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u |
+    xargs -r cp -L -t "${WORK}/host-jq-libs"
+  cat >"${WORK}/host-jq" <<'EOF'
+#!/Programs/BusyBox/1.36.1/Commands/busybox sh
+exec /run/auzix-hdd/host-jq-loader \
+  --library-path /run/auzix-hdd/host-jq-libs \
+  /run/auzix-hdd/host-jq.real "$@"
+EOF
+  chmod 0755 "${WORK}/host-jq"
   commit="$(git --git-dir="${BARE_REPO}" rev-parse "${SOURCE_REF}^{commit}")"
   git --git-dir="${BARE_REPO}" archive "${commit}" | tar -x -C "${WORK}/source"
   truncate -s "${IMAGE_SIZE}" "${IMAGE}"
@@ -140,7 +152,7 @@ for _ in range(100):
 raise SystemExit(f"repository server did not become ready on 127.0.0.1:{port}")
 PY
   chroot "${SEED_ROOT}" /Programs/BusyBox/1.36.1/Commands/busybox env \
-    AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_LINK_MODE=strict \
+    AUZIX_INSTALL_COPY_SEED_RUNTIME=0 AUZIX_INSTALL_JQ=/run/auzix-hdd/host-jq AUZIX_LINK_MODE=strict \
     /Programs/BusyBox/1.36.1/Commands/busybox sh /workspace/scripts/auzix-install-root-from-repo-profile.sh --force \
     --repo "http://127.0.0.1:${REPO_PORT}" --profile /run/auzix-hdd/desktop-main.packages "${LOOP_DEV}" \
     2>&1 | tee "${WORK}/installer.log"

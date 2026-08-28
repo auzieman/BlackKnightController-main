@@ -16,8 +16,8 @@
     "protected_reference": "node:vm:135"
   },
   "inputs": {
-    "hdd_id": {"required": true, "default": "desktop-main-20260828-r4"},
-    "source_ref": {"required": true, "default": "auzix-alpha-package-profile-hdd-20260828-r1"},
+    "hdd_id": {"required": true, "default": "desktop-main-20260828-r5"},
+    "source_ref": {"required": true, "default": "auzix-alpha-package-profile-hdd-20260828-r2"},
     "target_vmid": {"required": true, "default": 142},
     "target_ip": {"required": false, "default": "192.168.1.229"},
     "storage": {"required": true, "default": "local-lvm"},
